@@ -61,6 +61,9 @@ services:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
       - traefik.http.routers.harness.rule=Host(`${DSH_PUBLIC_HOST}`)
+      # Named explicitly: Traefik only infers a router's service when the
+      # container defines exactly one, and the webhook ingress adds a second.
+      - traefik.http.routers.harness.service=harness
       - traefik.http.routers.harness.entrypoints=websecure
       - traefik.http.routers.harness.tls=true
       - traefik.http.routers.harness.tls.certresolver=letsencrypt
