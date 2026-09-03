@@ -8,6 +8,11 @@ set -euo pipefail
 : "${DSH_PUBLIC_HOST:?set DSH_PUBLIC_HOST to the domain this instance is served on}"
 
 PORT="${DSH_PORT:-3080}"
+# The harness itself only ever binds loopback: upstream refuses `--host 0.0.0.0`
+# outright ("it would expose remote code execution to the network"), and that
+# guard is worth keeping. socat republishes it on the container interface so
+# Traefik can reach it, with the password gate and Traefik in front.
+INTERNAL_PORT="${DSH_INTERNAL_PORT:-3081}"
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -60,14 +65,30 @@ for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
 done
 
 cd "$APP_DIR"
-node --import tsx/esm apps/cli/src/bin.ts web \
+node --import tsx/esm apps/cli/src/bin.ts --profile web \
   --no-open \
-  --host 0.0.0.0 \
-  --port "$PORT" \
+  --host 127.0.0.1 \
+  --port "$INTERNAL_PORT" \
   "${trusted_args[@]}" &
 harness_pid=$!
 
+# Wait for the loopback listener before publishing it, so Traefik never sees a
+# refused connection during boot.
+for _ in $(seq 1 60); do
+  if curl -fsS -o /dev/null "http://127.0.0.1:$INTERNAL_PORT/auth/login" 2>/dev/null; then break; fi
+  if ! kill -0 "$harness_pid" 2>/dev/null; then
+    echo "[entrypoint] harness exited during startup" >&2
+    wait "$harness_pid"
+    exit 1
+  fi
+  sleep 1
+done
+
+socat "TCP-LISTEN:$PORT,fork,reuseaddr" "TCP:127.0.0.1:$INTERNAL_PORT" &
+socat_pid=$!
+
 shutdown() {
+  kill -TERM "$socat_pid" 2>/dev/null || true
   kill -TERM "$harness_pid" 2>/dev/null || true
   wait "$harness_pid" 2>/dev/null || true
   kill 0 2>/dev/null || true

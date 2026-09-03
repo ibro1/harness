@@ -1,8 +1,14 @@
 # Deploying the harness on Dokploy
 
-One container runs three processes: the harness web server on 3080 and the two
-OpenAI-protocol bridges on container loopback (8001 `agy`, 8002 `opencode`).
+One container runs four processes: the harness web server on loopback 3081,
+the two OpenAI-protocol bridges on loopback 8001 (`agy`) and 8002 (`opencode`),
+and a socat forwarder republishing 3081 on the container interface as 3080.
 Only 3080 is published, and only through Traefik.
+
+The forwarder exists because upstream refuses `--host 0.0.0.0` by design — it
+would expose remote code execution to the network. Keeping the harness on
+loopback preserves that guard: what reaches the container interface is a port
+that Traefik alone can route to, behind the password gate.
 
 ## 1. Host preparation (once)
 
@@ -93,12 +99,36 @@ docker exec "$(docker ps -qf name=harness)" agy models
 Antigravity account and its quota, with no per-user attribution. The same is
 true of opencode.
 
-## 5. Verify
+## 5. Two auth layers
+
+Upstream added its own browser gate in 0.1.2-rc.1, so a new browser passes two
+checks, once:
+
+1. The password login page (this fork's gate).
+2. Upstream's launch token: visit `https://harness.example.com/?token=<token>`
+   once. The token is printed in the container log at every start
+   (`dsh web: http://127.0.0.1:3081/?token=...`); it is exchanged for a signed
+   30-day cookie and stripped from the URL immediately.
+
+Read the token with:
+
+```sh
+docker logs "$(docker ps -qf name=harness)" 2>&1 | grep -o 'token=[A-Za-z0-9_-]*' | tail -1
+```
+
+After a redeploy you re-enter the password (sessions are in memory) but not the
+token: upstream's signing secret lives in the `dsh-state` volume, so cookies
+already issued stay valid. Only a brand-new browser needs the token again.
+
+## 6. Verify
 
 ```sh
 curl -sI https://harness.example.com/            # 302 -> /auth/login
 curl -sI https://harness.example.com/api/x       # 401
 ```
+
+A `401` with `dsh web authentication required` after signing in means step 2 of
+section 5 is still outstanding, not that the password gate failed.
 
 Sign in, open Settings, and confirm the `agy` and `opencode` providers list
 their models — that round-trips through the bridges to the binaries. On a
@@ -114,14 +144,12 @@ open the UI; edit them in the UI afterwards and the volume keeps your changes.
   do not split them into separate compose services without adding auth.
 - **`DSH_TRUST_PROXY=1` is set** because Traefik terminates TLS. It makes the
   app believe `X-Forwarded-For` (login rate limiting) and `X-Forwarded-Proto`
-  (the cookie `Secure` flag). Only correct behind a proxy you control.
+  (the cookie `Secure` flag). Only correct behind a proxy you control. It is
+  also what keeps rate limiting per real client: every connection arrives from
+  the socat forwarder, so the socket address is always 127.0.0.1 and
+  `X-Forwarded-For` is the only true client identity.
 - **Updating a binary:** replace the file in `/opt/harness/bin` and restart the
   container. No rebuild needed.
-- **Known, pre-existing:** the browser's `/api/events.*` WebSocket downlinks
-  never complete their handshake in this checkout. This is unrelated to the
-  auth patch and to Traefik — it reproduces identically on upstream `master`
-  with no auth and no proxy, on plain loopback. The UI works regardless. Do not
-  spend time debugging it as a proxy problem after deploying.
 - **Local development** now needs `DSH_AUTH_PASSWORD` (or the hash) in the
   environment, or `start-harness.sh` will print a fresh random password to
   `dsh.log` on every start.

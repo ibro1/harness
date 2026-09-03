@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       procps \
       python3 \
       ripgrep \
+      socat \
       tini \
     && rm -rf /var/lib/apt/lists/*
 
