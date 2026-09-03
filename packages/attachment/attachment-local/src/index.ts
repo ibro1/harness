@@ -11,21 +11,17 @@ import { readImageFile, saveImageFile, validateImageFile } from './store.ts'
 export { readImageFile, saveImageFile, validateImageFile } from './store.ts'
 
 /** Default maximum encoded bytes for one image. */
-export const DEFAULT_MAX_IMAGE_BYTES = 3.5 * 1024 * 1024
+export const DEFAULT_MAX_IMAGE_BYTES = 25 * 1024 * 1024
 /** Default maximum images in one prompt. */
-export const DEFAULT_MAX_IMAGES_PER_MESSAGE = 20
+export const DEFAULT_MAX_IMAGES_PER_MESSAGE = 50
 /** Default maximum aggregate image bytes in one prompt. */
-export const DEFAULT_MAX_MESSAGE_IMAGE_BYTES = 100 * 1024 * 1024
+export const DEFAULT_MAX_MESSAGE_IMAGE_BYTES = 200 * 1024 * 1024
 /** Default maximum intrinsic pixels for one image. */
-export const DEFAULT_MAX_IMAGE_PIXELS = 40_000_000
+export const DEFAULT_MAX_IMAGE_PIXELS = 100_000_000
 /**
- * Default maximum intrinsic width and height for one image. Deployed model
- * routes reject any request whose history carries an image with a side above
- * 2000px once the request holds many images, and an admitted image rides
- * every later request of its session, so admission refuses at the same line
- * to keep the durable history streamable.
+ * Default maximum intrinsic width and height for one image.
  */
-export const DEFAULT_MAX_IMAGE_DIMENSION = 2000
+export const DEFAULT_MAX_IMAGE_DIMENSION = 8192
 
 /** Local attachment backend configuration. */
 export interface Config {
