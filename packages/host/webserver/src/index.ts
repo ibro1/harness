@@ -14,6 +14,7 @@ import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { handleAuthRoutes, isAuthenticated } from './auth.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -150,6 +151,22 @@ export class WebServer extends Service {
       /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
       requests; the field is only optional on the client-side IncomingMessage type */
       const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+
+      if (handleAuthRoutes(req, res, rawPath)) {
+        return
+      }
+
+      if (!isAuthenticated(req)) {
+        if (rawPath.startsWith('/api/') || rawPath.startsWith('/events')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'unauthorized', login: '/auth/login' }))
+          return
+        }
+        res.writeHead(302, { 'Location': '/auth/login' })
+        res.end()
+        return
+      }
+
       const route = this.match(rawPath)
       if (route !== undefined) {
         await route.handler(req, res)
@@ -188,6 +205,11 @@ export class WebServer extends Service {
         socket.off('error', onError)
         this.upgradedSockets.delete(socket)
       })
+
+      if (!isAuthenticated(req)) {
+        socket.destroy()
+        return
+      }
       let route: WebUpgradeRoute | undefined
       try {
         /* v8 ignore next -- node:http always sets url on server requests. */
