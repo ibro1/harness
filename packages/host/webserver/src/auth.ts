@@ -13,7 +13,7 @@
  */
 
 import { randomBytes, scryptSync, createHash, timingSafeEqual } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -37,9 +37,18 @@ interface PasswordHash {
   hash: Buffer
 }
 
-interface AuthConfig {
-  username: string
+/** One account able to sign in. */
+export interface AuthUser {
+  /** Login name, unique and compared in constant time. */
+  name: string
+  /** Verifier for this account's password. */
   password: PasswordHash
+  /** Optional address recorded for display. */
+  email: string | undefined
+}
+
+interface AuthConfig {
+  users: readonly AuthUser[]
   /** Optional long-lived bearer token for programmatic clients. Never the password. */
   apiToken: string | undefined
   /** Session lifetime in milliseconds. */
@@ -146,8 +155,7 @@ export function getAuthConfig(): AuthConfig {
     : cookieSecureRaw === '1' || cookieSecureRaw === 'true'
 
   authConfig = {
-    username,
-    password,
+    users: resolveUsers(username, password),
     apiToken,
     sessionTtlMs: readIntEnv('DSH_SESSION_TTL_HOURS', 168) * 60 * 60 * 1000,
     trustProxy: readBoolEnv('DSH_TRUST_PROXY'),
@@ -156,56 +164,250 @@ export function getAuthConfig(): AuthConfig {
   return authConfig
 }
 
-/** Live sessions, keyed by opaque token, with an absolute expiry. */
-const activeSessions = new Map<string, number>()
+/** Where multi-account credentials live when the deployment has more than one. */
+const USERS_PATH = join(dshHome(), 'users.json')
 
-/** Drop expired sessions. Called on every session read; the map stays small. */
-function sweepSessions(now: number): void {
-  for (const [token, expiresAt] of activeSessions) {
-    if (expiresAt <= now) activeSessions.delete(token)
-  }
-}
-
-/** Mint a session token valid for the configured TTL. */
-export function createSessionToken(): string {
-  const now = Date.now()
-  sweepSessions(now)
-  const token = randomBytes(32).toString('hex')
-  activeSessions.set(token, now + getAuthConfig().sessionTtlMs)
-  return token
-}
-
-/** Invalidate one session server-side, so a logged-out cookie is dead everywhere. */
-export function revokeSessionToken(token: string): void {
-  activeSessions.delete(token)
+/** The Harness home this process reads its auth state from. */
+function dshHome(): string {
+  return process.env.DSH_HOME ?? join(homedir(), '.dsh')
 }
 
 /**
- * Whether a bearer/cookie token is currently valid.
+ * Accounts able to sign in.
+ *
+ * A `users.json` in the Harness home wins when it declares any account, so
+ * multi-user deployments are managed with `deploy/user.mjs` rather than by
+ * encoding several digests into one environment variable. With no such file the
+ * single environment-configured account stands, which is every deployment that
+ * has never asked for a second person.
+ * @param envName - the environment-configured login name.
+ * @param envPassword - its verifier.
+ * @returns the accounts, never empty.
+ */
+function resolveUsers(envName: string, envPassword: PasswordHash): readonly AuthUser[] {
+  let raw: string
+  try {
+    raw = readFileSync(USERS_PATH, 'utf8')
+  } catch {
+    return [{ name: envName, password: envPassword, email: undefined }]
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error(`webserver/auth: ${USERS_PATH} is not valid JSON; fix or remove it`)
+  }
+  const rows = (parsed as { users?: unknown }).users
+  if (!Array.isArray(rows)) {
+    throw new Error(`webserver/auth: ${USERS_PATH} has no "users" array`)
+  }
+  const users: AuthUser[] = []
+  for (const row of rows as readonly Record<string, unknown>[]) {
+    const name = typeof row['name'] === 'string' ? row['name'].trim() : ''
+    const digest = typeof row['password'] === 'string' ? row['password'] : ''
+    if (name === '') continue
+    const password = parsePasswordHash(digest)
+    if (password === undefined) {
+      throw new Error(`webserver/auth: user ${JSON.stringify(name)} in ${USERS_PATH} has no valid password digest`)
+    }
+    users.push({ name, password, email: typeof row['email'] === 'string' ? row['email'] : undefined })
+  }
+  if (users.length === 0) return [{ name: envName, password: envPassword, email: undefined }]
+  return users
+}
+
+/** One signed-in browser. */
+export interface SessionRecord {
+  /** Account that signed in. */
+  user: string
+  /** Epoch milliseconds the session was minted. */
+  issuedAt: number
+  /** Epoch milliseconds the session stops being accepted. */
+  expiresAt: number
+}
+
+/** Upper bound on retained sessions, oldest evicted first. */
+const MAX_SESSIONS = 500
+
+/**
+ * Sessions outlive the process: they live in the Harness home so a redeploy
+ * does not sign everyone out, which on a push-to-deploy setup is every few
+ * minutes. Held in memory and mirrored to disk on every change, because reads
+ * happen on every request and writes only on sign-in and sign-out.
+ */
+const activeSessions = new Map<string, SessionRecord>()
+let sessionsLoaded = false
+
+/** Where the session mirror lives. */
+function sessionsPath(): string {
+  return join(dshHome(), '.sessions.json')
+}
+
+/** Read the mirror once per process, discarding anything already expired. */
+function loadSessions(): void {
+  if (sessionsLoaded) return
+  sessionsLoaded = true
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(sessionsPath(), 'utf8'))
+  } catch {
+    // No mirror yet, or one this build cannot read: start empty rather than
+    // refuse to serve. The cost is that everyone signs in again.
+    return
+  }
+  const rows = (parsed as { sessions?: unknown }).sessions
+  if (typeof rows !== 'object' || rows === null) return
+  const now = Date.now()
+  for (const [token, value] of Object.entries(rows as Record<string, unknown>)) {
+    const record = value as Record<string, unknown>
+    const user = typeof record['user'] === 'string' ? record['user'] : undefined
+    const issuedAt = typeof record['issuedAt'] === 'number' ? record['issuedAt'] : undefined
+    const expiresAt = typeof record['expiresAt'] === 'number' ? record['expiresAt'] : undefined
+    if (user === undefined || issuedAt === undefined || expiresAt === undefined) continue
+    if (expiresAt <= now) continue
+    activeSessions.set(token, { user, issuedAt, expiresAt })
+  }
+}
+
+/**
+ * Mirror the live sessions to disk, replacing the file atomically so a crash
+ * mid-write cannot leave a half-written mirror that reads as no sessions.
+ */
+function persistSessions(): void {
+  const path = sessionsPath()
+  const temporary = `${path}.tmp`
+  const payload = JSON.stringify({ version: 1, sessions: Object.fromEntries(activeSessions) })
+  try {
+    mkdirSync(dshHome(), { recursive: true })
+    writeFileSync(temporary, payload, { mode: 0o600 })
+    renameSync(temporary, path)
+  } catch {
+    // A read-only or full Harness home costs persistence across restarts, not
+    // the ability to sign in; the in-memory map still serves this process.
+  }
+}
+
+/** Drop expired sessions, and the oldest beyond the retention cap. */
+function sweepSessions(now: number): void {
+  for (const [token, record] of activeSessions) {
+    if (record.expiresAt <= now) activeSessions.delete(token)
+  }
+  if (activeSessions.size <= MAX_SESSIONS) return
+  const ordered = [...activeSessions.entries()].sort((a, b) => a[1].issuedAt - b[1].issuedAt)
+  for (const [token] of ordered.slice(0, activeSessions.size - MAX_SESSIONS)) {
+    activeSessions.delete(token)
+  }
+}
+
+/**
+ * Mint a session for one account, valid for the configured TTL.
+ * @param user - the account that signed in.
+ * @returns the opaque session token.
+ */
+export function createSessionToken(user: string): string {
+  loadSessions()
+  const now = Date.now()
+  sweepSessions(now)
+  const token = randomBytes(32).toString('hex')
+  activeSessions.set(token, { user, issuedAt: now, expiresAt: now + getAuthConfig().sessionTtlMs })
+  persistSessions()
+  return token
+}
+
+/**
+ * Invalidate one session server-side, so a signed-out cookie is dead everywhere.
+ * @param token - the session to drop.
+ */
+export function revokeSessionToken(token: string): void {
+  loadSessions()
+  if (activeSessions.delete(token)) persistSessions()
+}
+
+/**
+ * Invalidate every session belonging to one account.
+ * @param user - the account to sign out everywhere.
+ * @param except - a session to keep, usually the caller's own.
+ * @returns how many sessions were dropped.
+ */
+export function revokeUserSessions(user: string, except?: string): number {
+  loadSessions()
+  let dropped = 0
+  for (const [token, record] of activeSessions) {
+    if (record.user !== user || token === except) continue
+    activeSessions.delete(token)
+    dropped += 1
+  }
+  if (dropped > 0) persistSessions()
+  return dropped
+}
+
+/**
+ * Sessions currently held by one account, newest first.
+ * @param user - the account to list.
+ * @returns the sessions and their tokens.
+ */
+export function listUserSessions(user: string): readonly (SessionRecord & { token: string })[] {
+  loadSessions()
+  sweepSessions(Date.now())
+  return [...activeSessions.entries()]
+    .filter(([, record]) => record.user === user)
+    .map(([token, record]) => ({ token, ...record }))
+    .sort((a, b) => b.issuedAt - a.issuedAt)
+}
+
+/**
+ * The account a bearer or cookie token authenticates, if any.
  *
  * A session token or the dedicated API token qualifies. The account password
  * deliberately does not: a password that doubles as a bearer token leaks login
  * through every proxy log and client history that records headers.
+ * @param token - the presented token.
+ * @returns the account name, or undefined when the token is not valid.
  */
-export function isValidSessionToken(token: string): boolean {
-  if (token === '') return false
+export function sessionUser(token: string): string | undefined {
+  if (token === '') return undefined
+  loadSessions()
   const now = Date.now()
-  const expiresAt = activeSessions.get(token)
-  if (expiresAt !== undefined) {
-    if (expiresAt > now) return true
+  const record = activeSessions.get(token)
+  if (record !== undefined) {
+    if (record.expiresAt > now) return record.user
     activeSessions.delete(token)
+    persistSessions()
   }
   const { apiToken } = getAuthConfig()
-  return apiToken !== undefined && secretEquals(token, apiToken)
+  if (apiToken !== undefined && secretEquals(token, apiToken)) return API_TOKEN_USER
+  return undefined
 }
 
-/** Verify a username/password pair in constant time with respect to the password. */
-function verifyCredentials(username: string, password: string): boolean {
-  const config = getAuthConfig()
-  const candidate = scryptSync(password, config.password.salt, SCRYPT_KEYLEN, SCRYPT_PARAMS)
-  const passwordOk = timingSafeEqual(candidate, config.password.hash)
-  const userOk = secretEquals(username, config.username)
-  return passwordOk && userOk
+/** Name recorded for requests authenticated by the deployment's API token. */
+const API_TOKEN_USER = 'api-token'
+
+/**
+ * Whether a bearer or cookie token is currently valid.
+ * @param token - the presented token.
+ * @returns true when it authenticates an account.
+ */
+export function isValidSessionToken(token: string): boolean {
+  return sessionUser(token) !== undefined
+}
+
+/**
+ * Verify a username and password against the configured accounts.
+ *
+ * Every account's verifier is exercised regardless of whether the name matched,
+ * so the response time does not reveal which names exist.
+ * @param username - the presented login name.
+ * @param password - the presented password.
+ * @returns the matched account, or undefined.
+ */
+function verifyCredentials(username: string, password: string): AuthUser | undefined {
+  let matched: AuthUser | undefined
+  for (const user of getAuthConfig().users) {
+    const candidate = scryptSync(password, user.password.salt, SCRYPT_KEYLEN, SCRYPT_PARAMS)
+    const passwordOk = timingSafeEqual(candidate, user.password.hash)
+    if (passwordOk && secretEquals(username, user.name)) matched = user
+  }
+  return matched
 }
 
 interface AttemptRecord {
@@ -273,18 +475,25 @@ function sessionCookie(req: IncomingMessage): string | undefined {
   return parseCookies(req.headers['cookie'])['dsh_session']
 }
 
-/** Whether a request is authenticated by session cookie, bearer token, or Basic credentials. */
-export function isAuthenticated(req: IncomingMessage): boolean {
+/**
+ * The account a request authenticates as, by session cookie, bearer token, or
+ * Basic credentials.
+ * @param req - the incoming request.
+ * @returns the account name, or undefined when unauthenticated.
+ */
+export function authenticatedUser(req: IncomingMessage): string | undefined {
   const authHeader = req.headers['authorization']
   if (authHeader !== undefined) {
     if (authHeader.startsWith('Bearer ')) {
-      if (isValidSessionToken(authHeader.slice(7).trim())) return true
+      const user = sessionUser(authHeader.slice(7).trim())
+      if (user !== undefined) return user
     } else if (authHeader.startsWith('Basic ')) {
       try {
         const decoded = Buffer.from(authHeader.slice(6).trim(), 'base64').toString('utf-8')
         const separator = decoded.indexOf(':')
-        if (separator > 0 && verifyCredentials(decoded.slice(0, separator), decoded.slice(separator + 1))) {
-          return true
+        if (separator > 0) {
+          const matched = verifyCredentials(decoded.slice(0, separator), decoded.slice(separator + 1))
+          if (matched !== undefined) return matched.name
         }
       } catch {
         // malformed header: fall through to the cookie check
@@ -293,7 +502,16 @@ export function isAuthenticated(req: IncomingMessage): boolean {
   }
 
   const token = sessionCookie(req)
-  return token !== undefined && isValidSessionToken(token)
+  return token === undefined ? undefined : sessionUser(token)
+}
+
+/**
+ * Whether a request is authenticated at all.
+ * @param req - the incoming request.
+ * @returns true when it carries valid credentials.
+ */
+export function isAuthenticated(req: IncomingMessage): boolean {
+  return authenticatedUser(req) !== undefined
 }
 
 /** Whether the session cookie should carry `Secure` for this request. */
@@ -649,7 +867,8 @@ export function handleAuthRoutes(
         }
 
         const { username, password } = parseLoginBody(bodyText, req.headers['content-type'] ?? '')
-        if (!verifyCredentials(username, password)) {
+        const matched = verifyCredentials(username, password)
+        if (matched === undefined) {
           recordFailure(req)
           res.writeHead(302, { 'Location': '/auth/login?error=1', 'Cache-Control': 'no-store' })
           res.end()
@@ -657,7 +876,7 @@ export function handleAuthRoutes(
         }
 
         clearFailures(req)
-        const token = createSessionToken()
+        const token = createSessionToken(matched.name)
         res.writeHead(302, {
           'Set-Cookie': sessionCookieValue(req, token, Math.floor(getAuthConfig().sessionTtlMs / 1000)),
           'Location': resolveSignedInTarget?.() ?? '/',
@@ -667,6 +886,36 @@ export function handleAuthRoutes(
       })
       return true
     }
+  }
+
+  if (rawPath === '/auth/sessions') {
+    const viewer = authenticatedUser(req)
+    if (viewer === undefined) {
+      res.writeHead(302, { 'Location': '/auth/login', 'Cache-Control': 'no-store' })
+      res.end()
+      return true
+    }
+    const current = sessionCookie(req)
+    if (req.method === 'POST') {
+      void readBoundedBody(req).then((bodyText) => {
+        if (res.writableEnded) return
+        const params = new URLSearchParams(bodyText ?? '')
+        // Only ever the viewer's own sessions: an account cannot reach another
+        // account's, whatever token it names.
+        const target = params.get('revoke')
+        if (params.get('revokeOthers') === '1') {
+          revokeUserSessions(viewer, current)
+        } else if (target !== null && listUserSessions(viewer).some(row => row.token === target)) {
+          revokeSessionToken(target)
+        }
+        res.writeHead(302, { 'Location': '/auth/sessions', 'Cache-Control': 'no-store' })
+        res.end()
+      })
+      return true
+    }
+    res.writeHead(200, AUTH_PAGE_HEADERS)
+    res.end(renderSessionsPage(viewer, listUserSessions(viewer), current))
+    return true
   }
 
   if (rawPath === '/auth/git-key') {
@@ -760,6 +1009,77 @@ export function renderGitKeyPage(key: string | undefined): string {
       })
     })
   </script>
+</body>
+</html>`
+}
+
+/** Render one timestamp for the sessions table. */
+function formatMoment(value: number): string {
+  return new Date(value).toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+}
+
+/**
+ * Page listing the signed-in account's own sessions, with revocation.
+ * @param viewer - the signed-in account.
+ * @param sessions - that account's live sessions, newest first.
+ * @param current - the viewer's own session token, marked in the list.
+ * @returns the rendered HTML.
+ */
+export function renderSessionsPage(
+  viewer: string,
+  sessions: readonly (SessionRecord & { token: string })[],
+  current: string | undefined,
+): string {
+  const rows = sessions.map((row) => {
+    const isCurrent = row.token === current
+    return `<tr>
+      <td>${formatMoment(row.issuedAt)}${isCurrent ? ' <span class="tag">this browser</span>' : ''}</td>
+      <td>${formatMoment(row.expiresAt)}</td>
+      <td class="right">${isCurrent
+        ? '<span class="muted">—</span>'
+        : `<form method="POST" action="/auth/sessions"><input type="hidden" name="revoke" value="${row.token}"><button type="submit" class="link">Revoke</button></form>`}</td>
+    </tr>`
+  }).join('')
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>Sessions</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    body { background: #0d1117; color: #c9d1d9; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .card { width: 100%; max-width: 680px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px; }
+    h1 { font-size: 18px; color: #f0f6fc; margin-bottom: 6px; }
+    p.sub { font-size: 13px; color: #8b949e; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-weight: 500; color: #8b949e; padding: 8px 6px; border-bottom: 1px solid #30363d; }
+    td { padding: 10px 6px; border-bottom: 1px solid #21262d; }
+    td.right, th.right { text-align: right; }
+    .tag { font-size: 11px; color: #3fb950; border: 1px solid #238636; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+    .muted { color: #6e7681; }
+    button.link { background: none; border: none; color: #f85149; font-size: 13px; cursor: pointer; padding: 0; width: auto; }
+    button.link:hover { text-decoration: underline; }
+    form.all { margin-top: 20px; }
+    form.all button { padding: 8px 14px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    form.all button:hover { border-color: #8b949e; color: #f0f6fc; }
+    a.back { display: inline-block; margin-top: 20px; font-size: 13px; color: #58a6ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Sessions</h1>
+    <p class="sub">Signed in as <strong>${viewer.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</strong>. Sessions survive a redeploy; revoking one ends it everywhere immediately.</p>
+    <table>
+      <thead><tr><th>Signed in</th><th>Expires</th><th class="right">&nbsp;</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${sessions.length > 1
+      ? '<form class="all" method="POST" action="/auth/sessions"><input type="hidden" name="revokeOthers" value="1"><button type="submit">Sign out every other browser</button></form>'
+      : ''}
+    <a class="back" href="/">&larr; Back to the harness</a>
+  </div>
 </body>
 </html>`
 }

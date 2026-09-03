@@ -176,6 +176,35 @@ fresh volume the entrypoint seeds `~/.dsh/settings.yaml` from
 `deploy/settings.seed.yaml`, so the providers are registered before you ever
 open the UI; edit them in the UI afterwards and the volume keeps your changes.
 
+## Accounts and sessions
+
+One account comes from the environment (`DSH_AUTH_USER` with a password or
+digest). For more than one person, add accounts to `users.json` on the state
+volume, which supersedes the environment account entirely:
+
+```sh
+C=$(docker ps -qf name=harness)
+docker exec -it $C node /app/deploy/user.mjs add jane jane@example.com
+docker exec -it $C node /app/deploy/user.mjs list
+docker restart $C
+```
+
+`passwd` changes a password and `remove` deletes an account; the file stores
+scrypt digests only. Removing the last account is refused, because the file
+would silently fall back to the environment account.
+
+Sessions live in `.sessions.json` on the same volume, so a redeploy no longer
+signs anyone out. `/auth/sessions` lists the signed-in account's own sessions
+with when each began and expires, revokes any one of them, or signs out every
+other browser. An account can only see and revoke its own.
+
+**What per-account does not buy you.** Everyone shares one agy identity and its
+quota, one git credential, and one filesystem — the harness runs every agent as
+the same OS user, and upstream's sessions have no owner, so nothing carries
+"this belongs to Jane" from the web request into tool execution. Accounts give
+you separate logins, separate revocation, and a name against each session. They
+do not isolate what a signed-in person can reach.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads
