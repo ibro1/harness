@@ -11,13 +11,13 @@ const OPENCODE_PATH = join(homedir(), '.opencode', 'bin')
 const ENV = { ...process.env, PATH: `${OPENCODE_PATH}:${process.env.PATH || ''}` }
 
 const OPENCODE_MODELS = [
+  { id: 'big-pickle', name: 'Big Pickle (Free)', context_window: 131072, max_tokens: 16384 },
+  { id: 'ling-3.0-flash-fin-free', name: 'Ling 3.0 Flash Fin (Free)', context_window: 131072, max_tokens: 16384 },
   { id: 'mimo-v2.5-free', name: 'Mimo v2.5 (Free)', context_window: 131072, max_tokens: 16384 },
-  { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (Free)', context_window: 131072, max_tokens: 16384 },
-  { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (Free)', context_window: 131072, max_tokens: 16384 },
-  { id: 'big-pickle', name: 'Big Pickle', context_window: 131072, max_tokens: 16384 },
-  { id: 'hy3-free', name: 'HY3 (Free)', context_window: 131072, max_tokens: 16384 },
   { id: 'muse-spark-1.2-contributor-free', name: 'Muse Spark 1.2 (Free)', context_window: 131072, max_tokens: 16384 },
-  { id: 'x-preview-f-free', name: 'X Preview F (Free)', context_window: 131072, max_tokens: 16384 },
+  { id: 'muse-spark-1.3-contributor-free', name: 'Muse Spark 1.3 (Free)', context_window: 131072, max_tokens: 16384 },
+  { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (Free)', context_window: 131072, max_tokens: 16384 },
+  { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (Free)', context_window: 131072, max_tokens: 16384 },
 ]
 
 function saveBase64Image(dataUrl) {
