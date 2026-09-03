@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import { writeFileSync, unlinkSync } from 'node:fs'
+import { writeFileSync, unlinkSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 
 const PORT = 8001
 const HOST = '127.0.0.1'
@@ -23,6 +24,29 @@ const AGY_MODELS = [
   { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)', context_window: 200000, max_tokens: 64000 },
   { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)', context_window: 131072, max_tokens: 16384 },
 ]
+
+/**
+ * Models this bridge advertises. The boot-time sync writes what the CLI
+ * actually serves; the constant below is only the floor when that file is
+ * missing or unreadable, so the list is never hand-maintained in two places.
+ */
+function catalogueModels(provider, fallback) {
+  try {
+    const path = join(process.env.DSH_HOME || join(homedir(), '.dsh'), '.model-catalogue.json')
+    const rows = JSON.parse(readFileSync(path, 'utf8'))[provider]
+    if (Array.isArray(rows) && rows.length > 0) {
+      return rows.map(row => ({
+        id: row.id,
+        name: row.name || row.id,
+        context_window: row.contextWindow || 131072,
+        max_tokens: row.maxTokens || 16384,
+      }))
+    }
+  } catch {
+    // No catalogue yet (first boot, or the CLI never answered): the constant stands.
+  }
+  return fallback
+}
 
 function saveBase64Image(dataUrl) {
   try {
@@ -115,7 +139,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && (url.pathname === '/v1/models' || url.pathname === '/models')) {
     const data = {
       object: 'list',
-      data: AGY_MODELS.map(m => ({
+      data: catalogueModels('agy', AGY_MODELS).map(m => ({
         id: m.id,
         object: 'model',
         created: 1700000000,

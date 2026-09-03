@@ -58,6 +58,13 @@ if [[ ! -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]]; then
   echo "[entrypoint] NOTE: agy is not signed in. See deploy/README.md section 4." >&2
 fi
 
+# Derive the model catalogue from what the CLIs actually serve. Both vendors
+# retire ids without notice, and a stale one fails only on selection — or
+# silently, when it is the configured default.
+if command -v agy >/dev/null 2>&1 || command -v opencode >/dev/null 2>&1; then
+  node "$APP_DIR/deploy/sync-models.mjs" || echo "[entrypoint] model sync failed; the configured lists stand" >&2
+fi
+
 for binary in agy opencode; do
   if ! command -v "$binary" >/dev/null 2>&1; then
     echo "[entrypoint] WARNING: '$binary' not on PATH — its provider will fail until /opt/harness/bin holds it." >&2

@@ -170,6 +170,24 @@ fresh volume the entrypoint seeds `~/.dsh/settings.yaml` from
 `deploy/settings.seed.yaml`, so the providers are registered before you ever
 open the UI; edit them in the UI afterwards and the volume keeps your changes.
 
+## Model catalogue
+
+The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads
+`agy models` and `opencode models`, rewrites those providers' lists in
+`~/.dsh/settings.yaml`, and writes `~/.dsh/.model-catalogue.json` for the
+bridges to serve. An id the file already describes keeps its tuned limits and
+name; a new one gets limits inferred from its family; a retired one is dropped.
+If the configured default names a model that is gone, it is repointed at a
+surviving one.
+
+A CLI that cannot answer — not installed, not signed in — leaves the configured
+list untouched rather than emptying it. Run it by hand with `--dry-run` to see
+what it would change:
+
+```sh
+docker exec $(docker ps -qf name=harness) node /app/deploy/sync-models.mjs --dry-run
+```
+
 ## Operational notes
 
 - **Sessions live in memory.** Every redeploy signs everyone out. Expected.
