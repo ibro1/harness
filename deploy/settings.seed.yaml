@@ -1,0 +1,128 @@
+# Seeded into ~/.dsh/settings.yaml on first boot when that file does not exist.
+# Registers the two local bridges as providers. Edit in the UI afterwards; the
+# volume keeps your changes and this file is never applied again.
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+llm-pi-ai:
+  providers:
+    agy:
+      displayName: Antigravity CLI (agy)
+      api: openai-completions
+      baseURL: http://127.0.0.1:8001/v1
+      apiKeyEnv: AGY_API_KEY
+      defaultInput:
+        - text
+        - image
+      models:
+        - id: gemini-3.7-flash-high
+          name: Gemini 3.7 Flash (High)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.7-flash-medium
+          name: Gemini 3.7 Flash (Medium)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.7-flash-low
+          name: Gemini 3.7 Flash (Low)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.6-flash-high
+          name: Gemini 3.6 Flash (High)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.6-flash-medium
+          name: Gemini 3.6 Flash (Medium)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.6-flash-low
+          name: Gemini 3.6 Flash (Low)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.5-flash-high
+          name: Gemini 3.5 Flash (High)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.5-flash-medium
+          name: Gemini 3.5 Flash (Medium)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.1-pro-high
+          name: Gemini 3.1 Pro (High)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.1-pro-low
+          name: Gemini 3.1 Pro (Low)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: claude-sonnet-4-6
+          name: Claude Sonnet 4.6 (Thinking)
+          contextWindow: 200000
+          maxTokens: 64000
+          input: [ text, image ]
+        - id: claude-opus-4-6-thinking
+          name: Claude Opus 4.6 (Thinking)
+          contextWindow: 200000
+          maxTokens: 64000
+          input: [ text, image ]
+        - id: gpt-oss-120b-medium
+          name: GPT-OSS 120B (Medium)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+    opencode:
+      displayName: OpenCode
+      api: openai-completions
+      baseURL: http://127.0.0.1:8002/v1
+      apiKeyEnv: OPENCODE_API_KEY
+      defaultInput:
+        - text
+        - image
+      models:
+        - id: mimo-v2.5-free
+          name: Mimo v2.5 (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+        - id: nemotron-3.5-lightning-free
+          name: Nemotron 3.5 Lightning (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+        - id: nemotron-3-ultra-free
+          name: Nemotron 3 Ultra (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+        - id: big-pickle
+          name: Big Pickle (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+        - id: hy3-free
+          name: HY3 (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+        - id: muse-spark-1.2-contributor-free
+          name: Muse Spark 1.2 (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+        - id: x-preview-f-free
+          name: X Preview F (Free)
+          contextWindow: 131072
+          maxTokens: 16384
+          input: [ text, image ]
+agent-default-model:
+  provider: opencode
+  model: x-preview-f-free

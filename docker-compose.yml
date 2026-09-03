@@ -1,0 +1,71 @@
+# DeepSeek Harness on Dokploy.
+#
+# Deploy as a Docker Compose application. Set the variables from
+# deploy/.env.example in Dokploy's Environment panel — nothing secret belongs
+# in this file.
+#
+# Before the first deploy, on the Dokploy host:
+#   mkdir -p /opt/harness/bin /opt/harness/workspace
+#   scp agy opencode  ->  /opt/harness/bin/   (chmod 755)
+#   see deploy/README.md for the agy OAuth token
+
+services:
+  harness:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    # No `ports:` on purpose. The only way in is Traefik, so the login page is
+    # the only public surface and the bridges stay on container loopback.
+    environment:
+      DSH_PUBLIC_HOST: ${DSH_PUBLIC_HOST:?set DSH_PUBLIC_HOST}
+      DSH_EXTRA_TRUSTED_HOSTS: ${DSH_EXTRA_TRUSTED_HOSTS:-}
+      DSH_AUTH_USER: ${DSH_AUTH_USER:-admin}
+      DSH_AUTH_PASSWORD_HASH: ${DSH_AUTH_PASSWORD_HASH:-}
+      DSH_AUTH_API_TOKEN: ${DSH_AUTH_API_TOKEN:-}
+      DSH_SESSION_TTL_HOURS: ${DSH_SESSION_TTL_HOURS:-168}
+      DSH_TRUST_PROXY: "1"
+      DSH_AUTH_COOKIE_SECURE: auto
+      GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME:-}
+      GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL:-}
+    volumes:
+      # Harness state: sessions, settings.yaml, provider credentials, attachments.
+      - dsh-state:/home/node/.dsh
+      # agy's identity. antigravity-oauth-token lives here and must survive
+      # redeploys, or every deploy costs you another browser login.
+      - agy-state:/home/node/.gemini
+      - opencode-config:/home/node/.config/opencode
+      - opencode-state:/home/node/.local/share/opencode
+      # The agy / opencode binaries, supplied from the host.
+      - /opt/harness/bin:/opt/harness/bin
+      # Where agents actually work. Anything here is reachable by the agent.
+      - /opt/harness/workspace:/workspace
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.harness.rule=Host(`${DSH_PUBLIC_HOST}`)
+      - traefik.http.routers.harness.entrypoints=websecure
+      - traefik.http.routers.harness.tls=true
+      - traefik.http.routers.harness.tls.certresolver=letsencrypt
+      - traefik.http.services.harness.loadbalancer.server.port=3080
+      - traefik.http.routers.harness.middlewares=harness-ratelimit@docker,harness-headers@docker
+      # Second line of defence on the login page; the app rate-limits per
+      # address as well, but this one costs the attacker the TCP handshake.
+      - traefik.http.middlewares.harness-ratelimit.ratelimit.average=60
+      - traefik.http.middlewares.harness-ratelimit.ratelimit.burst=120
+      - traefik.http.middlewares.harness-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.harness-headers.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.harness-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.harness-headers.headers.referrerPolicy=no-referrer
+
+volumes:
+  dsh-state:
+  agy-state:
+  opencode-config:
+  opencode-state:
+
+networks:
+  dokploy-network:
+    external: true
