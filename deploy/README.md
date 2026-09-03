@@ -42,6 +42,20 @@ binary appearing on PATH is picked up immediately.
 `/opt/harness/workspace` is where agents will work. Anything you put there is
 reachable by the agent, so keep unrelated repos and credentials out of it.
 
+### Letting agents use git
+
+Without a credential an agent can edit files it creates but cannot clone, pull
+or push. Set `GIT_TOKEN` in the environment to a fine-grained token scoped to
+the repositories you want reachable, and the entrypoint writes a
+`credential.helper store` entry for `GIT_HOST` (default `github.com`) on every
+boot. The token lives only in the environment; `$HOME` is not a volume, so
+nothing credential-shaped is left on disk between deploys beyond that boot's
+own file.
+
+The token is as powerful as the scope you give it, and an agent with shell
+access can read it. Scope it to the repositories this harness should touch,
+never to your whole account.
+
 ## 2. Credentials
 
 Set `DSH_AUTH_PASSWORD` to the password you want. That is all most deployments

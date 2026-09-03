@@ -33,6 +33,27 @@ if [[ ! -f "$HOME/.dsh/.credentials.yaml" ]]; then
   chmod 600 "$HOME/.dsh/.credentials.yaml"
 fi
 
+# Git identity and credentials for agents working in /workspace. Rewritten on
+# every boot from the environment: $HOME is not a volume, and the token must
+# never be the thing that persists.
+if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then git config --global user.name "$GIT_AUTHOR_NAME"; fi
+if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then git config --global user.email "$GIT_AUTHOR_EMAIL"; fi
+# /workspace is a bind mount; a repo cloned by another uid is otherwise refused
+# as dubious ownership, which reads as a git bug rather than a permissions one.
+git config --global --add safe.directory '*'
+
+if [[ -n "${GIT_TOKEN:-}" ]]; then
+  git_host="${GIT_HOST:-github.com}"
+  git_token_user="${GIT_TOKEN_USER:-x-access-token}"
+  umask 077
+  printf 'https://%s:%s@%s\n' "$git_token_user" "$GIT_TOKEN" "$git_host" > "$HOME/.git-credentials"
+  chmod 600 "$HOME/.git-credentials"
+  git config --global credential.helper store
+  echo "[entrypoint] git credentials configured for $git_host"
+else
+  echo "[entrypoint] NOTE: GIT_TOKEN unset — agents can edit /workspace but cannot clone or push." >&2
+fi
+
 if [[ ! -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]]; then
   echo "[entrypoint] NOTE: agy is not signed in. See deploy/README.md section 4." >&2
 fi
