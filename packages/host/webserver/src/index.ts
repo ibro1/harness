@@ -14,7 +14,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import compressionMiddleware from 'compression'
 import Negotiator from 'negotiator'
-import { handleAuthRoutes, isAuthenticated } from './auth.ts'
+import { getAuthConfig, handleAuthRoutes, isAuthenticated } from './auth.ts'
 import { renderIndexInjections, type IndexInjection } from './injections.ts'
 
 export { renderIndexInjections } from './injections.ts'
@@ -219,6 +219,11 @@ export class WebServer extends Service {
 
   /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
+    // Resolve credentials before binding: a malformed DSH_AUTH_PASSWORD_HASH
+    // must fail the boot with its own message, not answer 400 to every
+    // request once the deployment looks healthy.
+    getAuthConfig()
+
     const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
       requests; the field is only optional on the client-side IncomingMessage type */

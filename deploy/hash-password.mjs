@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Print a DSH_AUTH_PASSWORD_HASH value so the plaintext password never has to
-// live in Dokploy's environment panel.
+// live in Dokploy's environment panel. Dot-separated on purpose: Compose
+// expands `$name` inside a .env value, which would eat a `$`-separated digest.
 //
 //   node deploy/hash-password.mjs 'your password'
 //   node deploy/hash-password.mjs            # prompts, no shell history
@@ -26,4 +27,4 @@ if (password.length < 12) {
 
 const salt = randomBytes(16)
 const hash = scryptSync(password, salt, SCRYPT_KEYLEN, SCRYPT_PARAMS)
-console.log(`scrypt$${salt.toString('hex')}$${hash.toString('hex')}`)
+console.log(`scrypt.${salt.toString('hex')}.${hash.toString('hex')}`)

@@ -55,11 +55,15 @@ function hashPassword(password: string, salt: Buffer = randomBytes(16)): Passwor
 }
 
 /**
- * Parse a `scrypt$<saltHex>$<hashHex>` digest.
+ * Parse a `scrypt.<saltHex>.<hashHex>` digest.
+ *
+ * `$` is also accepted as the separator, but never emitted: Compose expands
+ * `$name` inside a `.env` value, so a dollar-separated digest pasted into a
+ * deployment panel arrives with both halves eaten.
  * @returns the parsed hash, or undefined when the value is not in that form.
  */
 function parsePasswordHash(value: string): PasswordHash | undefined {
-  const parts = value.split('$')
+  const parts = value.split(value.includes('.') ? '.' : '$')
   if (parts.length !== 3 || parts[0] !== 'scrypt') return undefined
   try {
     const salt = Buffer.from(parts[1] ?? '', 'hex')
@@ -104,7 +108,11 @@ export function getAuthConfig(): AuthConfig {
   if (configuredHash !== undefined && configuredHash !== '') {
     password = parsePasswordHash(configuredHash)
     if (password === undefined) {
-      throw new Error('webserver/auth: DSH_AUTH_PASSWORD_HASH is not a valid scrypt$<saltHex>$<hashHex> digest')
+      throw new Error(
+        'webserver/auth: DSH_AUTH_PASSWORD_HASH is not a valid scrypt.<saltHex>.<hashHex> digest.'
+        + ' Generate one with `node deploy/hash-password.mjs`.'
+        + ' A digest that arrives truncated to "scrypt" was eaten by .env variable expansion.',
+      )
     }
   } else {
     const plain = process.env.DSH_AUTH_PASSWORD

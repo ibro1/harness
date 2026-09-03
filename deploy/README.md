@@ -32,8 +32,15 @@ server or Dokploy's database:
 
 ```sh
 node deploy/hash-password.mjs
-# -> scrypt$<salt>$<hash>
+# -> scrypt.<salt>.<hash>
 ```
+
+Paste that whole line as `DSH_AUTH_PASSWORD_HASH`. Leaving the example's
+placeholder in place is a boot failure, by design — the container refuses to
+listen rather than come up healthy and answer 400 to everything.
+
+The digest is dot-separated because Compose expands `$name` inside a `.env`
+value: a `$`-separated digest reaches the container truncated to `scrypt`.
 
 Optional API token for scripts:
 
