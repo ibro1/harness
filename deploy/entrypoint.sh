@@ -109,13 +109,27 @@ respawn opencode-bridge "$APP_DIR/opencode-bridge.mjs" &
 # --trusted-host restores the DNS-rebinding / cross-site fence for the public
 # authority. Additional authorities (a second domain, a LAN IP) go in
 # DSH_EXTRA_TRUSTED_HOSTS, space separated.
+# The GitHub ingress is opt-in: without a secret there is nothing to verify a
+# delivery against, and an unauthenticated endpoint must not exist by default.
+patch_args=()
+WEBHOOK_PORT="${DSH_GITHUB_WEBHOOK_PORT:-3082}"
+if [[ -n "${DSH_GITHUB_WEBHOOK_SECRET:-}" ]]; then
+  if [[ -z "${DSH_GITHUB_REPOSITORIES:-}" ]]; then
+    echo "[entrypoint] WARNING: DSH_GITHUB_WEBHOOK_SECRET set but DSH_GITHUB_REPOSITORIES empty — every delivery will be ignored." >&2
+  fi
+  patch_args=(--patch "$APP_DIR/deploy/webhook/cordis.yml")
+  echo "[entrypoint] GitHub webhook ingress enabled on /github for: ${DSH_GITHUB_REPOSITORIES:-<none>}"
+fi
+
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
   trusted_args+=(--trusted-host "$host")
 done
 
 cd "$APP_DIR"
-node --import tsx/esm apps/cli/src/bin.ts --profile web \
+# --patch is a launcher flag: it must precede the app's own flags, which the
+# launcher hands through verbatim.
+node --import tsx/esm apps/cli/src/bin.ts --profile web ${patch_args[@]+"${patch_args[@]}"} \
   --no-open \
   --host 127.0.0.1 \
   --port "$INTERNAL_PORT" \
@@ -137,7 +151,16 @@ done
 socat "TCP-LISTEN:$PORT,fork,reuseaddr" "TCP:127.0.0.1:$INTERNAL_PORT" &
 socat_pid=$!
 
+# The ingress realm binds loopback like the UI; republish it on its own port so
+# Traefik can route /github to it without that route reaching the UI server.
+webhook_socat_pid=""
+if [[ -n "${DSH_GITHUB_WEBHOOK_SECRET:-}" ]]; then
+  socat "TCP-LISTEN:$((PORT + 1)),fork,reuseaddr" "TCP:127.0.0.1:$WEBHOOK_PORT" &
+  webhook_socat_pid=$!
+fi
+
 shutdown() {
+  [[ -n "$webhook_socat_pid" ]] && kill -TERM "$webhook_socat_pid" 2>/dev/null || true
   kill -TERM "$socat_pid" 2>/dev/null || true
   kill -TERM "$harness_pid" 2>/dev/null || true
   wait "$harness_pid" 2>/dev/null || true

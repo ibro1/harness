@@ -36,6 +36,13 @@ services:
       GIT_TOKEN: ${GIT_TOKEN:-}
       GIT_TOKEN_USER: ${GIT_TOKEN_USER:-}
       GIT_HOST: ${GIT_HOST:-}
+      DSH_GITHUB_WEBHOOK_SECRET: ${DSH_GITHUB_WEBHOOK_SECRET:-}
+      DSH_GITHUB_REPOSITORIES: ${DSH_GITHUB_REPOSITORIES:-}
+      DSH_GITHUB_WORKSPACE_ROOT: ${DSH_GITHUB_WORKSPACE_ROOT:-/workspace}
+      DSH_GITHUB_TRIGGER: ${DSH_GITHUB_TRIGGER:-}
+      DSH_GITHUB_ALLOWED_ASSOCIATIONS: ${DSH_GITHUB_ALLOWED_ASSOCIATIONS:-}
+      DSH_GITHUB_AGENT_PRESET: ${DSH_GITHUB_AGENT_PRESET:-}
+      DSH_GITHUB_PERMISSION_PRESET: ${DSH_GITHUB_PERMISSION_PRESET:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh
@@ -58,6 +65,15 @@ services:
       - traefik.http.routers.harness.tls=true
       - traefik.http.routers.harness.tls.certresolver=letsencrypt
       - traefik.http.services.harness.loadbalancer.server.port=3080
+      # /github reaches the ingress realm, never the UI server. Higher priority
+      # than the catch-all Host rule so the path wins.
+      - traefik.http.routers.harness-webhook.rule=Host(`${DSH_PUBLIC_HOST}`) && Path(`/github`)
+      - traefik.http.routers.harness-webhook.priority=100
+      - traefik.http.routers.harness-webhook.entrypoints=websecure
+      - traefik.http.routers.harness-webhook.tls=true
+      - traefik.http.routers.harness-webhook.tls.certresolver=letsencrypt
+      - traefik.http.routers.harness-webhook.service=harness-webhook
+      - traefik.http.services.harness-webhook.loadbalancer.server.port=3081
       - traefik.http.routers.harness.middlewares=harness-ratelimit@docker,harness-headers@docker
       # Second line of defence on the login page; the app rate-limits per
       # address as well, but this one costs the attacker the TCP handshake.

@@ -68,6 +68,15 @@ export interface Config {
   compressionLevel?: number
   /** Minimum known response length eligible for gzip; unknown-length streams are eligible. @default 1024 */
   compressionThresholdBytes?: number
+  /**
+   * Whether this instance sits behind the password gate.
+   *
+   * True for anything a browser reaches. False only for a realm whose routes
+   * authenticate their callers themselves — a signed webhook endpoint proves
+   * its origin by HMAC, and no password exists for a machine to present.
+   * @default true
+   */
+  authenticate?: boolean
 }
 
 const DEFAULT_COMPRESSION = 'none' as const
@@ -129,6 +138,7 @@ export class WebServer extends Service {
     compression: z.union([z.const('none'), z.const('gzip')]).default(DEFAULT_COMPRESSION),
     compressionLevel: z.number().step(1).min(0).max(9).default(DEFAULT_COMPRESSION_LEVEL),
     compressionThresholdBytes: z.natural().default(DEFAULT_COMPRESSION_THRESHOLD_BYTES),
+    authenticate: z.boolean().default(true),
   })
 
   private readonly exact = new Map<string, WebRoute>()
@@ -249,19 +259,21 @@ export class WebServer extends Service {
   async [Service.init](): Promise<void> {
     // Resolve credentials before binding: a malformed DSH_AUTH_PASSWORD_HASH
     // must fail the boot with its own message, not answer 400 to every
-    // request once the deployment looks healthy.
-    getAuthConfig()
+    // request once the deployment looks healthy. An unauthenticated realm has
+    // no credentials to resolve.
+    const gated = this.config.authenticate !== false
+    if (gated) getAuthConfig()
 
     const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
       requests; the field is only optional on the client-side IncomingMessage type */
       const rawPath = new URL(req.url ?? '/', 'http://x').pathname
 
-      if (handleAuthRoutes(req, res, rawPath, () => this.signedInTarget())) {
+      if (gated && handleAuthRoutes(req, res, rawPath, () => this.signedInTarget())) {
         return
       }
 
-      if (!isAuthenticated(req)) {
+      if (gated && !isAuthenticated(req)) {
         if (rawPath.startsWith('/api/') || rawPath.startsWith('/events')) {
           res.writeHead(401, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'unauthorized', login: '/auth/login' }))
@@ -315,7 +327,7 @@ export class WebServer extends Service {
         this.upgradedSockets.delete(socket)
       })
 
-      if (!isAuthenticated(req)) {
+      if (gated && !isAuthenticated(req)) {
         socket.destroy()
         return
       }

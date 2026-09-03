@@ -1,0 +1,47 @@
+# GitHub webhook ingress, layered over the shipped Web composition with
+# `dsh --profile web --patch`.
+#
+# The endpoint runs on its own WebServer in an isolated realm, following the
+# shipped github-review example: that server carries the webhook route and
+# nothing else, so a mistake there cannot reach the UI's /api surface. It is
+# also the one server in this deployment with `authenticate: false` — a signed
+# delivery proves its origin by HMAC, and GitHub has no password to present.
+#
+# Reached from outside through its own Traefik route on /github; see
+# docker-compose.yml.
+
+- insert:
+    - id: webhook-runtime
+      name: '@deepseek-ai/dsh-webhook'
+
+    - id: github-command-rule
+      name: './github-command-rule.mjs'
+      config:
+        source: primary-github
+        repositories: !!js (process.env.DSH_GITHUB_REPOSITORIES ?? '').split(',').map(entry => entry.trim()).filter(entry => entry !== '')
+        workspaceRoot: !!js process.env.DSH_GITHUB_WORKSPACE_ROOT ?? '/workspace'
+        trigger: !!js process.env.DSH_GITHUB_TRIGGER ?? '/dsh'
+        allowedAssociations: !!js (process.env.DSH_GITHUB_ALLOWED_ASSOCIATIONS ?? 'OWNER,MEMBER,COLLABORATOR').split(',').map(entry => entry.trim()).filter(entry => entry !== '')
+        agentPreset: !!js process.env.DSH_GITHUB_AGENT_PRESET ?? 'standard'
+        permissionPreset: !!js process.env.DSH_GITHUB_PERMISSION_PRESET ?? 'read-only'
+
+    - id: github-webhook-ingress
+      name: cordis:group
+      group: true
+      isolate:
+        webServer: true
+      config:
+        - id: github-webhook-server
+          name: '@deepseek-ai/dsh-host-webserver'
+          config:
+            host: '127.0.0.1'
+            port: !!js Number(process.env.DSH_GITHUB_WEBHOOK_PORT ?? 3082)
+            authenticate: false
+
+        - id: github-webhook-adapter
+          name: '@deepseek-ai/dsh-webhook-github'
+          config:
+            source: primary-github
+            path: /github
+            secretEnv: DSH_GITHUB_WEBHOOK_SECRET
+            maxBodyBytes: 1048576

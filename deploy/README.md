@@ -176,6 +176,54 @@ fresh volume the entrypoint seeds `~/.dsh/settings.yaml` from
 `deploy/settings.seed.yaml`, so the providers are registered before you ever
 open the UI; edit them in the UI afterwards and the volume keeps your changes.
 
+## GitHub webhook ingress
+
+A comment beginning with `/dsh` on an allowed repository starts a session in
+that repository's checkout, with the rest of the comment as the prompt.
+
+Enable it by setting `DSH_GITHUB_WEBHOOK_SECRET` and `DSH_GITHUB_REPOSITORIES`;
+with no secret the endpoint does not exist. Then in each repository's Settings
+&rarr; Webhooks:
+
+- Payload URL `https://<your domain>/github`
+- Content type `application/json`
+- Secret: the same value as `DSH_GITHUB_WEBHOOK_SECRET`
+- Events: **Issue comments** only
+
+Clone each repository into the workspace under its own name first, using the
+SSH key from `/auth/git-key`, or the run has nowhere to work:
+
+```sh
+cd /opt/harness/workspace && git clone git@github.com:ibro1/harness.git harness
+```
+
+### What stops anyone from running commands on your server
+
+A comment body is written by whoever can comment, which on a public repository
+is anyone at all. Three fences, and every one must pass:
+
+1. The adapter verifies GitHub's HMAC signature and answers `401` without it.
+2. The repository must be in `DSH_GITHUB_REPOSITORIES`.
+3. The commenter's `author_association` must be in
+   `DSH_GITHUB_ALLOWED_ASSOCIATIONS` — `OWNER`, `MEMBER` and `COLLABORATOR` by
+   default. Never add `NONE` or `FIRST_TIME_CONTRIBUTOR`.
+
+A signed delivery that fails fence 2 or 3 is acknowledged with `202` and
+produces nothing, because a webhook endpoint that answered differently would
+tell an attacker which repositories and roles it accepts. The comment text
+reaches the agent quoted, and the event metadata is labelled untrusted, so a
+comment cannot pose as an instruction about the agent's own rules.
+
+The default `DSH_GITHUB_PERMISSION_PRESET` is `read-only`: runs can read and
+report but not change the checkout. Raising it to `workspace-write` means a
+comment from a collaborator can modify files and, with git credentials
+configured, push them.
+
+The endpoint runs on its own web server in an isolated realm — the only server
+here with `authenticate: false`, since GitHub has no password to present. That
+realm carries the webhook route and nothing else, so it cannot reach the UI's
+`/api` surface.
+
 ## Accounts and sessions
 
 One account comes from the environment (`DSH_AUTH_USER` with a password or
