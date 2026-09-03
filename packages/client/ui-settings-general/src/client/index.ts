@@ -27,6 +27,7 @@ import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
+import { SignOutAction } from './SignOutAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
 import { SettingsDocumentStore } from './settings-document-store.ts'
 import { en, zh, type SettingsKey } from './locales.ts'
@@ -143,6 +144,14 @@ export function apply(ctx: ClientContext): void {
       },
     },
   })
+  // Sign-out belongs beside Settings, not floating over the page: this fork
+  // gates the whole surface behind a password, and the footer slot is where
+  // the sidebar puts account-level actions.
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: 'sign-out',
+    locale: NS,
+  }, SignOutAction))
   ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
     name: 'sidebar.settings',
     locale: NS,

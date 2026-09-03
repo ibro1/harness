@@ -1,0 +1,26 @@
+.action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  color: var(--dsh-color-text-secondary, #8b949e);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsh-color-surface-hover, rgba(110, 118, 129, 0.12));
+  color: var(--dsh-color-text-primary, #f0f6fc);
+}
+
+.rail {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.label {
+  font-size: 14px;
+  line-height: 1;
+}

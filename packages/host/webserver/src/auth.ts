@@ -14,7 +14,6 @@
 
 import { randomBytes, scryptSync, createHash, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { IndexInjection } from './injections.ts'
 
 /** scrypt parameters for password verification. Cost is per login attempt only. */
 const SCRYPT_KEYLEN = 32
@@ -454,22 +453,24 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
       position: relative;
     }
     .password-field input {
-      padding-right: 68px;
+      padding-right: 46px;
     }
     .password-field button {
       position: absolute;
       top: 50%;
-      right: 6px;
+      right: 4px;
       transform: translateY(-50%);
-      width: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
       margin: 0;
-      padding: 5px 10px;
+      padding: 0;
       background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 5px;
+      border: none;
+      border-radius: 6px;
       color: #8b949e;
-      font-size: 12px;
-      font-weight: 500;
     }
     .password-field button:hover {
       background: #1f242c;
@@ -506,7 +507,10 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
         <label for="password">Password</label>
         <div class="password-field">
           <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
-          <button type="button" id="reveal" aria-label="Show password" aria-pressed="false">Show</button>
+          <button type="button" id="reveal" aria-label="Show password" aria-pressed="false">
+            <svg id="eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.1M6.6 6.6A17.7 17.7 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/></svg>
+          </button>
         </div>
       </div>
       <button type="submit">Sign In</button>
@@ -520,10 +524,13 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
     (function () {
       var input = document.getElementById('password')
       var toggle = document.getElementById('reveal')
+      var open = document.getElementById('eye-open')
+      var off = document.getElementById('eye-off')
       toggle.addEventListener('click', function () {
         var shown = input.type === 'text'
         input.type = shown ? 'password' : 'text'
-        toggle.textContent = shown ? 'Show' : 'Hide'
+        open.style.display = shown ? '' : 'none'
+        off.style.display = shown ? 'none' : ''
         toggle.setAttribute('aria-label', shown ? 'Show password' : 'Hide password')
         toggle.setAttribute('aria-pressed', shown ? 'false' : 'true')
         input.focus()
@@ -672,31 +679,4 @@ export function handleAuthRoutes(
   }
 
   return false
-}
-
-/**
- * Index rows adding a sign-out control to the application page.
- *
- * The application is upstream's and owns its own DOM, so the control is a
- * fixed-position element outside that tree rather than a component inside it.
- * It stays dim until hovered so it does not compete with the app's own chrome.
- * @returns the rows to append to an index injection table.
- */
-export function signOutInjections(): IndexInjection[] {
-  return [
-    {
-      kind: 'style',
-      text: '#dsh-sign-out{position:fixed;right:12px;bottom:10px;z-index:2147483000;'
-        + 'font:500 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;'
-        + 'padding:6px 10px;border-radius:6px;text-decoration:none;opacity:.35;'
-        + 'color:#8b949e;background:rgba(22,27,34,.9);border:1px solid rgba(110,118,129,.4);'
-        + 'transition:opacity .15s,color .15s}'
-        + '#dsh-sign-out:hover{opacity:1;color:#f0f6fc}',
-    },
-    {
-      kind: 'html',
-      placement: 'body',
-      html: '<a id="dsh-sign-out" href="/auth/logout" title="End this browser session">Sign out</a>',
-    },
-  ]
 }
