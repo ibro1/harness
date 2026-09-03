@@ -27,20 +27,22 @@ reachable by the agent, so keep unrelated repos and credentials out of it.
 
 ## 2. Credentials
 
-Generate the password digest locally — the plaintext never has to reach the
-server or Dokploy's database:
+Set `DSH_AUTH_PASSWORD` to the password you want. That is all most deployments
+need. Avoid `$` in it — Compose expands `$name` inside a `.env` value and would
+eat part of the password.
+
+If you would rather the plaintext never sat in Dokploy's database and backups,
+leave `DSH_AUTH_PASSWORD` empty and set a digest instead:
 
 ```sh
 node deploy/hash-password.mjs
 # -> scrypt.<salt>.<hash>
 ```
 
-Paste that whole line as `DSH_AUTH_PASSWORD_HASH`. Leaving the example's
-placeholder in place is a boot failure, by design — the container refuses to
-listen rather than come up healthy and answer 400 to everything.
-
-The digest is dot-separated because Compose expands `$name` inside a `.env`
-value: a `$`-separated digest reaches the container truncated to `scrypt`.
+Paste that whole line as `DSH_AUTH_PASSWORD_HASH`. Set one or the other, never
+both. A malformed digest — the example's placeholder, or one truncated to
+`scrypt` by `.env` expansion — fails the boot on purpose, rather than coming up
+healthy and answering 400 to everything.
 
 Optional API token for scripts:
 
