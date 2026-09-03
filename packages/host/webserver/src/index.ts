@@ -14,7 +14,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import compressionMiddleware from 'compression'
 import Negotiator from 'negotiator'
-import { getAuthConfig, handleAuthRoutes, isAuthenticated } from './auth.ts'
+import { getAuthConfig, handleAuthRoutes, isAuthenticated, signOutInjections } from './auth.ts'
 import { renderIndexInjections, type IndexInjection } from './injections.ts'
 
 export { renderIndexInjections } from './injections.ts'
@@ -247,6 +247,10 @@ export class WebServer extends Service {
 
   /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
+    // The password gate owns sign-out, so it contributes the control that
+    // reaches it; the application page is upstream's and has no such affordance.
+    this.ctx.on('webserver/index-inject', (table) => { table.push(...signOutInjections()) })
+
     // Resolve credentials before binding: a malformed DSH_AUTH_PASSWORD_HASH
     // must fail the boot with its own message, not answer 400 to every
     // request once the deployment looks healthy.

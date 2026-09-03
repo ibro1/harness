@@ -14,6 +14,7 @@
 
 import { randomBytes, scryptSync, createHash, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IndexInjection } from './injections.ts'
 
 /** scrypt parameters for password verification. Cost is per login attempt only. */
 const SCRYPT_KEYLEN = 32
@@ -671,4 +672,31 @@ export function handleAuthRoutes(
   }
 
   return false
+}
+
+/**
+ * Index rows adding a sign-out control to the application page.
+ *
+ * The application is upstream's and owns its own DOM, so the control is a
+ * fixed-position element outside that tree rather than a component inside it.
+ * It stays dim until hovered so it does not compete with the app's own chrome.
+ * @returns the rows to append to an index injection table.
+ */
+export function signOutInjections(): IndexInjection[] {
+  return [
+    {
+      kind: 'style',
+      text: '#dsh-sign-out{position:fixed;right:12px;bottom:10px;z-index:2147483000;'
+        + 'font:500 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;'
+        + 'padding:6px 10px;border-radius:6px;text-decoration:none;opacity:.35;'
+        + 'color:#8b949e;background:rgba(22,27,34,.9);border:1px solid rgba(110,118,129,.4);'
+        + 'transition:opacity .15s,color .15s}'
+        + '#dsh-sign-out:hover{opacity:1;color:#f0f6fc}',
+    },
+    {
+      kind: 'html',
+      placement: 'body',
+      html: '<a id="dsh-sign-out" href="/auth/logout" title="End this browser session">Sign out</a>',
+    },
+  ]
 }
