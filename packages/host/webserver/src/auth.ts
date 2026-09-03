@@ -449,6 +449,31 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
     button:hover {
       background-color: var(--primary-hover);
     }
+    .password-field {
+      position: relative;
+    }
+    .password-field input {
+      padding-right: 68px;
+    }
+    .password-field button {
+      position: absolute;
+      top: 50%;
+      right: 6px;
+      transform: translateY(-50%);
+      width: auto;
+      margin: 0;
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: #8b949e;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .password-field button:hover {
+      background: #1f242c;
+      color: var(--text-heading);
+    }
     .footer {
       text-align: center;
       margin-top: 24px;
@@ -478,7 +503,10 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
       </div>
       <div class="form-group">
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+        <div class="password-field">
+          <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+          <button type="button" id="reveal" aria-label="Show password" aria-pressed="false">Show</button>
+        </div>
       </div>
       <button type="submit">Sign In</button>
     </form>
@@ -487,6 +515,20 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
       Protected instance • Antigravity Security
     </div>
   </div>
+  <script>
+    (function () {
+      var input = document.getElementById('password')
+      var toggle = document.getElementById('reveal')
+      toggle.addEventListener('click', function () {
+        var shown = input.type === 'text'
+        input.type = shown ? 'password' : 'text'
+        toggle.textContent = shown ? 'Show' : 'Hide'
+        toggle.setAttribute('aria-label', shown ? 'Show password' : 'Hide password')
+        toggle.setAttribute('aria-pressed', shown ? 'false' : 'true')
+        input.focus()
+      })
+    })()
+  </script>
 </body>
 </html>`
 }
@@ -550,12 +592,19 @@ function parseLoginBody(bodyText: string, contentType: string): { username: stri
 
 /**
  * Serve `/auth/login` and `/auth/logout`.
+ * @param req - incoming request.
+ * @param res - response owned when this returns true.
+ * @param rawPath - request pathname.
+ * @param resolveSignedInTarget - where a successful sign-in lands. Supplied by
+ * the host so a second browser gate mounted in this process can be cleared in
+ * the same redirect; defaults to `/`.
  * @returns true when the request was handled here and must not be routed further.
  */
 export function handleAuthRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   rawPath: string,
+  resolveSignedInTarget?: () => string,
 ): boolean {
   if (rawPath === '/auth/login') {
     if (req.method === 'GET') {
@@ -600,7 +649,7 @@ export function handleAuthRoutes(
         const token = createSessionToken()
         res.writeHead(302, {
           'Set-Cookie': sessionCookieValue(req, token, Math.floor(getAuthConfig().sessionTtlMs / 1000)),
-          'Location': '/',
+          'Location': resolveSignedInTarget?.() ?? '/',
           'Cache-Control': 'no-store',
         })
         res.end()

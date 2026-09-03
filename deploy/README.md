@@ -127,24 +127,18 @@ true of opencode.
 
 ## 5. Two auth layers
 
-Upstream added its own browser gate in 0.1.2-rc.1, so a new browser passes two
-checks, once:
+Upstream added its own browser gate in 0.1.2-rc.1: a per-launch token exchanged
+once for a signed 30-day cookie. It has no configuration to disable it, so this
+fork clears it as part of signing in — the password gate's success redirect
+carries the launch token, and one form submission satisfies both gates.
 
-1. The password login page (this fork's gate).
-2. Upstream's launch token: visit `https://harness.example.com/?token=<token>`
-   once. The token is printed in the container log at every start
-   (`dsh web: http://127.0.0.1:3081/?token=...`); it is exchanged for a signed
-   30-day cookie and stripped from the URL immediately.
+Nothing manual is needed. If you ever do land on the plain-text page reading
+`dsh web authentication required`, that wiring is not in place: the
+web-app bundle registers the target through `webServer.registerSignedInTarget`,
+and it is the first thing to check.
 
-Read the token with:
-
-```sh
-docker logs "$(docker ps -qf name=harness)" 2>&1 | grep -o 'token=[A-Za-z0-9_-]*' | tail -1
-```
-
-After a redeploy you re-enter the password (sessions are in memory) but not the
-token: upstream's signing secret lives in the `dsh-state` volume, so cookies
-already issued stay valid. Only a brand-new browser needs the token again.
+After a redeploy you re-enter the password (sessions are in memory) and the
+redirect re-issues the browser cookie against the new launch token.
 
 ## 6. Verify
 

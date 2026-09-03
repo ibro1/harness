@@ -137,6 +137,7 @@ export class WebServer extends Service {
   private readonly upgradedSockets = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
   private fallback: WebRoute['handler'] | undefined
+  private signedInTargetResolver: (() => string) | undefined
   private server!: Server
   private listenedPort!: number
   private readonly gzip: NodeMiddleware | undefined
@@ -217,6 +218,33 @@ export class WebServer extends Service {
     }
   }
 
+  /**
+   * Claim where a successful sign-in on the password gate lands. A second
+   * browser gate mounted above this package would otherwise answer its own 401
+   * to someone who just signed in here; the composing application registers a
+   * target that clears both in one redirect. One owner, last registration wins.
+   * @param resolve - computes the redirect target at sign-in time.
+   * @returns the disposer restoring the default target.
+   */
+  registerSignedInTarget(resolve: () => string): () => void {
+    this.signedInTargetResolver = resolve
+    return () => {
+      if (this.signedInTargetResolver === resolve) this.signedInTargetResolver = undefined
+    }
+  }
+
+  /** The registered sign-in target, or `/` when none is registered or it throws. */
+  private signedInTarget(): string {
+    try {
+      return this.signedInTargetResolver?.() ?? '/'
+    } catch (error) {
+      // A gate that cannot name its own URL is one this redirect cannot help;
+      // signing in must still succeed.
+      this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+      return '/'
+    }
+  }
+
   /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
     // Resolve credentials before binding: a malformed DSH_AUTH_PASSWORD_HASH
@@ -229,7 +257,7 @@ export class WebServer extends Service {
       requests; the field is only optional on the client-side IncomingMessage type */
       const rawPath = new URL(req.url ?? '/', 'http://x').pathname
 
-      if (handleAuthRoutes(req, res, rawPath)) {
+      if (handleAuthRoutes(req, res, rawPath, () => this.signedInTarget())) {
         return
       }
 

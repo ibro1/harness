@@ -260,6 +260,15 @@ export function apply(ctx: Context, config: Config): void {
   }
   if (config.printUrl || handoffBrowser) {
     ctx.inject(['connection'], (connectionCtx) => {
+      // Sign-in on the password gate carries this process's launch token, so a
+      // browser clears both gates in one redirect instead of being sent to the
+      // token URL by hand.
+      connectionCtx.effect(
+        () => connectionCtx.webServer.registerSignedInTarget(
+          () => `/${new URL(connectionCtx.connection.authenticatedUrl('http://dsh.invalid/')).search}`,
+        ),
+        'web-app: password-gate sign-in target',
+      )
       // The URL line and browser handoff are readiness signals: supervisors RPC
       // as soon as they observe the line, while a browser requests the page as
       // soon as it opens. Neither may run while sibling rows such as the /api
