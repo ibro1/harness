@@ -39,6 +39,12 @@ RUN mkdir -p /app \
       /home/node/.local/share/opencode \
     && chown -R node:node /app /workspace /home/node
 
+# The client build stamps the source commit into its metadata and reads it from
+# git when this is unset. `.git` is not in the build context (see
+# .dockerignore), so the value is supplied instead of shipping the history.
+ARG DSH_CLIENT_COMMIT_HASH=0000000
+ENV DSH_CLIENT_COMMIT_HASH=${DSH_CLIENT_COMMIT_HASH}
+
 USER node
 WORKDIR /app
 

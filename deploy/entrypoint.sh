@@ -74,7 +74,7 @@ harness_pid=$!
 
 # Wait for the loopback listener before publishing it, so Traefik never sees a
 # refused connection during boot.
-for _ in $(seq 1 60); do
+for _ in $(seq 1 180); do
   if curl -fsS -o /dev/null "http://127.0.0.1:$INTERNAL_PORT/auth/login" 2>/dev/null; then break; fi
   if ! kill -0 "$harness_pid" 2>/dev/null; then
     echo "[entrypoint] harness exited during startup" >&2

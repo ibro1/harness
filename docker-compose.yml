@@ -14,6 +14,10 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile
+      args:
+        # Only build metadata shown in the UI. Set it to the deployed commit if
+        # you want the build label to identify the source revision.
+        DSH_CLIENT_COMMIT_HASH: ${DSH_CLIENT_COMMIT_HASH:-0000000}
     restart: unless-stopped
     # No `ports:` on purpose. The only way in is Traefik, so the login page is
     # the only public surface and the bridges stay on container loopback.
