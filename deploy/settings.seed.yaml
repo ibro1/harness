@@ -14,6 +14,21 @@ llm-pi-ai:
         - text
         - image
       models:
+        - id: gemini-3.8-flash-high
+          name: Gemini 3.8 Flash (High)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.8-flash-medium
+          name: Gemini 3.8 Flash (Medium)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
+        - id: gemini-3.8-flash-low
+          name: Gemini 3.8 Flash (Low)
+          contextWindow: 1048576
+          maxTokens: 65536
+          input: [ text, image ]
         - id: gemini-3.7-flash-high
           name: Gemini 3.7 Flash (High)
           contextWindow: 1048576
@@ -41,16 +56,6 @@ llm-pi-ai:
           input: [ text, image ]
         - id: gemini-3.6-flash-low
           name: Gemini 3.6 Flash (Low)
-          contextWindow: 1048576
-          maxTokens: 65536
-          input: [ text, image ]
-        - id: gemini-3.5-flash-high
-          name: Gemini 3.5 Flash (High)
-          contextWindow: 1048576
-          maxTokens: 65536
-          input: [ text, image ]
-        - id: gemini-3.5-flash-medium
-          name: Gemini 3.5 Flash (Medium)
           contextWindow: 1048576
           maxTokens: 65536
           input: [ text, image ]

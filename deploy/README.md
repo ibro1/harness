@@ -10,17 +10,34 @@ would expose remote code execution to the network. Keeping the harness on
 loopback preserves that guard: what reaches the container interface is a port
 that Traefik alone can route to, behind the password gate.
 
-## 1. Host preparation (once)
+## 1. Host preparation
 
-The `agy` and `opencode` binaries are ~200 MB each and are not in the image.
-Put them on the Dokploy host:
+Do this after the first deploy, once the container exists. Both binaries are
+~200 MB and not in the image; each ships an official installer, so they are
+fetched in place rather than copied around.
+
+Docker creates the bind-mounted `/opt/harness/bin` owned by root, and the
+container runs as uid 1000, so grant it first — on the Dokploy host:
 
 ```sh
-ssh you@dokploy-host 'mkdir -p /opt/harness/bin /opt/harness/workspace'
-scp ~/.local/bin/agy      you@dokploy-host:/opt/harness/bin/
-scp ~/.opencode/bin/opencode you@dokploy-host:/opt/harness/bin/
-ssh you@dokploy-host 'chmod 755 /opt/harness/bin/*'
+mkdir -p /opt/harness/bin /opt/harness/workspace
+chown 1000:1000 /opt/harness/bin /opt/harness/workspace
 ```
+
+Then install both inside the container and move them onto the bind mount.
+Their installers target `$HOME`, which is not a volume — left there they are
+lost on the next deploy:
+
+```sh
+C=$(docker ps -qf name=harness)
+docker exec -it $C bash -lc 'curl -fsSL https://antigravity.google/cli/install.sh | bash'
+docker exec -it $C bash -lc 'curl -fsSL https://opencode.ai/install | bash'
+docker exec -it $C bash -lc 'mv ~/.local/bin/agy ~/.opencode/bin/opencode /opt/harness/bin/ && chmod 755 /opt/harness/bin/*'
+docker exec $C bash -lc 'ls -l /opt/harness/bin'
+```
+
+No restart is needed: the bridges spawn `agy` and `opencode` per request, so a
+binary appearing on PATH is picked up immediately.
 
 `/opt/harness/workspace` is where agents will work. Anything you put there is
 reachable by the agent, so keep unrelated repos and credentials out of it.
@@ -70,39 +87,39 @@ which the `agy-state` volume preserves across redeploys. The access token
 expires hourly and refreshes itself; you only redo this if the volume is wiped
 or Google revokes the grant.
 
-Two ways to get the token in place.
-
-**A — copy the token you already have (fastest):**
-
-```sh
-# from the machine where agy is already logged in
-scp ~/.gemini/antigravity-cli/antigravity-oauth-token you@dokploy-host:/tmp/
-ssh you@dokploy-host
-docker cp /tmp/antigravity-oauth-token \
-  "$(docker ps -qf name=harness)":/home/node/.gemini/antigravity-cli/antigravity-oauth-token
-docker exec "$(docker ps -qf name=harness)" \
-  chmod 600 /home/node/.gemini/antigravity-cli/antigravity-oauth-token
-rm /tmp/antigravity-oauth-token
-```
-
-**B — log in inside the container:**
-
-agy's OAuth redirect lands on a loopback port *inside the container*, so open a
-tunnel from the machine with the browser first:
+Sign in on the host, then hand the container the result. Signing in *inside*
+the container does not work: agy's OAuth redirect binds a loopback port in the
+container's own network namespace, which an `ssh -L` tunnel to the host cannot
+reach.
 
 ```sh
-ssh -L 8085:localhost:8085 you@dokploy-host
-docker exec -it "$(docker ps -qf name=harness)" agy
-# follow the sign-in URL it prints, in your local browser
+# on the Dokploy host
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+~/.local/bin/agy
 ```
 
-If the port it picks is not 8085, re-open the tunnel on the port it names.
-
-Verify either way:
+It prints a sign-in URL containing `localhost:<PORT>`. From the machine with
+the browser, open a second session forwarding that exact port, then follow the
+URL there:
 
 ```sh
-docker exec "$(docker ps -qf name=harness)" agy models
+ssh -L <PORT>:localhost:<PORT> root@dokploy-host
 ```
+
+Once it completes, copy the token in. `docker cp` writes as root, so fix the
+ownership after:
+
+```sh
+C=$(docker ps -qf name=harness)
+docker cp /root/.gemini/antigravity-cli/antigravity-oauth-token \
+  $C:/home/node/.gemini/antigravity-cli/antigravity-oauth-token
+docker exec -u root $C chown node:node /home/node/.gemini/antigravity-cli/antigravity-oauth-token
+docker exec -u root $C chmod 600 /home/node/.gemini/antigravity-cli/antigravity-oauth-token
+docker exec $C agy models
+```
+
+`agy models` listing the catalogue is the confirmation; before sign-in it
+answers `Please sign in to view available models`.
 
 **This is one shared identity.** Everyone who logs into the harness uses your
 Antigravity account and its quota, with no per-user attribution. The same is

@@ -8,14 +8,15 @@ const PORT = 8001
 const HOST = '127.0.0.1'
 
 const AGY_MODELS = [
+  { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)', context_window: 1048576, max_tokens: 65536 },
+  { id: 'gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash (Medium)', context_window: 1048576, max_tokens: 65536 },
+  { id: 'gemini-3.8-flash-low', name: 'Gemini 3.8 Flash (Low)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash (High)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.7-flash-medium', name: 'Gemini 3.7 Flash (Medium)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.7-flash-low', name: 'Gemini 3.7 Flash (Low)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.6-flash-high', name: 'Gemini 3.6 Flash (High)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.6-flash-medium', name: 'Gemini 3.6 Flash (Medium)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.6-flash-low', name: 'Gemini 3.6 Flash (Low)', context_window: 1048576, max_tokens: 65536 },
-  { id: 'gemini-3.5-flash-high', name: 'Gemini 3.5 Flash (High)', context_window: 1048576, max_tokens: 65536 },
-  { id: 'gemini-3.5-flash-medium', name: 'Gemini 3.5 Flash (Medium)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro (High)', context_window: 1048576, max_tokens: 65536 },
   { id: 'gemini-3.1-pro-low', name: 'Gemini 3.1 Pro (Low)', context_window: 1048576, max_tokens: 65536 },
   { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)', context_window: 200000, max_tokens: 64000 },
