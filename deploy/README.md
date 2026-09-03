@@ -45,16 +45,22 @@ reachable by the agent, so keep unrelated repos and credentials out of it.
 ### Letting agents use git
 
 Without a credential an agent can edit files it creates but cannot clone, pull
-or push. Set `GIT_TOKEN` in the environment to a fine-grained token scoped to
-the repositories you want reachable, and the entrypoint writes a
-`credential.helper store` entry for `GIT_HOST` (default `github.com`) on every
-boot. The token lives only in the environment; `$HOME` is not a volume, so
-nothing credential-shaped is left on disk between deploys beyond that boot's
-own file.
+or push. There are two ways in; the first needs no secret in the environment.
 
-The token is as powerful as the scope you give it, and an agent with shell
-access can read it. Scope it to the repositories this harness should touch,
-never to your whole account.
+**SSH key (preferred).** The container generates an ed25519 identity onto the
+state volume on first boot and keeps it across deploys. Sign in and open
+`/auth/git-key` to copy the public half, then add it on your forge as a **deploy
+key** for one repository, or an **account key** for every repository. Clone with
+the SSH form (`git@github.com:owner/repo.git`). Revoke by deleting the key on
+the forge — nothing here changes. The private half never leaves the volume, and
+the boot log prints the public half too.
+
+**Token.** Set `GIT_TOKEN` to a fine-grained token and the entrypoint writes a
+`credential.helper store` entry for `GIT_HOST` (default `github.com`) on every
+boot. Simpler for HTTPS remotes, but the token sits in the deployment
+environment, and an agent with shell access in this container can read it —
+scope it to the repositories this harness should touch, never your whole
+account.
 
 ## 2. Credentials
 

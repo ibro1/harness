@@ -42,6 +42,28 @@ if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then git config --global user.email "$GIT_A
 # as dubious ownership, which reads as a git bug rather than a permissions one.
 git config --global --add safe.directory '*'
 
+# An SSH identity is the credential that never enters the environment: the key
+# is generated once onto the state volume, and access is granted and revoked on
+# the forge by adding or removing the public half.
+SSH_DIR="$HOME/.dsh/ssh"
+SSH_KEY="$SSH_DIR/id_ed25519"
+mkdir -p "$SSH_DIR"
+chmod 700 "$SSH_DIR"
+if [[ ! -f "$SSH_KEY" ]]; then
+  ssh-keygen -t ed25519 -N '' -C "dsh-harness@${DSH_PUBLIC_HOST}" -f "$SSH_KEY" >/dev/null 2>&1 \
+    && echo "[entrypoint] generated a new SSH identity at ~/.dsh/ssh/id_ed25519" \
+    || echo "[entrypoint] WARNING: could not generate an SSH key" >&2
+fi
+if [[ -f "$SSH_KEY" ]]; then
+  chmod 600 "$SSH_KEY"
+  # accept-new records a host on first contact instead of prompting, which no
+  # one is present to answer; a changed host key still fails loudly.
+  git config --global core.sshCommand \
+    "ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SSH_DIR/known_hosts"
+  echo "[entrypoint] SSH public key (add as a deploy key or account key):"
+  echo "[entrypoint]   $(cat "$SSH_KEY.pub")"
+fi
+
 if [[ -n "${GIT_TOKEN:-}" ]]; then
   git_host="${GIT_HOST:-github.com}"
   git_token_user="${GIT_TOKEN_USER:-x-access-token}"
@@ -51,7 +73,7 @@ if [[ -n "${GIT_TOKEN:-}" ]]; then
   git config --global credential.helper store
   echo "[entrypoint] git credentials configured for $git_host"
 else
-  echo "[entrypoint] NOTE: GIT_TOKEN unset — agents can edit /workspace but cannot clone or push." >&2
+  echo "[entrypoint] NOTE: GIT_TOKEN unset — use the SSH key above, or set a token." >&2
 fi
 
 if [[ ! -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]]; then

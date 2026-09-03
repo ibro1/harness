@@ -13,6 +13,9 @@
  */
 
 import { randomBytes, scryptSync, createHash, timingSafeEqual } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /** scrypt parameters for password verification. Cost is per login attempt only. */
@@ -666,6 +669,27 @@ export function handleAuthRoutes(
     }
   }
 
+  if (rawPath === '/auth/git-key') {
+    // Sits behind the gate like every other page: the public half is not a
+    // secret, but which forge this instance can reach should not be.
+    if (!isAuthenticated(req)) {
+      res.writeHead(302, { 'Location': '/auth/login', 'Cache-Control': 'no-store' })
+      res.end()
+      return true
+    }
+    const keyPath = process.env.DSH_GIT_KEY_PATH
+      ?? join(homedir(), '.dsh', 'ssh', 'id_ed25519.pub')
+    let key: string | undefined
+    try {
+      key = readFileSync(keyPath, 'utf8').trim()
+    } catch {
+      // No identity generated yet; the page says so rather than 500ing.
+    }
+    res.writeHead(200, AUTH_PAGE_HEADERS)
+    res.end(renderGitKeyPage(key))
+    return true
+  }
+
   if (rawPath === '/auth/logout') {
     const token = sessionCookie(req)
     if (token !== undefined) revokeSessionToken(token)
@@ -679,4 +703,63 @@ export function handleAuthRoutes(
   }
 
   return false
+}
+
+/**
+ * Page showing this instance's git SSH public key, for pasting into a forge as
+ * a deploy key (one repository) or an account key (every repository).
+ * @param key - the public key line, or undefined when none has been generated.
+ * @returns the rendered HTML.
+ */
+export function renderGitKeyPage(key: string | undefined): string {
+  const body = key === undefined
+    ? '<p class="empty">No SSH identity has been generated yet. It is created on the next container start.</p>'
+    : `<pre id="key">${key.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`
+      + '<button type="button" id="copy">Copy</button>'
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>Git access key</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    body { background: #0d1117; color: #c9d1d9; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .card { width: 100%; max-width: 640px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px; }
+    h1 { font-size: 18px; color: #f0f6fc; margin-bottom: 6px; }
+    p.sub { font-size: 13px; color: #8b949e; margin-bottom: 20px; }
+    pre { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #f0f6fc; white-space: pre-wrap; word-break: break-all; }
+    button { margin-top: 12px; padding: 8px 14px; background: #238636; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #2ea043; }
+    ol { margin: 22px 0 0 18px; font-size: 13px; color: #8b949e; line-height: 1.7; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #c9d1d9; }
+    .empty { font-size: 13px; color: #8b949e; }
+    a.back { display: inline-block; margin-top: 22px; font-size: 13px; color: #58a6ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Git access key</h1>
+    <p class="sub">This instance authenticates to your forge with this key. The private half never leaves the server.</p>
+    ${body}
+    <ol>
+      <li><strong>One repository:</strong> its Settings &rarr; Deploy keys &rarr; Add, paste, and tick write access if agents should push.</li>
+      <li><strong>Every repository:</strong> your account Settings &rarr; SSH and GPG keys &rarr; New SSH key.</li>
+      <li>Clone with the SSH form, <code>git@github.com:owner/repo.git</code>, not <code>https://</code>.</li>
+      <li>Revoke by deleting the key on the forge; nothing here needs changing.</li>
+    </ol>
+    <a class="back" href="/">&larr; Back to the harness</a>
+  </div>
+  <script>
+    var button = document.getElementById('copy')
+    if (button) button.addEventListener('click', function () {
+      navigator.clipboard.writeText(document.getElementById('key').textContent).then(function () {
+        button.textContent = 'Copied'
+        setTimeout(function () { button.textContent = 'Copy' }, 1500)
+      })
+    })
+  </script>
+</body>
+</html>`
 }
