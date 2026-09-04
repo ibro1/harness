@@ -22,6 +22,7 @@ import clsx from 'clsx'
 import type * as Md from 'mdast'
 import type {} from 'mdast-util-math'
 import { normalizeUri } from 'micromark-util-sanitize-uri'
+import { MermaidBlock } from './MermaidBlock.tsx'
 import { CodeBlock } from './CodeBlock.tsx'
 import { renderTexToReact } from './katex.tsx'
 import type { PositionedBlock } from './incremental.ts'
@@ -327,7 +328,7 @@ function renderCode(node: Md.Code, key: Key, context: MarkdownRenderContext): Re
     // its text extraction saw the code block's trailing newline.
     return <Fragment key={key}>{renderTexToReact(`${node.value}\n`, true)}</Fragment>
   }
-  return (
+  const block = (
     <CodeBlock
       key={key}
       // The replaced hast pipeline appended one synthetic newline that
@@ -345,6 +346,12 @@ function renderCode(node: Md.Code, key: Key, context: MarkdownRenderContext): Re
       copiedLabel={context.labels.code.copiedLabel}
     />
   )
+  // Diagrams settle like ```math: a growing fence is not yet parseable, and the
+  // code block it falls back to is the same one shown while mermaid loads.
+  if (!context.streaming && lang === 'mermaid') {
+    return <MermaidBlock key={key} code={node.value} fallback={block} />
+  }
+  return block
 }
 
 /** A list is loose when it or any of its items is spread; every item then keeps its paragraphs. */

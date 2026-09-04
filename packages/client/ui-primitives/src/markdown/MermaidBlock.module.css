@@ -1,0 +1,15 @@
+.diagram {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--dsh-color-border, rgba(110, 118, 129, 0.25));
+  border-radius: 8px;
+  background: var(--dsh-color-surface, transparent);
+}
+
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
