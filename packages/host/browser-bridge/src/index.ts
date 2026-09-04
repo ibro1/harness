@@ -29,6 +29,18 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/**
+ * Boot diagnostics go to stderr, not `ctx.logger`. The shipped Web profile
+ * composes no logger, so a plugin that never starts leaves no trace at all and
+ * the only symptom is a WebSocket handshake refused with no response.
+ * @param message - one line, written as-is.
+ */
+function announce(message: string): void {
+  process.stderr.write(`browser-bridge: ${message}\n`)
+}
+
+announce('module loaded')
+
 /** How long a tool call waits for the browser before giving up. */
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000
 
@@ -118,10 +130,7 @@ export class BrowserBridge extends Service {
       // No response body: an endpoint that answers differently to a wrong token
       // tells an unauthenticated caller that it exists. The operator is told
       // here instead, where it is not a disclosure.
-      this.ctx.logger.warn(
-        'browser-bridge: refused an upgrade presenting %s token',
-        presented === '' ? 'no' : 'an incorrect',
-      )
+      announce(`refused an upgrade presenting ${presented === '' ? 'no' : 'an incorrect'} token`)
       rawSocket.destroy()
       return
     }
@@ -147,7 +156,7 @@ export class BrowserBridge extends Service {
       this.failAll(new Error('the browser disconnected'))
     })
     socket.on('error', () => { socket.close() })
-    this.ctx.logger.info('browser-bridge: extension connected')
+    announce('extension connected')
   }
 
   /** Settle the pending command one reply belongs to. */
@@ -178,12 +187,23 @@ export class BrowserBridge extends Service {
     }
   }
 
-  /** Register the upgrade route and the browser tools. */
+  /** Start the bridge, reporting a failure the Loader would otherwise swallow. */
   [Service.init](): void {
+    try {
+      this.start()
+    } catch (error) {
+      // The Loader records a failed row through the logger this profile lacks.
+      announce(`failed to start: ${error instanceof Error ? error.message : String(error)}`)
+      throw error
+    }
+  }
+
+  /** Register the upgrade route and the browser tools. */
+  private start(): void {
     if (this.config.token === '') {
       throw new Error('browser-bridge: a token is required; set DSH_BROWSER_BRIDGE_TOKEN')
     }
-    this.ctx.logger.info('browser-bridge: listening on %s', this.config.path)
+    announce(`listening on ${this.config.path}`)
     this.ctx.effect(
       () => this.ctx.webServer.registerUpgrade({
         path: this.config.path,
