@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Harness Browser Bridge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Lets a self-hosted agent harness drive this browser: it dials out to the harness over a WebSocket and executes navigate/snapshot/click/type/scroll commands in the active tab.",
   "minimum_chrome_version": "116",
   "permissions": [

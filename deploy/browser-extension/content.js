@@ -35,6 +35,10 @@
   // budget, and because we run on arbitrary (sometimes pathological) pages.
   // ---------------------------------------------------------------------------
   const MAX_INTERACTIVE = 100;   // interactive lines emitted per snapshot
+/** Longest single run of page text kept on one line. */
+const MAX_TEXT = 300;
+/** Share of the snapshot page text may fill, so controls are never starved. */
+const MAX_TEXT_CHARS = 3000;
   const MAX_CHARS = 8000;        // approximate character cap on the outline
   const MAX_WALK_NODES = 25000;  // hard ceiling on elements visited per walk
   const MAX_DEPTH = 60;          // guards cyclic/absurd shadow+iframe nesting
@@ -740,12 +744,33 @@
     const kids = [];
     const shadow = safe(() => el.shadowRoot, null); // null for closed roots
     if (shadow) {
-      const sk = safe(() => Array.prototype.slice.call(shadow.children), []);
+      const sk = safe(() => Array.prototype.slice.call(shadow.childNodes), []);
       for (const k of sk) kids.push(k);
     }
-    const own = safe(() => Array.prototype.slice.call(el.children), []);
+    // childNodes, not children: an element's own text is the page's content, and
+    // a walk over elements alone reports every control on a page and none of
+    // what it says. Whitespace-only nodes are dropped at the visit.
+    const own = safe(() => Array.prototype.slice.call(el.childNodes), []);
     for (const k of own) kids.push(k);
     return kids;
+  }
+
+  /**
+   * Whether a text node falls inside the viewport. Text has no box of its own,
+   * so it is measured through a Range; a node that cannot be measured is kept
+   * rather than dropped, since losing content is worse than an extra line.
+   * @param {Text} node @param {{x:number,y:number}} offset @returns {boolean}
+   */
+  function textInViewport(node, offset) {
+    const rect = safe(() => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const r = range.getBoundingClientRect();
+      range.detach && range.detach();
+      return r;
+    }, null);
+    if (!rect || (rect.width <= 0 && rect.height <= 0)) return true;
+    return inViewport(rect, offset);
   }
 
   function visit(el, parent, ctx, state) {
@@ -754,7 +779,27 @@
       return;
     }
     if (state.depth > MAX_DEPTH) return;
-    if (!el || el.nodeType !== 1) return;
+    if (!el) return;
+    if (el.nodeType === 3) {
+      // Text under a control is that control's own label, already carried by its
+      // accessible name; emitting it again would say everything twice.
+      if (state.interactiveAncestor) return;
+      const value = collapse(safe(() => el.nodeValue, '') || '');
+      if (value === '') return;
+      // A heading's text is already its name on the line above it.
+      if (parent.name && parent.name === value) return;
+      if (!ctx.full && !textInViewport(el, state.offset)) return;
+      // Inline markup splits one sentence across several text nodes; rejoin
+      // them so "<strong>1</strong> item left!" reads as one line.
+      const last = parent.children[parent.children.length - 1];
+      if (last && last.type === 'text' && last.value.length < MAX_TEXT) {
+        last.value = truncate(last.value + ' ' + value, MAX_TEXT);
+        return;
+      }
+      parent.children.push({ type: 'text', value: truncate(value, MAX_TEXT) });
+      return;
+    }
+    if (el.nodeType !== 1) return;
 
     const tag = tagOf(el);
     if (SKIP_TAGS.has(tag)) return;
@@ -838,6 +883,8 @@
    * own but only when on-screen (or in full mode).
    */
   function prune(entry) {
+    // Text is a leaf and carries no children to filter.
+    if (entry.type === 'text') return true;
     entry.children = entry.children.filter(prune);
     if (entry.type === 'interactive') return true;
     if (entry.type === 'heading') return entry.onScreen !== false || entry.children.length > 0;
@@ -856,6 +903,8 @@
     const lines = [];
     let chars = 0;
     let emitted = 0;
+    let textChars = 0;
+    let textTruncated = false;
     const stop = { hit: false, reason: '' };
 
     function emit(text, depth) {
@@ -874,6 +923,17 @@
       if (stop.hit) return;
       for (const child of entry.children) {
         if (stop.hit) return;
+        if (child.type === 'text') {
+          // Its own budget: a wall of prose must not push the page's controls
+          // out of the snapshot, which is what the model needs refs from.
+          if (textChars + child.value.length > MAX_TEXT_CHARS) {
+            textTruncated = true;
+            continue;
+          }
+          if (!emit(quote(child.value), depth)) return;
+          textChars += child.value.length;
+          continue;
+        }
         if (child.type === 'interactive') {
           if (emitted >= MAX_INTERACTIVE) {
             stop.hit = true;
@@ -898,7 +958,7 @@
     }
 
     walkOut(root, 0);
-    return { lines: lines, emitted: emitted, stop: stop };
+    return { lines: lines, emitted: emitted, stop: stop, textTruncated: textTruncated };
   }
 
   // ---------------------------------------------------------------------------
@@ -948,7 +1008,7 @@
         ' | viewport ' + vw + 'x' + vh +
         ' | scrolled ' + scrollY + '/' + Math.max(pageH - vh, 0) + 'px'
     );
-    header.push('Legend: [n] = ref — use it with click/type. Indentation = page structure.');
+    header.push('Legend: [n] = ref — use it with click/type. Quoted lines with no ref are page text. Indentation = page structure.');
 
     const footer = [];
     if (rendered.stop.hit) {
@@ -963,6 +1023,9 @@
         'Note: ' + (ctx.totalInteractive - rendered.emitted) +
           ' further interactive elements exist outside the viewport; scroll or use full:true.'
       );
+    }
+    if (rendered.textTruncated) {
+      footer.push('Note: some page text was left out to keep room for the interactive elements.');
     }
     if (ctx.walkOverflow) {
       footer.push('Note: the page is very large; the scan stopped after ' + MAX_WALK_NODES + ' elements.');
