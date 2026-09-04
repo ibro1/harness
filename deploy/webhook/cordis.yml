@@ -17,13 +17,16 @@
     - id: github-command-rule
       name: './github-command-rule.mjs'
       config:
+        # `||` throughout, not `??`: Compose sets every declared variable, so an
+        # unset one arrives as '' rather than undefined. An empty trigger is the
+        # dangerous case — every comment starts with '' — so it must not survive.
         source: primary-github
-        repositories: !!js (process.env.DSH_GITHUB_REPOSITORIES ?? '').split(',').map(entry => entry.trim()).filter(entry => entry !== '')
-        workspaceRoot: !!js process.env.DSH_GITHUB_WORKSPACE_ROOT ?? '/workspace'
-        trigger: !!js process.env.DSH_GITHUB_TRIGGER ?? '/dsh'
-        allowedAssociations: !!js (process.env.DSH_GITHUB_ALLOWED_ASSOCIATIONS ?? 'OWNER,MEMBER,COLLABORATOR').split(',').map(entry => entry.trim()).filter(entry => entry !== '')
-        agentPreset: !!js process.env.DSH_GITHUB_AGENT_PRESET ?? 'standard'
-        permissionPreset: !!js process.env.DSH_GITHUB_PERMISSION_PRESET ?? 'read-only'
+        repositories: !!js (process.env.DSH_GITHUB_REPOSITORIES || '').split(',').map(entry => entry.trim()).filter(entry => entry !== '')
+        workspaceRoot: !!js process.env.DSH_GITHUB_WORKSPACE_ROOT || '/workspace'
+        trigger: !!js process.env.DSH_GITHUB_TRIGGER || '/dsh'
+        allowedAssociations: !!js (process.env.DSH_GITHUB_ALLOWED_ASSOCIATIONS || 'OWNER,MEMBER,COLLABORATOR').split(',').map(entry => entry.trim()).filter(entry => entry !== '')
+        agentPreset: !!js process.env.DSH_GITHUB_AGENT_PRESET || 'standard'
+        permissionPreset: !!js process.env.DSH_GITHUB_PERMISSION_PRESET || 'read-only'
 
     - id: github-webhook-ingress
       name: cordis:group
@@ -35,7 +38,7 @@
           name: '@deepseek-ai/dsh-host-webserver'
           config:
             host: '127.0.0.1'
-            port: !!js Number(process.env.DSH_GITHUB_WEBHOOK_PORT ?? 3082)
+            port: !!js Number(process.env.DSH_GITHUB_WEBHOOK_PORT || 3082)
             authenticate: false
 
         - id: github-webhook-adapter

@@ -203,6 +203,11 @@ export class BrowserBridge extends Service {
     if (this.config.token === '') {
       throw new Error('browser-bridge: a token is required; set DSH_BROWSER_BRIDGE_TOKEN')
     }
+    // A set-but-empty DSH_BROWSER_BRIDGE_PATH once reached here as '', which
+    // registers the route on a path no client can request and reports success.
+    if (!this.config.path.startsWith('/')) {
+      throw new Error(`browser-bridge: path must start with "/", not ${JSON.stringify(this.config.path)}`)
+    }
     announce(`listening on ${this.config.path}`)
     this.ctx.effect(
       () => this.ctx.webServer.registerUpgrade({

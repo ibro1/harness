@@ -45,6 +45,14 @@ function repositoryDirectory(fullName) {
 }
 
 export function apply(ctx, config) {
+  // An empty trigger matches every comment, because every string starts with
+  // ''. Refuse it rather than turn each comment into an agent run.
+  if (config.trigger === '') {
+    throw new Error('github-command-rule: trigger must not be empty')
+  }
+  if (config.allowedAssociations.length === 0) {
+    throw new Error('github-command-rule: allowedAssociations must not be empty')
+  }
   const allowed = new Set(config.repositories)
   const associations = new Set(config.allowedAssociations)
 

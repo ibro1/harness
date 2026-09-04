@@ -11,5 +11,8 @@
       # never exists, which reaches a browser only as a 502 on the handshake.
       name: '../../packages/host/browser-bridge/lib/index.js'
       config:
-        path: !!js process.env.DSH_BROWSER_BRIDGE_PATH ?? '/browser-bridge'
+        # `||`, not `??`: Compose sets every declared variable, so an unset
+        # DSH_BROWSER_BRIDGE_PATH arrives as '' rather than undefined, and `??`
+        # would keep it — registering the route on the empty path.
+        path: !!js process.env.DSH_BROWSER_BRIDGE_PATH || '/browser-bridge'
         token: !!js process.env.DSH_BROWSER_BRIDGE_TOKEN ?? ''

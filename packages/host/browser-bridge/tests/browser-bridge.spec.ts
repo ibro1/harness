@@ -53,7 +53,7 @@ afterEach(async () => {
 })
 
 /** Boot a webserver + bridge composition through the real Loader on one port. */
-async function loadComposition(port: number, commandTimeoutMs = 30_000): Promise<Context> {
+async function loadComposition(port: number, commandTimeoutMs = 30_000, path = '/browser-bridge'): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-browser-bridge-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -65,7 +65,7 @@ async function loadComposition(port: number, commandTimeoutMs = 30_000): Promise
     "- name: 'stub-tools'",
     "- name: '@deepseek-ai/dsh-host-browser-bridge'",
     '  config:',
-    "    path: '/browser-bridge'",
+    `    path: '${path}'`,
     `    token: '${TOKEN}'`,
     `    commandTimeoutMs: ${String(commandTimeoutMs)}`,
     '',
@@ -120,6 +120,13 @@ describe('browser-bridge', () => {
       'browser_scroll',
       'browser_wait',
     ])
+  })
+
+  it('refuses to start on a path no client could request', async () => {
+    // A set-but-empty DSH_BROWSER_BRIDGE_PATH reached the config as '' and the
+    // route registered on it, reporting success while every real upgrade to
+    // /browser-bridge found no route and was destroyed without a response.
+    await expect(loadComposition(19_741, 30_000, '')).rejects.toThrow('path must start with "/"')
   })
 
   it('refuses an upgrade presenting the wrong token', async () => {
