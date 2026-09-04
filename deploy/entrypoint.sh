@@ -151,6 +151,22 @@ fi
 if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/browser.cordis.yml")
   echo "[entrypoint] Browser bridge enabled on ${DSH_BROWSER_BRIDGE_PATH:-/browser-bridge}"
+
+  # Register the browser tools with the CLIs behind the model bridges. They run
+  # their own agent loop and discard the tools the harness offers, so MCP is the
+  # only seam through which a model reached that way can drive a browser.
+  # Idempotent: `mcp add` updates an existing entry of the same name.
+  if [[ "${DSH_BROWSER_MCP:-1}" != "0" ]] && command -v agy >/dev/null 2>&1; then
+    if agy mcp add \
+      --env "DSH_BROWSER_BRIDGE_TOKEN=$DSH_BROWSER_BRIDGE_TOKEN" \
+      --env "DSH_BROWSER_COMMAND_URL=http://127.0.0.1:$INTERNAL_PORT${DSH_BROWSER_BRIDGE_PATH:-/browser-bridge}/command" \
+      dsh-browser node "$APP_DIR/deploy/mcp/browser-mcp.mjs" >/dev/null 2>&1
+    then
+      echo "[entrypoint] Registered the browser tools with agy as the MCP server 'dsh-browser'"
+    else
+      echo "[entrypoint] WARNING: could not register the browser MCP server with agy." >&2
+    fi
+  fi
 fi
 
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")

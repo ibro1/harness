@@ -42,6 +42,12 @@ export type WebRouteKind = 'exact' | 'prefix'
 /** One named route registration. */
 export interface WebRoute {
   kind: WebRouteKind
+  /**
+   * False when the route carries its own authentication and must not be sent
+   * to the sign-in page. Reserved for routes proving their caller another way,
+   * the way the browser bridge proves it with a shared token.
+   */
+  authenticate?: boolean
   /** Absolute pathname, no trailing slash. */
   path: string
   /** Owns the full response lifecycle (may hold the response open, e.g. SSE). */
@@ -283,7 +289,11 @@ export class WebServer extends Service {
         return
       }
 
-      if (gated && !isAuthenticated(req)) {
+      // Resolved before the gate so a self-authenticating route is recognised,
+      // as on the upgrade path; an unknown path still falls through to it.
+      const matched = this.match(rawPath)
+
+      if (gated && matched?.authenticate !== false && !isAuthenticated(req)) {
         if (rawPath.startsWith('/api/') || rawPath.startsWith('/events')) {
           res.writeHead(401, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'unauthorized', login: '/auth/login' }))
@@ -294,9 +304,8 @@ export class WebServer extends Service {
         return
       }
 
-      const route = this.match(rawPath)
-      if (route !== undefined) {
-        await route.handler(req, res)
+      if (matched !== undefined) {
+        await matched.handler(req, res)
         return
       }
       const fallback = this.fallback

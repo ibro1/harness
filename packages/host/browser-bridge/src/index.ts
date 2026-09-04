@@ -14,7 +14,7 @@
  */
 
 import { randomUUID, timingSafeEqual, createHash } from 'node:crypto'
-import type { IncomingMessage } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -22,7 +22,7 @@ import z from '@deepseek-ai/schemastery'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-tools'
-import { registerBrowserTools } from './tools.ts'
+import { buildBrowserTools, registerBrowserTools } from './tools.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -73,6 +73,27 @@ const PROFILE_PATTERN = /^[A-Za-z0-9._-]{1,32}$/
 
 /** The label a browser gets when its extension names none. */
 const DEFAULT_PROFILE = 'default'
+
+/** Largest command body accepted, since the caller is not the harness. */
+const MAX_COMMAND_BODY_BYTES = 64 * 1024
+
+/**
+ * Read a request body, refusing one past the cap rather than buffering it.
+ * @param req - the request to drain.
+ * @param limit - most bytes to accept.
+ * @returns the body as text, or undefined when it exceeded the cap.
+ */
+async function readBody(req: IncomingMessage, limit: number): Promise<string | undefined> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req) {
+    const buffer = chunk as Buffer
+    size += buffer.length
+    if (size > limit) return undefined
+    chunks.push(buffer)
+  }
+  return Buffer.concat(chunks).toString('utf8')
+}
 
 /** Compare two secrets without leaking their relationship through timing. */
 function secretEquals(a: string, b: string): boolean {
@@ -244,6 +265,78 @@ export class BrowserBridge extends Service {
   }
 
   /**
+   * Answer one command request: the tool catalogue on GET, one command on POST.
+   * @param req - the incoming request, carrying the token.
+   * @param res - the response to complete.
+   */
+  private async handleCommand(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? '/', 'http://x')
+    const header = req.headers.authorization ?? ''
+    const presented = header.startsWith('Bearer ')
+      ? header.slice('Bearer '.length)
+      : url.searchParams.get('token') ?? ''
+    if (this.config.token === '' || !secretEquals(presented, this.config.token)) {
+      announce('refused a command request presenting a bad token')
+      res.writeHead(404)
+      res.end()
+      return
+    }
+
+    if (req.method === 'GET') {
+      // One catalogue, built from the definitions the harness registers, so an
+      // MCP client and the harness never advertise different schemas.
+      const tools = buildBrowserTools(this).map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      }))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ tools, profiles: this.profiles() }))
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Allow': 'GET, POST' })
+      res.end()
+      return
+    }
+
+    const body = await readBody(req, MAX_COMMAND_BODY_BYTES)
+    if (body === undefined) {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'the command body is too large' }))
+      return
+    }
+    let request: { type?: unknown; payload?: unknown; profile?: unknown }
+    try {
+      request = JSON.parse(body) as typeof request
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'the command body is not JSON' }))
+      return
+    }
+    if (typeof request.type !== 'string') {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'the command needs a type' }))
+      return
+    }
+    try {
+      const result = await this.call(
+        request.type,
+        request.payload ?? {},
+        typeof request.profile === 'string' && request.profile !== '' ? request.profile : undefined,
+      )
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ result }))
+    } catch (error) {
+      // The caller's failure, not the server's: a browser that is not connected
+      // or a ref that has gone is the answer, and the MCP client relays it.
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }))
+    }
+  }
+
+  /**
    * Reject the waiting commands one failure covers, so none hangs past it.
    * @param reason - what to reject them with.
    * @param profile - the profile whose commands failed, or undefined for all.
@@ -279,6 +372,19 @@ export class BrowserBridge extends Service {
       throw new Error(`browser-bridge: path must start with "/", not ${JSON.stringify(this.config.path)}`)
     }
     announce(`listening on ${this.config.path}`)
+    // A local command surface, so a process that is not the harness — the MCP
+    // server a CLI spawns — can drive the same browsers through the same token.
+    this.ctx.effect(
+      () => this.ctx.webServer.register({
+        kind: 'exact',
+        path: `${this.config.path}/command`,
+        // The token in the request is this route's own authentication, as on
+        // the socket; the deployment's sign-in gate never sees an MCP client.
+        authenticate: false,
+        handler: (req: IncomingMessage, res: ServerResponse) => this.handleCommand(req, res),
+      }),
+      `browser-bridge: ${this.config.path}/command`,
+    )
     this.ctx.effect(
       () => this.ctx.webServer.registerUpgrade({
         path: this.config.path,

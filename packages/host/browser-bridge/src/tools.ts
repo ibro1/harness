@@ -133,177 +133,192 @@ function resolveWaitMs(requested: number | undefined): number {
  * @param bridge - the bridge the tools drive.
  */
 export function registerBrowserTools(ctx: Context, bridge: BrowserTarget): void {
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_profiles',
-    description: 'List the browsers currently connected to this harness, by label. '
-      + 'Call it when another browser tool reports that several browsers are connected, to learn which labels the profile argument accepts.',
-    parameters: {},
-    output: {
-      schema: OUTPUT_SCHEMA,
-      render: (_args, value) => [{ type: 'text', text: value.text }],
-    },
-    execute: (_args, exec) => {
-      exec.signal.throwIfAborted()
-      const labels = bridge.profiles()
-      return Promise.resolve({
-        text: labels.length === 0
-          ? 'No browser is connected.'
-          : `Connected browsers: ${labels.join(', ')}.`,
-      })
-    },
-    presentCall: () => ({ card: 'generic', title: 'List connected browsers', kind: 'other', rawInput: '' }),
-  })), 'browser-bridge: browser_profiles')
+  for (const tool of buildBrowserTools(bridge)) {
+    ctx.effect(() => ctx.tools.register(tool), `browser-bridge: ${tool.name}`)
+  }
+}
 
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_navigate',
-    description: 'Open a URL in the active browser tab and wait for it to load. '
-      + 'Use it to reach a page before reading or acting on it, then call browser_snapshot to see the page and get the refs the other browser tools need.',
-    parameters: {
-      profile: PROFILE_PARAMETER,
-      url: {
-        type: 'string',
-        required: true,
-        description: 'Absolute URL to open, including the scheme (for example https://example.com/docs).',
+/**
+ * Build the browser tools without registering them, so one definition serves
+ * both the harness's registry and the MCP catalogue a CLI reads. Two lists
+ * would drift, and a drifted schema is a call the browser cannot answer.
+ * @param bridge - the bridge the tools drive.
+ * @returns the tool definitions, in catalogue order.
+ */
+export function buildBrowserTools(bridge: BrowserTarget) {
+  return [
+    defineTool({
+      name: 'browser_profiles',
+      description: 'List the browsers currently connected to this harness, by label. '
+        + 'Call it when another browser tool reports that several browsers are connected, to learn which labels the profile argument accepts.',
+      parameters: {},
+      output: {
+        schema: OUTPUT_SCHEMA,
+        render: (_args, value) => [{ type: 'text', text: value.text }],
       },
-    },
-    output: {
-      schema: OUTPUT_SCHEMA,
-      render: (args, value) => [{ type: 'text', text: value.text === '' ? `Navigated to ${args.url}.` : value.text }],
-    },
-    execute: (args, exec) => callBrowser(bridge, 'navigate', { url: args.url }, exec, args.profile),
-    presentCall: args => ({ card: 'generic', title: `Navigate to ${args.url}`, kind: 'other', rawInput: args.url }),
-  })), 'browser-bridge: browser_navigate')
-
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_snapshot',
-    description: 'Read the current page as text, with a numbered `ref` on each interactive element for browser_click and browser_type. '
-      + 'Snapshot before you act, and again after anything that changes the page: refs come only from a snapshot and stop being valid once the page navigates, reloads, or updates.',
-    parameters: {
-      profile: PROFILE_PARAMETER,
-      full: {
-        type: 'boolean',
-        description: 'True to capture the whole page instead of the visible viewport. Defaults to false; use it when the element you need is off-screen and you would otherwise scroll to find it.',
+      execute: (_args, exec) => {
+        exec.signal.throwIfAborted()
+        const labels = bridge.profiles()
+        return Promise.resolve({
+          text: labels.length === 0
+            ? 'No browser is connected.'
+            : `Connected browsers: ${labels.join(', ')}.`,
+        })
       },
-    },
-    output: {
-      schema: OUTPUT_SCHEMA,
-      render: (_args, value) => [{ type: 'text', text: value.text === '' ? 'The page snapshot is empty.' : value.text }],
-    },
-    execute: (args, exec) => callBrowser(bridge, 'snapshot', { full: args.full ?? false }, exec, args.profile),
-    presentCall: args => ({
-      card: 'generic',
-      title: args.full === true ? 'Snapshot the full page' : 'Snapshot the page',
-      kind: 'other',
-      rawInput: args.full ?? false,
+      presentCall: () => ({ card: 'generic', title: 'List connected browsers', kind: 'other', rawInput: '' }),
     }),
-  })), 'browser-bridge: browser_snapshot')
 
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_click',
-    description: 'Click one element on the current page by its snapshot `ref`. '
-      + 'Take a browser_snapshot first — refs come from that snapshot and are only valid until the page changes, so snapshot again after a click that navigates or updates the page before clicking anything else.',
-    parameters: {
-      profile: PROFILE_PARAMETER,
-      ref: {
-        type: 'integer',
-        required: true,
-        description: 'Ref number of the element to click, as printed by the most recent browser_snapshot.',
+    defineTool({
+      name: 'browser_navigate',
+      description: 'Open a URL in the active browser tab and wait for it to load. '
+        + 'Use it to reach a page before reading or acting on it, then call browser_snapshot to see the page and get the refs the other browser tools need.',
+      parameters: {
+        profile: PROFILE_PARAMETER,
+        url: {
+          type: 'string',
+          required: true,
+          description: 'Absolute URL to open, including the scheme (for example https://example.com/docs).',
+        },
       },
-    },
-    output: {
-      schema: OUTPUT_SCHEMA,
-      render: (args, value) => [{ type: 'text', text: value.text === '' ? `Clicked element ${String(args.ref)}.` : value.text }],
-    },
-    execute: (args, exec) => callBrowser(bridge, 'click', { ref: args.ref }, exec, args.profile),
-    presentCall: args => ({ card: 'generic', title: `Click element ${String(args.ref)}`, kind: 'other', rawInput: args.ref }),
-  })), 'browser-bridge: browser_click')
+      output: {
+        schema: OUTPUT_SCHEMA,
+        render: (args, value) => [{ type: 'text', text: value.text === '' ? `Navigated to ${args.url}.` : value.text }],
+      },
+      execute: (args, exec) => callBrowser(bridge, 'navigate', { url: args.url }, exec, args.profile),
+      presentCall: args => ({ card: 'generic', title: `Navigate to ${args.url}`, kind: 'other', rawInput: args.url }),
+    }),
 
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_type',
-    description: 'Fill a text field on the current page — input, textarea, or editable element — identified by its snapshot `ref`, replacing whatever it holds, and optionally press Enter to submit. '
-      + 'Refs come from browser_snapshot and are only valid until the page changes, so snapshot again after a submission before typing anywhere else.',
-    parameters: {
-      profile: PROFILE_PARAMETER,
-      ref: {
-        type: 'integer',
-        required: true,
-        description: 'Ref number of the field to fill, as printed by the most recent browser_snapshot.',
+    defineTool({
+      name: 'browser_snapshot',
+      description: 'Read the current page as text, with a numbered `ref` on each interactive element for browser_click and browser_type. '
+        + 'Snapshot before you act, and again after anything that changes the page: refs come only from a snapshot and stop being valid once the page navigates, reloads, or updates.',
+      parameters: {
+        profile: PROFILE_PARAMETER,
+        full: {
+          type: 'boolean',
+          description: 'True to capture the whole page instead of the visible viewport. Defaults to false; use it when the element you need is off-screen and you would otherwise scroll to find it.',
+        },
       },
-      text: {
-        type: 'string',
-        required: true,
-        description: 'Text to put in the field; it replaces the current value rather than appending to it.',
+      output: {
+        schema: OUTPUT_SCHEMA,
+        render: (_args, value) => [{ type: 'text', text: value.text === '' ? 'The page snapshot is empty.' : value.text }],
       },
-      submit: {
-        type: 'boolean',
-        description: 'True to press Enter after typing, submitting the form or search. Defaults to false.',
-      },
-    },
-    output: {
-      schema: OUTPUT_SCHEMA,
-      render: (args, value) => [{
-        type: 'text',
-        text: value.text === ''
-          ? `Typed into element ${String(args.ref)}${args.submit === true ? ' and pressed Enter' : ''}.`
-          : value.text,
-      }],
-    },
-    execute: (args, exec) => callBrowser(bridge, 'type', { ref: args.ref, text: args.text, submit: args.submit ?? false }, exec, args.profile),
-    presentCall: args => ({ card: 'generic', title: `Type into element ${String(args.ref)}`, kind: 'other', rawInput: args.text }),
-  })), 'browser-bridge: browser_type')
+      execute: (args, exec) => callBrowser(bridge, 'snapshot', { full: args.full ?? false }, exec, args.profile),
+      presentCall: args => ({
+        card: 'generic',
+        title: args.full === true ? 'Snapshot the full page' : 'Snapshot the page',
+        kind: 'other',
+        rawInput: args.full ?? false,
+      }),
+    }),
 
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_scroll',
-    description: 'Scroll the current page up or down to bring off-screen content into view, then take a new browser_snapshot to read it. '
-      + 'Scrolling changes what the viewport holds, so refs from an earlier snapshot may no longer be valid.',
-    parameters: {
-      profile: PROFILE_PARAMETER,
-      direction: {
-        type: 'string',
-        required: true,
-        enum: ['up', 'down'],
-        description: 'Which way to scroll the page.',
+    defineTool({
+      name: 'browser_click',
+      description: 'Click one element on the current page by its snapshot `ref`. '
+        + 'Take a browser_snapshot first — refs come from that snapshot and are only valid until the page changes, so snapshot again after a click that navigates or updates the page before clicking anything else.',
+      parameters: {
+        profile: PROFILE_PARAMETER,
+        ref: {
+          type: 'integer',
+          required: true,
+          description: 'Ref number of the element to click, as printed by the most recent browser_snapshot.',
+        },
       },
-      amount: {
-        type: 'integer',
-        description: 'How far to scroll, in pixels. Omit to let the browser scroll by about one viewport.',
+      output: {
+        schema: OUTPUT_SCHEMA,
+        render: (args, value) => [{ type: 'text', text: value.text === '' ? `Clicked element ${String(args.ref)}.` : value.text }],
       },
-    },
-    output: {
-      schema: OUTPUT_SCHEMA,
-      render: (args, value) => [{ type: 'text', text: value.text === '' ? `Scrolled ${args.direction}.` : value.text }],
-    },
-    execute(args, exec) {
-      // An omitted `amount` stays omitted: the extension owns how far one
-      // viewport-sized step scrolls, so this side names no distance for it.
-      const payload: Record<string, string | number> = { direction: args.direction }
-      if (args.amount !== undefined) payload.amount = args.amount
-      return callBrowser(bridge, 'scroll', payload, exec, args.profile)
-    },
-    presentCall: args => ({ card: 'generic', title: `Scroll ${args.direction}`, kind: 'other', rawInput: args.amount ?? args.direction }),
-  })), 'browser-bridge: browser_scroll')
+      execute: (args, exec) => callBrowser(bridge, 'click', { ref: args.ref }, exec, args.profile),
+      presentCall: args => ({ card: 'generic', title: `Click element ${String(args.ref)}`, kind: 'other', rawInput: args.ref }),
+    }),
 
-  ctx.effect(() => ctx.tools.register(defineTool({
-    name: 'browser_wait',
-    description: 'Pause for the page to settle after an action that starts a navigation, a redirect, or asynchronous loading, then take a fresh browser_snapshot. '
-      + `Use it when a click or submission has not visibly finished; it waits ${String(DEFAULT_WAIT_MS)}ms unless you ask for longer, and never longer than ${String(MAX_WAIT_MS)}ms.`,
-    parameters: {
-      profile: PROFILE_PARAMETER,
-      ms: {
-        type: 'integer',
-        description: `Milliseconds to wait. Defaults to ${String(DEFAULT_WAIT_MS)}; a larger request is capped at ${String(MAX_WAIT_MS)}.`,
+    defineTool({
+      name: 'browser_type',
+      description: 'Fill a text field on the current page — input, textarea, or editable element — identified by its snapshot `ref`, replacing whatever it holds, and optionally press Enter to submit. '
+        + 'Refs come from browser_snapshot and are only valid until the page changes, so snapshot again after a submission before typing anywhere else.',
+      parameters: {
+        profile: PROFILE_PARAMETER,
+        ref: {
+          type: 'integer',
+          required: true,
+          description: 'Ref number of the field to fill, as printed by the most recent browser_snapshot.',
+        },
+        text: {
+          type: 'string',
+          required: true,
+          description: 'Text to put in the field; it replaces the current value rather than appending to it.',
+        },
+        submit: {
+          type: 'boolean',
+          description: 'True to press Enter after typing, submitting the form or search. Defaults to false.',
+        },
       },
-    },
-    output: {
-      schema: OUTPUT_SCHEMA,
-      // Presenters must be total on replayed arguments, so this one reports the
-      // wait without re-resolving a duration `resolveWaitMs` could reject.
-      render: (_args, value) => [{
-        type: 'text',
-        text: value.text === '' ? 'Waited for the page to settle.' : value.text,
-      }],
-    },
-    execute: (args, exec) => callBrowser(bridge, 'wait', { ms: resolveWaitMs(args.ms) }, exec, args.profile),
-    presentCall: args => ({ card: 'generic', title: 'Wait for the page', kind: 'other', rawInput: args.ms ?? DEFAULT_WAIT_MS }),
-  })), 'browser-bridge: browser_wait')
+      output: {
+        schema: OUTPUT_SCHEMA,
+        render: (args, value) => [{
+          type: 'text',
+          text: value.text === ''
+            ? `Typed into element ${String(args.ref)}${args.submit === true ? ' and pressed Enter' : ''}.`
+            : value.text,
+        }],
+      },
+      execute: (args, exec) => callBrowser(bridge, 'type', { ref: args.ref, text: args.text, submit: args.submit ?? false }, exec, args.profile),
+      presentCall: args => ({ card: 'generic', title: `Type into element ${String(args.ref)}`, kind: 'other', rawInput: args.text }),
+    }),
+
+    defineTool({
+      name: 'browser_scroll',
+      description: 'Scroll the current page up or down to bring off-screen content into view, then take a new browser_snapshot to read it. '
+        + 'Scrolling changes what the viewport holds, so refs from an earlier snapshot may no longer be valid.',
+      parameters: {
+        profile: PROFILE_PARAMETER,
+        direction: {
+          type: 'string',
+          required: true,
+          enum: ['up', 'down'],
+          description: 'Which way to scroll the page.',
+        },
+        amount: {
+          type: 'integer',
+          description: 'How far to scroll, in pixels. Omit to let the browser scroll by about one viewport.',
+        },
+      },
+      output: {
+        schema: OUTPUT_SCHEMA,
+        render: (args, value) => [{ type: 'text', text: value.text === '' ? `Scrolled ${args.direction}.` : value.text }],
+      },
+      execute(args, exec) {
+        // An omitted `amount` stays omitted: the extension owns how far one
+        // viewport-sized step scrolls, so this side names no distance for it.
+        const payload: Record<string, string | number> = { direction: args.direction }
+        if (args.amount !== undefined) payload.amount = args.amount
+        return callBrowser(bridge, 'scroll', payload, exec, args.profile)
+      },
+      presentCall: args => ({ card: 'generic', title: `Scroll ${args.direction}`, kind: 'other', rawInput: args.amount ?? args.direction }),
+    }),
+
+    defineTool({
+      name: 'browser_wait',
+      description: 'Pause for the page to settle after an action that starts a navigation, a redirect, or asynchronous loading, then take a fresh browser_snapshot. '
+        + `Use it when a click or submission has not visibly finished; it waits ${String(DEFAULT_WAIT_MS)}ms unless you ask for longer, and never longer than ${String(MAX_WAIT_MS)}ms.`,
+      parameters: {
+        profile: PROFILE_PARAMETER,
+        ms: {
+          type: 'integer',
+          description: `Milliseconds to wait. Defaults to ${String(DEFAULT_WAIT_MS)}; a larger request is capped at ${String(MAX_WAIT_MS)}.`,
+        },
+      },
+      output: {
+        schema: OUTPUT_SCHEMA,
+        // Presenters must be total on replayed arguments, so this one reports the
+        // wait without re-resolving a duration `resolveWaitMs` could reject.
+        render: (_args, value) => [{
+          type: 'text',
+          text: value.text === '' ? 'Waited for the page to settle.' : value.text,
+        }],
+      },
+      execute: (args, exec) => callBrowser(bridge, 'wait', { ms: resolveWaitMs(args.ms) }, exec, args.profile),
+      presentCall: args => ({ card: 'generic', title: 'Wait for the page', kind: 'other', rawInput: args.ms ?? DEFAULT_WAIT_MS }),
+    }),
+  ]
 }
