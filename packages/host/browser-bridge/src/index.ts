@@ -17,6 +17,7 @@ import { randomUUID, timingSafeEqual, createHash } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import z from '@deepseek-ai/schemastery'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type {} from '@deepseek-ai/dsh-host-webserver'
@@ -218,10 +219,32 @@ export class BrowserBridge extends Service {
       }),
       `browser-bridge: ${this.config.path}`,
     )
-    // Tools are registered wherever the registry exists, but the route does not
-    // wait for it: an unsatisfied injection would leave this plugin inactive and
-    // the endpoint absent, which reaches a browser only as a 502 handshake.
-    this.ctx.inject(['tools'], (toolCtx) => { registerBrowserTools(toolCtx) })
+    // Tools go on each agent, not on the host. The Web surface disables every
+    // host tool row and mounts one registry per session behind an agent preset,
+    // so a registration made here reaches a registry no agent ever reads.
+    // Neither injection gates the route: an unsatisfied one would leave this
+    // plugin inactive and the endpoint absent.
+    this.ctx.inject(['agents'], (agentsCtx) => {
+      const installed = new Map<Agent, { dispose: () => Promise<void> }>()
+      const install = (agent: Agent): void => {
+        if (installed.has(agent)) return
+        installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
+          registerBrowserTools(scope)
+          announce('browser tools installed on an agent')
+        }))
+      }
+      const remove = (agent: Agent): void => {
+        const fiber = installed.get(agent)
+        if (fiber === undefined) return
+        installed.delete(agent)
+        void fiber.dispose().catch(() => {
+          // The agent is gone; its registry went with it.
+        })
+      }
+      for (const agent of agentsCtx.agents.list()) install(agent)
+      agentsCtx.on('agent/created', ({ agent }) => { install(agent) })
+      agentsCtx.on('agent/disposed', ({ agent }) => { remove(agent) })
+    })
     // Teardown is a disposer, not a lifecycle method: cordis has no dispose
     // symbol, and the effect that owns the route should own the socket too.
     this.ctx.effect(() => () => {

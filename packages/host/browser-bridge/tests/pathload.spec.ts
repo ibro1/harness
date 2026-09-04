@@ -24,6 +24,23 @@ class StubTools extends Service {
   register(d: { name: string }): () => void { this.registered.push(d.name); return () => {} }
 }
 
+/**
+ * Stands in for the agent roster. One agent, listed before the bridge mounts,
+ * whose context carries the tool registry — which is where the Web surface puts
+ * it, one registry per session behind a preset rather than one on the host.
+ */
+class StubAgents extends Service {
+  readonly agents: { ctx: Context }[]
+  constructor(ctx: Context) {
+    super(ctx, 'agents')
+    this.agents = [{ ctx }]
+  }
+  /** @returns the agents the bridge should install its tools onto. */
+  list(): { ctx: Context }[] {
+    return this.agents
+  }
+}
+
 it('mounts the bridge from a relative path, the way the deploy overlay names it', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-pathload-'))
   const dir = join(root, 'deploy', 'plugins')
@@ -40,6 +57,7 @@ it('mounts the bridge from a relative path, the way the deploy overlay names it'
     '    port: 19781',
     '    authenticate: false',
     "- name: 'stub-tools'",
+    "- name: 'stub-agents'",
     `- name: '${rel}'`,
     '  config:',
     "    path: '/browser-bridge'",
@@ -54,6 +72,7 @@ it('mounts the bridge from a relative path, the way the deploy overlay names it'
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
     ['stub-tools', StubTools],
+    ['stub-agents', StubAgents],
   ])
   context.loader.internal = {
     version: 'v2',

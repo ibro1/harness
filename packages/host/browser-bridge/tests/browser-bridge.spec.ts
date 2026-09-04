@@ -45,6 +45,23 @@ class StubTools extends Service {
   }
 }
 
+/**
+ * Stands in for the agent roster. One agent, listed before the bridge mounts,
+ * whose context carries the tool registry — which is where the Web surface puts
+ * it, one registry per session behind a preset rather than one on the host.
+ */
+class StubAgents extends Service {
+  readonly agents: { ctx: Context }[]
+  constructor(ctx: Context) {
+    super(ctx, 'agents')
+    this.agents = [{ ctx }]
+  }
+  /** @returns the agents the bridge should install its tools onto. */
+  list(): { ctx: Context }[] {
+    return this.agents
+  }
+}
+
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
@@ -63,6 +80,7 @@ async function loadComposition(port: number, commandTimeoutMs = 30_000, path = '
     `    port: ${String(port)}`,
     '    authenticate: false',
     "- name: 'stub-tools'",
+    "- name: 'stub-agents'",
     "- name: '@deepseek-ai/dsh-host-browser-bridge'",
     '  config:',
     `    path: '${path}'`,
@@ -79,6 +97,7 @@ async function loadComposition(port: number, commandTimeoutMs = 30_000, path = '
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
     ['@deepseek-ai/dsh-host-browser-bridge', BrowserBridge],
     ['stub-tools', StubTools],
+    ['stub-agents', StubAgents],
   ])
   context.loader.internal = {
     version: 'v2',
