@@ -65,7 +65,7 @@ function secretEquals(a: string, b: string): boolean {
  * rather than doubling the capability.
  */
 export class BrowserBridge extends Service {
-  static inject = ['webServer', 'tools']
+  static inject = ['webServer']
 
   static Config: z<Config> = z.object({
     path: z.string().default('/browser-bridge'),
@@ -116,7 +116,12 @@ export class BrowserBridge extends Service {
     const presented = url.searchParams.get('token') ?? ''
     if (this.config.token === '' || !secretEquals(presented, this.config.token)) {
       // No response body: an endpoint that answers differently to a wrong token
-      // tells an unauthenticated caller that it exists.
+      // tells an unauthenticated caller that it exists. The operator is told
+      // here instead, where it is not a disclosure.
+      this.ctx.logger.warn(
+        'browser-bridge: refused an upgrade presenting %s token',
+        presented === '' ? 'no' : 'an incorrect',
+      )
       rawSocket.destroy()
       return
     }
@@ -178,6 +183,7 @@ export class BrowserBridge extends Service {
     if (this.config.token === '') {
       throw new Error('browser-bridge: a token is required; set DSH_BROWSER_BRIDGE_TOKEN')
     }
+    this.ctx.logger.info('browser-bridge: listening on %s', this.config.path)
     this.ctx.effect(
       () => this.ctx.webServer.registerUpgrade({
         path: this.config.path,
@@ -187,7 +193,10 @@ export class BrowserBridge extends Service {
       }),
       `browser-bridge: ${this.config.path}`,
     )
-    registerBrowserTools(this.ctx)
+    // Tools are registered wherever the registry exists, but the route does not
+    // wait for it: an unsatisfied injection would leave this plugin inactive and
+    // the endpoint absent, which reaches a browser only as a 502 handshake.
+    this.ctx.inject(['tools'], (toolCtx) => { registerBrowserTools(toolCtx) })
     // Teardown is a disposer, not a lifecycle method: cordis has no dispose
     // symbol, and the effect that owns the route should own the socket too.
     this.ctx.effect(() => () => {
