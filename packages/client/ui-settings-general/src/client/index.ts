@@ -27,8 +27,6 @@ import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
-import { SignOutAction } from './SignOutAction.tsx'
-import { AccountSection } from './AccountSection.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
 import { SettingsDocumentStore } from './settings-document-store.ts'
 import { en, zh, type SettingsKey } from './locales.ts'
@@ -145,14 +143,6 @@ export function apply(ctx: ClientContext): void {
       },
     },
   })
-  // Sign-out belongs beside Settings, not floating over the page: this fork
-  // gates the whole surface behind a password, and the footer slot is where
-  // the sidebar puts account-level actions.
-  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-    name: 'sidebar.footer.action',
-    id: 'sign-out',
-    locale: NS,
-  }, SignOutAction))
   ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
     name: 'sidebar.settings',
     locale: NS,
@@ -190,14 +180,4 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
   }, GeneralSection))
-  // The password gate serves the session and key pages; Settings is where
-  // someone looks for them, so the section links out rather than restating
-  // that state through the application's RPC surface.
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'account',
-    order: 40,
-    label: 'Account',
-    locale: NS,
-  }, AccountSection))
 }

@@ -1,0 +1,10 @@
+# Fork-local rows, layered over the shipped Web composition.
+#
+# Everything this deployment adds that CAN be a plugin is one, so the upstream
+# tree stays untouched and a rebase has nothing to conflict with. What remains
+# patched is only what has no extension point: the password gate itself, which
+# must inspect every request before routing.
+
+- insert:
+    - id: harness-account
+      name: '@deepseek-ai/dsh-client-harness-account'

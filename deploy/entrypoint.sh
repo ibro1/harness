@@ -111,13 +111,14 @@ respawn opencode-bridge "$APP_DIR/opencode-bridge.mjs" &
 # DSH_EXTRA_TRUSTED_HOSTS, space separated.
 # The GitHub ingress is opt-in: without a secret there is nothing to verify a
 # delivery against, and an unauthenticated endpoint must not exist by default.
-patch_args=()
+# Fork-local plugin rows always layer on; the webhook rows only when configured.
+patch_args=(--patch "$APP_DIR/deploy/plugins/cordis.yml")
 WEBHOOK_PORT="${DSH_GITHUB_WEBHOOK_PORT:-3082}"
 if [[ -n "${DSH_GITHUB_WEBHOOK_SECRET:-}" ]]; then
   if [[ -z "${DSH_GITHUB_REPOSITORIES:-}" ]]; then
     echo "[entrypoint] WARNING: DSH_GITHUB_WEBHOOK_SECRET set but DSH_GITHUB_REPOSITORIES empty — every delivery will be ignored." >&2
   fi
-  patch_args=(--patch "$APP_DIR/deploy/webhook/cordis.yml")
+  patch_args+=(--patch "$APP_DIR/deploy/webhook/cordis.yml")
   echo "[entrypoint] GitHub webhook ingress enabled on /github for: ${DSH_GITHUB_REPOSITORIES:-<none>}"
 fi
 
