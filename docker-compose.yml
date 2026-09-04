@@ -43,6 +43,9 @@ services:
       DSH_GITHUB_ALLOWED_ASSOCIATIONS: ${DSH_GITHUB_ALLOWED_ASSOCIATIONS:-}
       DSH_GITHUB_AGENT_PRESET: ${DSH_GITHUB_AGENT_PRESET:-}
       DSH_GITHUB_PERMISSION_PRESET: ${DSH_GITHUB_PERMISSION_PRESET:-}
+      # Browser control. Empty leaves the bridge unmounted; see deploy/README.md.
+      DSH_BROWSER_BRIDGE_TOKEN: ${DSH_BROWSER_BRIDGE_TOKEN:-}
+      DSH_BROWSER_BRIDGE_PATH: ${DSH_BROWSER_BRIDGE_PATH:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh

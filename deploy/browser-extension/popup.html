@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Harness Browser Bridge</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      width: 280px;
+      margin: 0;
+      padding: 14px 16px 16px;
+      font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    .head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #999; flex: none; }
+    .dot.connected { background: #1a9c4b; }
+    .dot.connecting { background: #d19a12; }
+    .dot.disconnected { background: #c8402f; }
+    .state { font-weight: 600; font-size: 14px; }
+    .url {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      word-break: break-all;
+      opacity: 0.8;
+      margin: 0 0 8px;
+    }
+    .detail { font-size: 12px; opacity: 0.75; margin: 0 0 12px; min-height: 1em; }
+    .actions { display: flex; gap: 8px; }
+    button {
+      font: inherit;
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid rgba(128, 128, 128, 0.5);
+      border-radius: 6px;
+      background: canvas;
+      color: canvastext;
+      cursor: pointer;
+    }
+    button:hover { border-color: rgba(128, 128, 128, 0.9); }
+    button[disabled] { opacity: 0.5; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <span class="dot" id="dot"></span>
+    <span class="state" id="state">Loading…</span>
+  </div>
+  <p class="url" id="url"></p>
+  <p class="detail" id="detail"></p>
+  <div class="actions">
+    <button type="button" id="reconnect">Reconnect</button>
+    <button type="button" id="settings">Settings</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

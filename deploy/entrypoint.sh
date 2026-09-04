@@ -121,6 +121,16 @@ if [[ -n "${DSH_GITHUB_WEBHOOK_SECRET:-}" ]]; then
   echo "[entrypoint] GitHub webhook ingress enabled on /github for: ${DSH_GITHUB_REPOSITORIES:-<none>}"
 fi
 
+# Browser control is opt-in on its token, for the same reason: the bridge
+# authenticates its caller with that token alone, so mounting the route without
+# one would publish an unauthenticated command channel into the operator's
+# browser. The plugin itself also refuses to start on an empty token; this keeps
+# the route absent rather than merely failing.
+if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/browser.cordis.yml")
+  echo "[entrypoint] Browser bridge enabled on ${DSH_BROWSER_BRIDGE_PATH:-/browser-bridge}"
+fi
+
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
   trusted_args+=(--trusted-host "$host")

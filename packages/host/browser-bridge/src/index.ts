@@ -20,6 +20,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-tools'
+import { registerBrowserTools } from './tools.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -63,7 +65,7 @@ function secretEquals(a: string, b: string): boolean {
  * rather than doubling the capability.
  */
 export class BrowserBridge extends Service {
-  static inject = ['webServer']
+  static inject = ['webServer', 'tools']
 
   static Config: z<Config> = z.object({
     path: z.string().default('/browser-bridge'),
@@ -132,7 +134,11 @@ export class BrowserBridge extends Service {
       this.receive(Array.isArray(data) ? Buffer.concat(data).toString('utf8') : data.toString('utf8'))
     })
     socket.on('close', () => {
-      if (this.socket === socket) this.socket = undefined
+      // A socket already replaced by a newer one owns nothing: its close is the
+      // tail of `adopt` above, and failing the pending commands here would
+      // abandon work the connected browser is still able to answer.
+      if (this.socket !== socket) return
+      this.socket = undefined
       this.failAll(new Error('the browser disconnected'))
     })
     socket.on('error', () => { socket.close() })
@@ -167,7 +173,7 @@ export class BrowserBridge extends Service {
     }
   }
 
-  /** Register the upgrade route. */
+  /** Register the upgrade route and the browser tools. */
   [Service.init](): void {
     if (this.config.token === '') {
       throw new Error('browser-bridge: a token is required; set DSH_BROWSER_BRIDGE_TOKEN')
@@ -181,6 +187,7 @@ export class BrowserBridge extends Service {
       }),
       `browser-bridge: ${this.config.path}`,
     )
+    registerBrowserTools(this.ctx)
     // Teardown is a disposer, not a lifecycle method: cordis has no dispose
     // symbol, and the effect that owns the route should own the socket too.
     this.ctx.effect(() => () => {

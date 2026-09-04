@@ -253,6 +253,28 @@ the same OS user, and upstream's sessions have no owner, so nothing carries
 you separate logins, separate revocation, and a name against each session. They
 do not isolate what a signed-in person can reach.
 
+## Browser control
+
+An agent can drive your browser: read the page, click, type, scroll. The
+harness holds one WebSocket that a Chrome extension dials into, so the browser
+does not need to be reachable from the server.
+
+Enable it by setting `DSH_BROWSER_BRIDGE_TOKEN`; with no token the endpoint
+does not exist. Then load the extension from `deploy/browser-extension/` in
+Chrome (`chrome://extensions` → Developer mode → Load unpacked) and set the
+bridge URL and the same token in its options.
+
+The bridge authenticates its own caller, because a browser cannot set request
+headers on a WebSocket: the token rides the upgrade URL, is compared in
+constant time, and a wrong or missing token gets the socket destroyed with no
+response. That is why its route opts out of the password gate — it is the one
+route in this deployment that does.
+
+**Run it against a dedicated Chrome profile.** The agent acts in whatever
+browser holds that extension, with your sessions and cookies. In your daily
+profile that reaches every tab you are signed into; in a profile that only
+knows your test app, the blast radius is the test app.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

@@ -5,6 +5,7 @@
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
-    { "path": "../webserver" }
+    { "path": "../webserver" },
+    { "path": "../../core/tools" }
   ]
 }
