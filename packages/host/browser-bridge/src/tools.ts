@@ -21,6 +21,18 @@ import type { ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
  * tool registry, and cordis refuses a property read for a service that context
  * never injected.
  */
+/**
+ * The sentence naming what is connected. Shared so the tool and the command
+ * route answer identically; the MCP client reads the second one.
+ * @param labels - connected profile labels.
+ * @returns the model-facing sentence.
+ */
+export function describeProfiles(labels: string[]): string {
+  return labels.length === 0
+    ? 'No browser is connected.'
+    : `Connected browsers: ${labels.join(', ')}.`
+}
+
 export interface BrowserTarget {
   /**
    * Send one command to a connected browser.

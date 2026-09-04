@@ -22,7 +22,7 @@ import z from '@deepseek-ai/schemastery'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-tools'
-import { buildBrowserTools, registerBrowserTools } from './tools.ts'
+import { buildBrowserTools, describeProfiles, registerBrowserTools } from './tools.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -318,6 +318,14 @@ export class BrowserBridge extends Service {
     if (typeof request.type !== 'string') {
       res.writeHead(400, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'the command needs a type' }))
+      return
+    }
+    // Answered here, not by the browser: which browsers are connected is the
+    // bridge's own knowledge, and forwarding it would ask an extension about
+    // its siblings.
+    if (request.type === 'profiles') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ result: describeProfiles(this.profiles()) }))
       return
     }
     try {

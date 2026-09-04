@@ -154,6 +154,27 @@ describe('browser MCP server', () => {
     expect(navigate?.inputSchema.properties).toHaveProperty('profile')
   })
 
+  it('answers browser_profiles without asking a browser about its siblings', async () => {
+    // Every tool name but this one carries a command for the extension. Forwarding
+    // it reached the browser as an unknown command, which the MCP tests missed by
+    // exercising navigate and snapshot and never this one.
+    await boot(19_755)
+    const socket = await connectBrowser(19_755, 'work')
+    const request = start(19_755)
+    await request('initialize', {})
+    const called = await request('tools/call', { name: 'browser_profiles', arguments: {} })
+    expect(called.result).toEqual({ content: [{ type: 'text', text: 'Connected browsers: work.' }] })
+    socket.close()
+  })
+
+  it('reports no browser rather than failing when none is connected', async () => {
+    await boot(19_756)
+    const request = start(19_756)
+    await request('initialize', {})
+    const called = await request('tools/call', { name: 'browser_profiles', arguments: {} })
+    expect(called.result).toEqual({ content: [{ type: 'text', text: 'No browser is connected.' }] })
+  })
+
   it('drives a connected browser through a tool call', async () => {
     await boot(19_752)
     const socket = await connectBrowser(19_752, 'work')
