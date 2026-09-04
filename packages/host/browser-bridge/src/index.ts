@@ -298,7 +298,7 @@ export class BrowserBridge extends Service {
       const install = (agent: Agent): void => {
         if (installed.has(agent)) return
         installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
-          registerBrowserTools(scope)
+          registerBrowserTools(scope, this)
           announce('browser tools installed on an agent')
         }))
       }

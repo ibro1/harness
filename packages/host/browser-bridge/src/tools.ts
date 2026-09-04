@@ -1,6 +1,6 @@
 /**
  * The six model-facing tools that drive the connected browser through
- * `ctx.browserBridge.call`. This module owns their schemas, argument
+ * the bridge handed to {@link registerBrowserTools}. This module owns their schemas, argument
  * resolution, and model-facing rendering; the extension owns page semantics —
  * what a snapshot ref denotes, how far a scroll step moves, and when a page has
  * settled.
@@ -15,8 +15,24 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-// Type-only: resolves the ctx.browserBridge service declaration this module calls.
-import type {} from './index.ts'
+/**
+ * What these tools need of the bridge. Passed in rather than read from the
+ * context: the tools register on each agent's context, which declares only the
+ * tool registry, and cordis refuses a property read for a service that context
+ * never injected.
+ */
+export interface BrowserTarget {
+  /**
+   * Send one command to a connected browser.
+   * @param type - command name the extension dispatches on.
+   * @param payload - command arguments, JSON-serializable.
+   * @param profile - which connected browser to act on, or undefined for the only one.
+   * @returns the extension's reply.
+   */
+  call(type: string, payload: unknown, profile?: string): Promise<unknown>
+  /** @returns the labels of every connected browser. */
+  profiles(): string[]
+}
 
 /** Milliseconds `browser_wait` waits when the model names no duration. */
 const DEFAULT_WAIT_MS = 1000
@@ -75,7 +91,7 @@ function replyText(reply: unknown): string {
  * extension's reply or on its own `commandTimeoutMs`, so `exec.signal` is
  * observed before the send rather than forwarded: an in-flight command runs to
  * that bounded settlement and the tool reaches quiescence with it.
- * @param ctx - the plugin context carrying the bridge service.
+ * @param bridge - the bridge the command travels over.
  * @param type - command name the extension dispatches on.
  * @param payload - command arguments for that command.
  * @param exec - the tool execution whose signal gates the send.
@@ -84,14 +100,14 @@ function replyText(reply: unknown): string {
  * @throws when the caller already cancelled, no browser is connected, the extension reports a failure, or no reply arrives in time.
  */
 async function callBrowser(
-  ctx: Context,
+  bridge: BrowserTarget,
   type: string,
   payload: Record<string, string | number | boolean>,
   exec: ToolRunContext,
   profile: string | undefined,
 ): Promise<{ text: string }> {
   exec.signal.throwIfAborted()
-  return { text: replyText(await ctx.browserBridge.call(type, payload, profile)) }
+  return { text: replyText(await bridge.call(type, payload, profile)) }
 }
 
 /**
@@ -113,9 +129,10 @@ function resolveWaitMs(requested: number | undefined): number {
  * `ctx.tools`. Each
  * registration is an effect of the calling context, so unloading the bridge
  * withdraws the tools with it.
- * @param ctx - the bridge's context, carrying both the tool registry and `ctx.browserBridge`.
+ * @param ctx - the context whose tool registry receives them.
+ * @param bridge - the bridge the tools drive.
  */
-export function registerBrowserTools(ctx: Context): void {
+export function registerBrowserTools(ctx: Context, bridge: BrowserTarget): void {
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'browser_profiles',
     description: 'List the browsers currently connected to this harness, by label. '
@@ -127,7 +144,7 @@ export function registerBrowserTools(ctx: Context): void {
     },
     execute: (_args, exec) => {
       exec.signal.throwIfAborted()
-      const labels = ctx.browserBridge.profiles()
+      const labels = bridge.profiles()
       return Promise.resolve({
         text: labels.length === 0
           ? 'No browser is connected.'
@@ -153,7 +170,7 @@ export function registerBrowserTools(ctx: Context): void {
       schema: OUTPUT_SCHEMA,
       render: (args, value) => [{ type: 'text', text: value.text === '' ? `Navigated to ${args.url}.` : value.text }],
     },
-    execute: (args, exec) => callBrowser(ctx, 'navigate', { url: args.url }, exec, args.profile),
+    execute: (args, exec) => callBrowser(bridge, 'navigate', { url: args.url }, exec, args.profile),
     presentCall: args => ({ card: 'generic', title: `Navigate to ${args.url}`, kind: 'other', rawInput: args.url }),
   })), 'browser-bridge: browser_navigate')
 
@@ -172,7 +189,7 @@ export function registerBrowserTools(ctx: Context): void {
       schema: OUTPUT_SCHEMA,
       render: (_args, value) => [{ type: 'text', text: value.text === '' ? 'The page snapshot is empty.' : value.text }],
     },
-    execute: (args, exec) => callBrowser(ctx, 'snapshot', { full: args.full ?? false }, exec, args.profile),
+    execute: (args, exec) => callBrowser(bridge, 'snapshot', { full: args.full ?? false }, exec, args.profile),
     presentCall: args => ({
       card: 'generic',
       title: args.full === true ? 'Snapshot the full page' : 'Snapshot the page',
@@ -197,7 +214,7 @@ export function registerBrowserTools(ctx: Context): void {
       schema: OUTPUT_SCHEMA,
       render: (args, value) => [{ type: 'text', text: value.text === '' ? `Clicked element ${String(args.ref)}.` : value.text }],
     },
-    execute: (args, exec) => callBrowser(ctx, 'click', { ref: args.ref }, exec, args.profile),
+    execute: (args, exec) => callBrowser(bridge, 'click', { ref: args.ref }, exec, args.profile),
     presentCall: args => ({ card: 'generic', title: `Click element ${String(args.ref)}`, kind: 'other', rawInput: args.ref }),
   })), 'browser-bridge: browser_click')
 
@@ -231,7 +248,7 @@ export function registerBrowserTools(ctx: Context): void {
           : value.text,
       }],
     },
-    execute: (args, exec) => callBrowser(ctx, 'type', { ref: args.ref, text: args.text, submit: args.submit ?? false }, exec, args.profile),
+    execute: (args, exec) => callBrowser(bridge, 'type', { ref: args.ref, text: args.text, submit: args.submit ?? false }, exec, args.profile),
     presentCall: args => ({ card: 'generic', title: `Type into element ${String(args.ref)}`, kind: 'other', rawInput: args.text }),
   })), 'browser-bridge: browser_type')
 
@@ -261,7 +278,7 @@ export function registerBrowserTools(ctx: Context): void {
       // viewport-sized step scrolls, so this side names no distance for it.
       const payload: Record<string, string | number> = { direction: args.direction }
       if (args.amount !== undefined) payload.amount = args.amount
-      return callBrowser(ctx, 'scroll', payload, exec, args.profile)
+      return callBrowser(bridge, 'scroll', payload, exec, args.profile)
     },
     presentCall: args => ({ card: 'generic', title: `Scroll ${args.direction}`, kind: 'other', rawInput: args.amount ?? args.direction }),
   })), 'browser-bridge: browser_scroll')
@@ -286,7 +303,7 @@ export function registerBrowserTools(ctx: Context): void {
         text: value.text === '' ? 'Waited for the page to settle.' : value.text,
       }],
     },
-    execute: (args, exec) => callBrowser(ctx, 'wait', { ms: resolveWaitMs(args.ms) }, exec, args.profile),
+    execute: (args, exec) => callBrowser(bridge, 'wait', { ms: resolveWaitMs(args.ms) }, exec, args.profile),
     presentCall: args => ({ card: 'generic', title: 'Wait for the page', kind: 'other', rawInput: args.ms ?? DEFAULT_WAIT_MS }),
   })), 'browser-bridge: browser_wait')
 }

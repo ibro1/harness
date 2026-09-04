@@ -29,18 +29,27 @@ let root: string | undefined
 let context: Context | undefined
 
 /** Stands in for the tool runtime, recording what the bridge registers. */
+interface RecordedTool {
+  name: string
+  execute: (args: Record<string, unknown>, exec: { signal: AbortSignal }) => Promise<{ text: string }>
+}
+
 class StubTools extends Service {
-  readonly registered: string[] = []
+  readonly tools: RecordedTool[] = []
   constructor(ctx: Context) {
     super(ctx, 'tools')
+  }
+  /** The names registered, in order. */
+  get registered(): string[] {
+    return this.tools.map(tool => tool.name)
   }
   /**
    * Record one tool registration.
    * @param definition - the tool the bridge registers.
    * @returns a disposer, as the real registry returns.
    */
-  register(definition: { name: string }): () => void {
-    this.registered.push(definition.name)
+  register(definition: RecordedTool): () => void {
+    this.tools.push(definition)
     return () => {}
   }
 }
@@ -148,6 +157,25 @@ describe('browser-bridge', () => {
     // route registered on it, reporting success while every real upgrade to
     // /browser-bridge found no route and was destroyed without a response.
     await expect(loadComposition(19_741, 30_000, '')).rejects.toThrow('path must start with "/"')
+  })
+
+  it('runs a registered tool against the connected browser', async () => {
+    // Registration alone proved nothing: the tools once read the bridge off a
+    // context that never injected it, which cordis refuses only at call time.
+    const ctx = await loadComposition(19_746)
+    const tools = ctx.get('tools') as unknown as StubTools
+    const socket = connectExtension(19_746, TOKEN, 'work')
+    await once(socket, 'open')
+    autoReply(socket, message => `ran ${message.type}`)
+    const exec = { signal: new AbortController().signal }
+
+    const profiles = tools.tools.find(tool => tool.name === 'browser_profiles')
+    expect(await profiles?.execute({}, exec)).toEqual({ text: 'Connected browsers: work.' })
+
+    const snapshot = tools.tools.find(tool => tool.name === 'browser_snapshot')
+    expect(await snapshot?.execute({ profile: 'work' }, exec)).toEqual({ text: 'ran snapshot' })
+
+    socket.close()
   })
 
   it('refuses an upgrade presenting the wrong token', async () => {
