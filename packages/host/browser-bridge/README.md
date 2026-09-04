@@ -59,6 +59,8 @@ Commands carry a UUID; replies are matched to it, so concurrent commands settle 
 
 A CLI that runs its own agent loop — `agy`, `opencode` — answers a chat request with its own tools and discards the ones the harness sends. A model reached that way cannot drive the browser however well the bridge works, so the tools are offered a second way: `deploy/mcp/browser-mcp.mjs` is an MCP server that a CLI spawns and calls, and it drives the same bridge, the same browsers and the same profiles.
 
+A CLI that cannot prompt must also be told to permit the tools: `agy` auto-denies anything needing approval in a headless run, and the turn then produces no output at all. `deploy/mcp/allow-rule.mjs` adds `mcp(dsh-browser/*)` to its `permissions.allow`, scoped to this server so the CLI's own file and shell tools keep asking.
+
 It reaches the bridge through `<path>/command`, a route carrying the same token as the socket and, like it, exempt from the deployment's sign-in gate. `GET` returns the tool catalogue, built from the definitions the harness registers so the two can never advertise different schemas; `POST` runs one command. A bridge refusal — no browser connected, a ref that has gone — comes back as a tool error the model reads, not a transport failure.
 
 <a id="model-experience"></a>

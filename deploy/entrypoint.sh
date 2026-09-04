@@ -162,7 +162,16 @@ if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
       --env "DSH_BROWSER_COMMAND_URL=http://127.0.0.1:$INTERNAL_PORT${DSH_BROWSER_BRIDGE_PATH:-/browser-bridge}/command" \
       dsh-browser node "$APP_DIR/deploy/mcp/browser-mcp.mjs" >/dev/null 2>&1
     then
-      echo "[entrypoint] Registered the browser tools with agy as the MCP server 'dsh-browser'"
+      # A headless `agy -p` run cannot prompt for approval, so a browser tool
+      # would be auto-denied and the turn would produce nothing at all. The
+      # rule is scoped to this server: agy's own file and shell tools keep
+      # asking, which --dangerously-skip-permissions would not.
+      if node "$APP_DIR/deploy/mcp/allow-rule.mjs" 'mcp(dsh-browser/*)' >/dev/null 2>&1; then
+        echo "[entrypoint] Registered the browser tools with agy as the MCP server 'dsh-browser'"
+      else
+        echo "[entrypoint] WARNING: registered the MCP server but could not add its allow-rule;" >&2
+        echo "[entrypoint]          agy will auto-deny the browser tools in headless mode." >&2
+      fi
     else
       echo "[entrypoint] WARNING: could not register the browser MCP server with agy." >&2
     fi
