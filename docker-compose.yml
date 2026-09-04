@@ -46,6 +46,7 @@ services:
       # Browser control. Empty leaves the bridge unmounted; see deploy/README.md.
       DSH_BROWSER_BRIDGE_TOKEN: ${DSH_BROWSER_BRIDGE_TOKEN:-}
       DSH_BROWSER_BRIDGE_PATH: ${DSH_BROWSER_BRIDGE_PATH:-}
+      DSH_GITHUB_WEBHOOK_PUBLIC_PORT: ${DSH_GITHUB_WEBHOOK_PUBLIC_PORT:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh
@@ -79,7 +80,8 @@ services:
       - traefik.http.routers.harness-webhook.tls=true
       - traefik.http.routers.harness-webhook.tls.certresolver=letsencrypt
       - traefik.http.routers.harness-webhook.service=harness-webhook
-      - traefik.http.services.harness-webhook.loadbalancer.server.port=3081
+      # Must match DSH_GITHUB_WEBHOOK_PUBLIC_PORT in deploy/entrypoint.sh.
+      - traefik.http.services.harness-webhook.loadbalancer.server.port=3083
       - traefik.http.routers.harness.middlewares=harness-ratelimit@docker,harness-headers@docker
       # Second line of defence on the login page; the app rate-limits per
       # address as well, but this one costs the attacker the TCP handshake.

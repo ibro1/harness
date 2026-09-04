@@ -13,8 +13,30 @@ PORT="${DSH_PORT:-3080}"
 # guard is worth keeping. socat republishes it on the container interface so
 # Traefik can reach it, with the password gate and Traefik in front.
 INTERNAL_PORT="${DSH_INTERNAL_PORT:-3081}"
+# The port Traefik routes /github to. Named rather than derived: it was once
+# PORT+1, which is INTERNAL_PORT on the default ports, so socat raced the
+# harness for the same socket and lost. Keep it in step with the
+# harness-webhook Traefik label in docker-compose.yml.
+WEBHOOK_PUBLIC_PORT="${DSH_GITHUB_WEBHOOK_PUBLIC_PORT:-3083}"
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
+
+# Four ports share this container and two of them are published by socat, which
+# fails at bind time and in the background. Refuse to start on a collision
+# rather than lose one listener quietly.
+for port_pair in \
+  "PORT:$PORT:INTERNAL_PORT:$INTERNAL_PORT" \
+  "PORT:$PORT:WEBHOOK_PUBLIC_PORT:$WEBHOOK_PUBLIC_PORT" \
+  "INTERNAL_PORT:$INTERNAL_PORT:WEBHOOK_PUBLIC_PORT:$WEBHOOK_PUBLIC_PORT" \
+  "PORT:$PORT:DSH_GITHUB_WEBHOOK_PORT:${DSH_GITHUB_WEBHOOK_PORT:-3082}" \
+  "INTERNAL_PORT:$INTERNAL_PORT:DSH_GITHUB_WEBHOOK_PORT:${DSH_GITHUB_WEBHOOK_PORT:-3082}" \
+  "WEBHOOK_PUBLIC_PORT:$WEBHOOK_PUBLIC_PORT:DSH_GITHUB_WEBHOOK_PORT:${DSH_GITHUB_WEBHOOK_PORT:-3082}"; do
+  IFS=: read -r left_name left_value right_name right_value <<<"$port_pair"
+  if [[ "$left_value" == "$right_value" ]]; then
+    echo "[entrypoint] FATAL: $left_name and $right_name are both $left_value; every port in this container must differ." >&2
+    exit 1
+  fi
+done
 
 if [[ -z "${DSH_AUTH_PASSWORD_HASH:-}" && -z "${DSH_AUTH_PASSWORD:-}" ]]; then
   echo "[entrypoint] WARNING: no DSH_AUTH_PASSWORD_HASH / DSH_AUTH_PASSWORD set." >&2
@@ -165,8 +187,15 @@ socat_pid=$!
 # Traefik can route /github to it without that route reaching the UI server.
 webhook_socat_pid=""
 if [[ -n "${DSH_GITHUB_WEBHOOK_SECRET:-}" ]]; then
-  socat "TCP-LISTEN:$((PORT + 1)),fork,reuseaddr" "TCP:127.0.0.1:$WEBHOOK_PORT" &
+  socat "TCP-LISTEN:$WEBHOOK_PUBLIC_PORT,fork,reuseaddr" "TCP:127.0.0.1:$WEBHOOK_PORT" &
   webhook_socat_pid=$!
+  # socat reports a failed bind by exiting, and it is in the background: without
+  # this the only symptom is Traefik answering /github with 502.
+  sleep 1
+  if ! kill -0 "$webhook_socat_pid" 2>/dev/null; then
+    echo "[entrypoint] FATAL: could not publish the webhook on $WEBHOOK_PUBLIC_PORT." >&2
+    exit 1
+  fi
 fi
 
 shutdown() {
