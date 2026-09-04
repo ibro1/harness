@@ -1,0 +1,11 @@
+# Browser control, layered over the shipped Web composition.
+#
+# The bridge rides the UI web server rather than its own realm: a browser
+# extension must reach it on the same origin and port the operator already
+# trusts, and it authenticates its own caller with a token in the upgrade URL.
+- insert:
+    - id: browser-bridge
+      name: '@deepseek-ai/dsh-host-browser-bridge'
+      config:
+        path: !!js process.env.DSH_BROWSER_BRIDGE_PATH ?? '/browser-bridge'
+        token: !!js process.env.DSH_BROWSER_BRIDGE_TOKEN ?? ''

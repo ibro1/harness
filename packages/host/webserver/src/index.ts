@@ -54,6 +54,16 @@ export interface WebUpgradeRoute {
   path: string
   /** Owns protocol negotiation and the upgraded socket after dispatch. */
   handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
+  /**
+   * Whether the password gate must pass before this route sees the socket.
+   *
+   * False only for a route that authenticates its own caller. A browser cannot
+   * set request headers on a WebSocket, so an extension holding a shared secret
+   * has no way to satisfy a cookie-or-bearer gate and must present its token in
+   * the upgrade URL, which only the route itself can judge.
+   * @default true
+   */
+  authenticate?: boolean
 }
 
 /** Web server listen and response-compression config. */
@@ -327,16 +337,18 @@ export class WebServer extends Service {
         this.upgradedSockets.delete(socket)
       })
 
-      if (gated && !isAuthenticated(req)) {
-        socket.destroy()
-        return
-      }
+      // The route is resolved before the gate so a self-authenticating route
+      // can be recognised; an unknown path is still refused without a hint.
       let route: WebUpgradeRoute | undefined
       try {
         /* v8 ignore next -- node:http always sets url on server requests. */
         route = this.upgrades.get(new URL(req.url ?? '/', 'http://x').pathname)
       } catch (error) {
         this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+        socket.destroy()
+        return
+      }
+      if (gated && route?.authenticate !== false && !isAuthenticated(req)) {
         socket.destroy()
         return
       }
