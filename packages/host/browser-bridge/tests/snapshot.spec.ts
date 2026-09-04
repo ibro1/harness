@@ -37,7 +37,6 @@ async function snapshot(html: string, payload: Record<string, unknown> = {}): Pr
   }
   // A fresh evaluation per test: the script guards against double installation.
   delete (window as unknown as Record<string, unknown>).__AGENT_CONTENT_SCRIPT_INSTALLED__
-  // eslint-disable-next-line no-eval
   ;(0, eval)(readFileSync(CONTENT_SCRIPT, 'utf8'))
 
   // The listener answers asynchronously, as the extension messaging API expects.
