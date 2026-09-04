@@ -5,6 +5,28 @@ import { writeFileSync, unlinkSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
+// Headless `agy -p` cannot prompt for tool approval, and its settings
+// allow-rules are not consulted for MCP: every browser tool call is auto-denied
+// and the turn returns nothing. `--dangerously-skip-permissions` is the only
+// switch that admits them, and it admits agy's own file and shell tools with
+// them — inside this container, which holds the deploy key and the checkout.
+//
+// Tied to the browser tools deliberately: turn those off and the grant goes
+// with them, rather than outliving the reason it was made.
+const SKIP_PERMISSIONS = (process.env.DSH_BROWSER_BRIDGE_TOKEN ?? '') !== ''
+  && (process.env.DSH_BROWSER_MCP ?? '1') !== '0'
+
+/** @returns {string[]} the argument list every agy invocation shares. */
+function agyArgs(model) {
+  return [
+    '--input-format', 'stream-json',
+    '--output-format', 'stream-json',
+    '--model', model,
+    '--disable-slash-commands',
+    ...(SKIP_PERMISSIONS ? ['--dangerously-skip-permissions'] : []),
+  ]
+}
+
 const PORT = 8001
 const HOST = '127.0.0.1'
 
@@ -194,12 +216,7 @@ const server = createServer(async (req, res) => {
           'Connection': 'keep-alive',
         })
 
-        const proc = spawn('agy', [
-          '--input-format', 'stream-json',
-          '--output-format', 'stream-json',
-          '--model', model,
-          '--disable-slash-commands',
-        ], {
+        const proc = spawn('agy', agyArgs(model), {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: process.env,
         })
@@ -302,12 +319,7 @@ const server = createServer(async (req, res) => {
           }
         })
       } else {
-        const proc = spawn('agy', [
-          '--input-format', 'stream-json',
-          '--output-format', 'stream-json',
-          '--model', model,
-          '--disable-slash-commands',
-        ], {
+        const proc = spawn('agy', agyArgs(model), {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: process.env,
         })

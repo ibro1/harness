@@ -59,7 +59,7 @@ Commands carry a UUID; replies are matched to it, so concurrent commands settle 
 
 A CLI that runs its own agent loop — `agy`, `opencode` — answers a chat request with its own tools and discards the ones the harness sends. A model reached that way cannot drive the browser however well the bridge works, so the tools are offered a second way: `deploy/mcp/browser-mcp.mjs` is an MCP server that a CLI spawns and calls, and it drives the same bridge, the same browsers and the same profiles.
 
-A CLI that cannot prompt must also be told to permit the tools: `agy` auto-denies anything needing approval in a headless run, and the turn then produces no output at all. `deploy/mcp/allow-rule.mjs` adds `mcp(dsh-browser/*)` to its `permissions.allow`, scoped to this server so the CLI's own file and shell tools keep asking.
+A CLI that cannot prompt must also be told to permit the tools. `agy` auto-denies anything needing approval in a headless run, and its `permissions.allow` rules are not consulted for MCP — `mcp(*)`, `mcp(<server>)`, `mcp(<server>/<tool>)` and `autoApproveTools` were all tried and all denied. The only switch that admits them is `--dangerously-skip-permissions`, which `agy-bridge.mjs` passes while the browser tools are enabled.
 
 It reaches the bridge through `<path>/command`, a route carrying the same token as the socket and, like it, exempt from the deployment's sign-in gate. `GET` returns the tool catalogue, built from the definitions the harness registers so the two can never advertise different schemas; `POST` runs one command. A bridge refusal — no browser connected, a ref that has gone — comes back as a tool error the model reads, not a transport failure.
 
@@ -75,6 +75,7 @@ Refs are stable across consecutive snapshots of the same page, so a model that r
 <a id="known-limitations-and-deferred-work"></a>
 ## Known Limitations and Deferred Work
 
+- **Enabling the browser tools widens what agy may do.** The flag that admits them admits agy's own file and shell tools too, inside the container that holds the deploy key and the checkout. It is tied to `DSH_BROWSER_BRIDGE_TOKEN`, so clearing that withdraws both, but there is no way to grant one without the other.
 - **The command route is as strong as its token, and no stronger.** It is reachable wherever the harness is, exempt from the sign-in gate, and one POST drives the operator's browser. It shares the socket's token, so a leak of that token is a leak of both.
 - **The extension is the trust boundary, and it is wide.** The bridge drives the operator's own signed-in browser with `<all_urls>` host permissions. Anything the operator is authenticated to, an agent holding this channel can act as. There is no per-origin allowlist; a dedicated browser profile is the only isolation currently offered, and it is advisory.
 - **The profile label is operator-assigned.** Chrome cannot reliably report which profile an extension runs in, so the label is typed into the extension's options. Two browsers given the same label displace each other, silently, exactly as one browser reconnecting does.
