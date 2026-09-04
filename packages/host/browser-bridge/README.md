@@ -49,14 +49,16 @@ Every command settles. A command with no connected browser, one the extension re
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-One connection at a time. A second extension replaces the first, because two browsers answering the same `browser_click` makes the result ambiguous rather than doubling the capability. Replacement is not a disconnect: commands in flight stay pending and are answered by the new connection, which matters because MV3 service workers are evicted and restarted routinely.
+One connection per profile label, which the extension sends as `?label=` and which defaults to `default`. A second browser connecting under the same label replaces the first; under a different label it joins alongside. Replacement is not a disconnect: commands in flight stay pending and are answered by the new connection, which matters because MV3 service workers are evicted and restarted routinely. A disconnect fails only the commands sent to that profile.
+
+Two browsers are two targets, not a race. When several are connected and a tool names none, the call is refused with the labels listed rather than sent to whichever socket happens to be there — a snapshot read from one browser and a click sent to another is the failure this prevents.
 
 Commands carry a UUID; replies are matched to it, so concurrent commands settle independently of arrival order.
 
 <a id="model-experience"></a>
 ## Model Experience
 
-Six tools reach the model: `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_wait`. All six share one output value — the extension's reply as text — because the commands differ in what they do to the page, not in what they report.
+Seven tools reach the model: `browser_profiles`, `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_wait`. All but the first take an optional `profile`, needed only when more than one browser is connected; `browser_profiles` lists the labels. All six share one output value — the extension's reply as text — because the commands differ in what they do to the page, not in what they report.
 
 `browser_snapshot` dominates token cost. It renders the viewport as an indented outline of interactive elements, each with a `[ref]` the click and type tools take, and is capped at roughly 100 elements and 8000 characters with an explicit truncation footer; `full: true` renders the whole page. Values of password and secret-looking fields are masked. A snapshot is a fresh observation each time and is not cached, so a loop of act-then-snapshot grows the context by roughly one snapshot per step.
 
@@ -66,6 +68,7 @@ Refs are stable across consecutive snapshots of the same page, so a model that r
 ## Known Limitations and Deferred Work
 
 - **The extension is the trust boundary, and it is wide.** The bridge drives the operator's own signed-in browser with `<all_urls>` host permissions. Anything the operator is authenticated to, an agent holding this channel can act as. There is no per-origin allowlist; a dedicated browser profile is the only isolation currently offered, and it is advisory.
+- **The profile label is operator-assigned.** Chrome cannot reliably report which profile an extension runs in, so the label is typed into the extension's options. Two browsers given the same label displace each other, silently, exactly as one browser reconnecting does.
 - **Only http and https, only the active tab.** `navigate` refuses other schemes, and commands act on the active tab of the last-focused normal window. There is no tab management, no window targeting, and no download or file-chooser handling.
 - **The snapshot cannot see event listeners.** An isolated content script cannot read `addEventListener` handlers, so a clickable element with no role, no `tabindex`, and no pointer cursor is invisible to it. Closed shadow roots, cross-origin iframes, and canvas-rendered UIs expose nothing.
 - **Change detection after a click is heuristic** — a fixed settle window over URL, title, and mutation count. A slow navigation can be reported as no change.

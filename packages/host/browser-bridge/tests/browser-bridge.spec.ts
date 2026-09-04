@@ -115,8 +115,9 @@ async function loadComposition(port: number, commandTimeoutMs = 30_000, path = '
 }
 
 /** Connect as the extension does, with the token in the upgrade query string. */
-function connectExtension(port: number, token: string): WebSocket {
-  return new WebSocket(`ws://127.0.0.1:${String(port)}/browser-bridge?token=${encodeURIComponent(token)}`)
+function connectExtension(port: number, token: string, label?: string): WebSocket {
+  const query = `token=${encodeURIComponent(token)}${label === undefined ? '' : `&label=${encodeURIComponent(label)}`}`
+  return new WebSocket(`ws://127.0.0.1:${String(port)}/browser-bridge?${query}`)
 }
 
 /** Answer every command with one reply built from the request. */
@@ -128,10 +129,11 @@ function autoReply(socket: WebSocket, reply: (message: { id: string; type: strin
 }
 
 describe('browser-bridge', () => {
-  it('registers the six browser tools when it mounts', async () => {
+  it('registers the browser tools when it mounts', async () => {
     const ctx = await loadComposition(19_731)
     const tools = ctx.get('tools') as unknown as StubTools
     expect(tools.registered).toEqual([
+      'browser_profiles',
       'browser_navigate',
       'browser_snapshot',
       'browser_click',
@@ -230,7 +232,59 @@ describe('browser-bridge', () => {
     await once(socket, 'open')
     const pending = ctx.browserBridge.call('snapshot', {})
     socket.on('message', () => { socket.close() })
-    await expect(pending).rejects.toThrow('the browser disconnected')
+    await expect(pending).rejects.toThrow('the browser connected as default disconnected')
+  })
+
+  it('keeps two labelled browsers side by side and routes to the named one', async () => {
+    const ctx = await loadComposition(19_742)
+    const work = connectExtension(19_742, TOKEN, 'work')
+    const home = connectExtension(19_742, TOKEN, 'home')
+    await Promise.all([once(work, 'open'), once(home, 'open')])
+    autoReply(work, () => 'from work')
+    autoReply(home, () => 'from home')
+
+    expect(ctx.browserBridge.profiles()).toEqual(['home', 'work'])
+    expect(await ctx.browserBridge.call('snapshot', {}, 'work')).toBe('from work')
+    expect(await ctx.browserBridge.call('snapshot', {}, 'home')).toBe('from home')
+
+    work.close()
+    home.close()
+  })
+
+  it('refuses to guess when several browsers are connected', async () => {
+    const ctx = await loadComposition(19_743)
+    const work = connectExtension(19_743, TOKEN, 'work')
+    const home = connectExtension(19_743, TOKEN, 'home')
+    await Promise.all([once(work, 'open'), once(home, 'open')])
+    // Acting on an unintended browser is worse than refusing to act.
+    await expect(ctx.browserBridge.call('click', { ref: 1 }))
+      .rejects.toThrow('several browsers are connected (home, work); pass profile to choose one')
+    await expect(ctx.browserBridge.call('click', { ref: 1 }, 'laptop'))
+      .rejects.toThrow('no browser is connected as "laptop"; connected: home, work')
+    work.close()
+    home.close()
+  })
+
+  it('fails only the disconnected profile\'s commands', async () => {
+    const ctx = await loadComposition(19_744)
+    const work = connectExtension(19_744, TOKEN, 'work')
+    const home = connectExtension(19_744, TOKEN, 'home')
+    await Promise.all([once(work, 'open'), once(home, 'open')])
+    autoReply(home, () => 'home still answers')
+
+    const orphaned = ctx.browserBridge.call('snapshot', {}, 'work')
+    work.close()
+    await expect(orphaned).rejects.toThrow('the browser connected as work disconnected')
+    // The surviving browser is unaffected by its neighbour going away.
+    expect(await ctx.browserBridge.call('snapshot', {}, 'home')).toBe('home still answers')
+    home.close()
+  })
+
+  it('refuses a connection whose label could not be used', async () => {
+    const ctx = await loadComposition(19_745)
+    const socket = connectExtension(19_745, TOKEN, 'not a label!')
+    await once(socket, 'error')
+    expect(ctx.browserBridge.profiles()).toEqual([])
   })
 
   it('replaces an existing connection with a newer one', async () => {

@@ -27,6 +27,7 @@
       color: canvastext;
     }
     .hint { margin: 6px 0 0; font-size: 12px; opacity: 0.7; }
+    .optional { font-weight: 400; opacity: 0.6; }
     .row { display: flex; gap: 8px; align-items: center; }
     button {
       font: inherit;
@@ -85,7 +86,16 @@
              placeholder="DSH_BROWSER_BRIDGE_TOKEN">
       <p class="hint">
         The value of <code>DSH_BROWSER_BRIDGE_TOKEN</code> on the harness. It is sent in the
-        connection URL and stored in this browser profile's extension storage.
+        connection URL and stored in this browser profile's extension storage.</p>
+    </div>
+
+    <div class="field">
+      <label for="label">Profile label <span class="optional">(optional)</span></label>
+      <input id="label" name="label" type="text" autocomplete="off" spellcheck="false"
+             placeholder="work">
+      <p class="hint">Names this browser to the harness, so an agent driving more than one
+      can say which it means. Letters, digits, dot, dash and underscore, up to 32 characters.
+      Leave it blank and the harness calls this browser <code>default</code>.
       </p>
     </div>
 

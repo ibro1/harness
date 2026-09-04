@@ -60,7 +60,19 @@ interface Pending {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
   timer: ReturnType<typeof setTimeout>
+  /** The profile the command was sent to, so its disconnect settles only its own. */
+  profile: string
 }
+
+/**
+ * Profile label accepted from the upgrade URL. Deliberately narrow: the label
+ * is echoed back to a model in error text and used as a Map key, so it stays a
+ * short identifier rather than arbitrary text.
+ */
+const PROFILE_PATTERN = /^[A-Za-z0-9._-]{1,32}$/
+
+/** The label a browser gets when its extension names none. */
+const DEFAULT_PROFILE = 'default'
 
 /** Compare two secrets without leaking their relationship through timing. */
 function secretEquals(a: string, b: string): boolean {
@@ -87,7 +99,13 @@ export class BrowserBridge extends Service {
   })
 
   private readonly server = new WebSocketServer({ noServer: true })
-  private socket: WebSocket | undefined
+  /**
+   * One live connection per profile label. Keyed rather than single because two
+   * browsers driven from one harness are two distinct targets, not a race: a
+   * snapshot taken in one and a click sent to the other is the failure this
+   * prevents.
+   */
+  private readonly connections = new Map<string, WebSocket>()
   private readonly pending = new Map<string, Pending>()
 
   /** @param ctx - host context. @param config - validated bridge config. */
@@ -95,9 +113,45 @@ export class BrowserBridge extends Service {
     super(ctx, 'browserBridge')
   }
 
-  /** Whether an extension is currently connected. */
+  /** Whether any extension is currently connected. */
   get connected(): boolean {
-    return this.socket !== undefined
+    return this.connections.size > 0
+  }
+
+  /**
+   * The profile labels with a live connection, sorted for stable output.
+   * @returns every connected profile's label.
+   */
+  profiles(): string[] {
+    return [...this.connections.keys()].sort()
+  }
+
+  /**
+   * Choose the connection a command goes to.
+   * @param profile - the requested label, or undefined to use the only one.
+   * @returns the label and its socket.
+   * @throws when nothing is connected, the label is unknown, or several are
+   * connected and the caller named none — never picking arbitrarily, because
+   * acting on the wrong browser is worse than refusing.
+   */
+  private target(profile: string | undefined): { label: string; socket: WebSocket } {
+    const labels = this.profiles()
+    if (labels.length === 0) {
+      throw new Error('no browser is connected; open a page and connect the extension')
+    }
+    if (profile !== undefined) {
+      const socket = this.connections.get(profile)
+      if (socket === undefined) {
+        throw new Error(`no browser is connected as ${JSON.stringify(profile)}; connected: ${labels.join(', ')}`)
+      }
+      return { label: profile, socket }
+    }
+    if (labels.length > 1) {
+      throw new Error(`several browsers are connected (${labels.join(', ')}); pass profile to choose one`)
+    }
+    // One label, established by the length checks above.
+    const [label] = labels as [string]
+    return { label, socket: this.connections.get(label) as WebSocket }
   }
 
   /**
@@ -107,18 +161,15 @@ export class BrowserBridge extends Service {
    * @returns the extension's result.
    * @throws when no browser is connected, or the reply does not arrive in time.
    */
-  async call(type: string, payload: unknown): Promise<unknown> {
-    const socket = this.socket
-    if (socket === undefined) {
-      throw new Error('no browser is connected; open a page and connect the extension')
-    }
+  async call(type: string, payload: unknown, profile?: string): Promise<unknown> {
+    const { label, socket } = this.target(profile)
     const id = randomUUID()
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(new Error(`browser did not answer ${type} within ${String(this.config.commandTimeoutMs)}ms`))
       }, this.config.commandTimeoutMs)
-      this.pending.set(id, { resolve, reject, timer })
+      this.pending.set(id, { resolve, reject, timer, profile: label })
       socket.send(JSON.stringify({ id, type, payload }))
     })
   }
@@ -127,6 +178,8 @@ export class BrowserBridge extends Service {
   private readonly handleUpgrade = (req: IncomingMessage, rawSocket: Duplex, head: Buffer): void => {
     const url = new URL(req.url ?? '/', 'http://x')
     const presented = url.searchParams.get('token') ?? ''
+    const requested = url.searchParams.get('label') ?? ''
+    const label = requested === '' ? DEFAULT_PROFILE : requested
     if (this.config.token === '' || !secretEquals(presented, this.config.token)) {
       // No response body: an endpoint that answers differently to a wrong token
       // tells an unauthenticated caller that it exists. The operator is told
@@ -135,15 +188,26 @@ export class BrowserBridge extends Service {
       rawSocket.destroy()
       return
     }
+    if (!PROFILE_PATTERN.test(label)) {
+      // Refused after the token, so an unauthenticated caller still learns nothing.
+      announce(`refused a connection with an unusable profile label ${JSON.stringify(label)}`)
+      rawSocket.destroy()
+      return
+    }
     this.server.handleUpgrade(req, rawSocket, head, (socket) => {
-      this.adopt(socket)
+      this.adopt(label, socket)
     })
   }
 
-  /** Replace any existing connection with this one and wire its lifetime. */
-  private adopt(socket: WebSocket): void {
-    this.socket?.close(1000, 'replaced by a newer connection')
-    this.socket = socket
+  /**
+   * Take this connection as the given profile, replacing only that profile's
+   * own socket. Other profiles are untouched: two browsers are two targets.
+   * @param label - the profile the browser connected as.
+   * @param socket - its live connection.
+   */
+  private adopt(label: string, socket: WebSocket): void {
+    this.connections.get(label)?.close(1000, 'replaced by a newer connection')
+    this.connections.set(label, socket)
     // ws hands a Buffer (or an array of them) per frame; the protocol is text.
     socket.on('message', (data: Buffer | Buffer[]) => {
       this.receive(Array.isArray(data) ? Buffer.concat(data).toString('utf8') : data.toString('utf8'))
@@ -152,12 +216,12 @@ export class BrowserBridge extends Service {
       // A socket already replaced by a newer one owns nothing: its close is the
       // tail of `adopt` above, and failing the pending commands here would
       // abandon work the connected browser is still able to answer.
-      if (this.socket !== socket) return
-      this.socket = undefined
-      this.failAll(new Error('the browser disconnected'))
+      if (this.connections.get(label) !== socket) return
+      this.connections.delete(label)
+      this.fail(new Error(`the browser connected as ${label} disconnected`), label)
     })
     socket.on('error', () => { socket.close() })
-    announce('extension connected')
+    announce(`extension connected as ${label}`)
   }
 
   /** Settle the pending command one reply belongs to. */
@@ -179,9 +243,14 @@ export class BrowserBridge extends Service {
     else waiting.resolve(message.result)
   }
 
-  /** Reject everything still waiting, so no tool call hangs past a disconnect. */
-  private failAll(reason: Error): void {
+  /**
+   * Reject the waiting commands one failure covers, so none hangs past it.
+   * @param reason - what to reject them with.
+   * @param profile - the profile whose commands failed, or undefined for all.
+   */
+  private fail(reason: Error, profile?: string): void {
     for (const [id, waiting] of this.pending) {
+      if (profile !== undefined && waiting.profile !== profile) continue
       this.pending.delete(id)
       clearTimeout(waiting.timer)
       waiting.reject(reason)
@@ -248,9 +317,9 @@ export class BrowserBridge extends Service {
     // Teardown is a disposer, not a lifecycle method: cordis has no dispose
     // symbol, and the effect that owns the route should own the socket too.
     this.ctx.effect(() => () => {
-      this.failAll(new Error('the bridge is shutting down'))
-      this.socket?.close(1001, 'harness shutting down')
-      this.socket = undefined
+      this.fail(new Error('the bridge is shutting down'))
+      for (const socket of this.connections.values()) socket.close(1001, 'harness shutting down')
+      this.connections.clear()
       this.server.close()
     }, 'browser-bridge: connection')
   }

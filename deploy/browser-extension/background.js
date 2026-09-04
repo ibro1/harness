@@ -24,7 +24,7 @@
 /* -------------------------------------------------------------------------- */
 
 /** chrome.storage.local keys. Config is written by the options page. */
-const CONFIG_KEYS = ['bridgeUrl', 'token'];
+const CONFIG_KEYS = ['bridgeUrl', 'token', 'label'];
 /** Where the popup reads the live connection state from. */
 const STATUS_KEY = 'connectionStatus';
 
@@ -117,9 +117,9 @@ function describe(err) {
 /**
  * Build the upgrade URL. The token rides the query string because a browser
  * cannot set headers on a WebSocket handshake.
- * @param {string} bridgeUrl @param {string} token @returns {string}
+ * @param {string} bridgeUrl @param {string} token @param {string} label @returns {string}
  */
-function buildUrl(bridgeUrl, token) {
+function buildUrl(bridgeUrl, token, label) {
   const url = new URL(bridgeUrl);
   if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
     throw new Error(`the bridge URL must start with wss:// or ws://, not ${url.protocol}//`);
@@ -127,6 +127,9 @@ function buildUrl(bridgeUrl, token) {
   // set(), not an appended '?token=': the operator may have pasted a URL that
   // already carries a query, and a second '?' would make the token unreadable.
   url.searchParams.set('token', token);
+  // The label names this browser to the harness, so an agent driving two of
+  // them can say which one it means. Absent, the harness calls it 'default'.
+  if (label !== '') url.searchParams.set('label', label);
   return url.toString();
 }
 
@@ -153,6 +156,7 @@ async function connect(options = {}) {
   const config = await chrome.storage.local.get(CONFIG_KEYS);
   const bridgeUrl = typeof config.bridgeUrl === 'string' ? config.bridgeUrl.trim() : '';
   const token = typeof config.token === 'string' ? config.token : '';
+  const label = typeof config.label === 'string' ? config.label.trim() : '';
   if (bridgeUrl === '' || token === '') {
     // Nothing to dial. Stay quiet rather than burning a retry loop; the options
     // page will trigger a connect the moment both fields are saved.
@@ -176,7 +180,7 @@ async function connect(options = {}) {
 
   let target;
   try {
-    target = buildUrl(bridgeUrl, token);
+    target = buildUrl(bridgeUrl, token, label);
   } catch (err) {
     // A malformed URL will not fix itself; stop instead of retrying forever.
     failures = 0;

@@ -162,3 +162,11 @@ alarm.
 **Nothing happens after a harness redeploy.** The socket closes and the backoff
 restarts; the extension reconnects within 30 seconds. Press Reconnect to skip
 the wait.
+
+## Driving more than one browser
+
+Give each browser a **Profile label** in the extension options — `work`, `personal`, whatever you type. The label rides the connection URL as `?label=`, and the harness keeps one connection per label, so two browsers stay connected side by side instead of displacing each other.
+
+An agent then names one: `browser_snapshot` and the rest take an optional `profile`. With a single browser connected the argument is unnecessary. With several connected and none named, the tool refuses and lists the labels rather than picking one — acting on the wrong browser is worse than not acting. `browser_profiles` lists what is connected.
+
+Leave the label blank and the harness calls that browser `default`. Two browsers sharing a label displace each other, the same way one browser reconnecting does.

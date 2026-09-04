@@ -88,7 +88,7 @@ it('mounts the bridge from a relative path, the way the deploy overlay names it'
   // The bridge only registers its tools once it has actually mounted.
   const tools = context.get('tools') as unknown as StubTools
   expect(tools.registered).toContain('browser_navigate')
-  expect(tools.registered).toHaveLength(6)
+  expect(tools.registered).toHaveLength(7)
 
   await context.fiber.dispose()
   await rm(root, { recursive: true, force: true })

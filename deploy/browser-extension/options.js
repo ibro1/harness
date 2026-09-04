@@ -12,6 +12,7 @@ const STATUS_KEY = 'connectionStatus';
 const form = document.getElementById('form');
 const bridgeUrlInput = document.getElementById('bridgeUrl');
 const tokenInput = document.getElementById('token');
+const labelInput = document.getElementById('label');
 const revealButton = document.getElementById('reveal');
 const reconnectButton = document.getElementById('reconnect');
 const savedNote = document.getElementById('saved');
@@ -46,9 +47,10 @@ function renderStatus(status) {
 
 /** Load the saved settings and the current status into the form. */
 async function load() {
-  const stored = await chrome.storage.local.get(['bridgeUrl', 'token', STATUS_KEY]);
+  const stored = await chrome.storage.local.get(['bridgeUrl', 'token', 'label', STATUS_KEY]);
   bridgeUrlInput.value = typeof stored.bridgeUrl === 'string' ? stored.bridgeUrl : '';
   tokenInput.value = typeof stored.token === 'string' ? stored.token : '';
+  labelInput.value = typeof stored.label === 'string' ? stored.label : '';
   renderStatus(stored[STATUS_KEY]);
 }
 
@@ -68,6 +70,7 @@ form.addEventListener('submit', async (event) => {
 
   const bridgeUrl = bridgeUrlInput.value.trim();
   const token = tokenInput.value.trim();
+  const label = labelInput.value.trim();
 
   // Validate here rather than letting the worker fail quietly: this is the only
   // surface where the operator can see and fix a typo.
@@ -86,14 +89,19 @@ form.addEventListener('submit', async (event) => {
     showError('The bridge URL must start with wss:// (or ws:// for localhost).');
     return;
   }
+  if (label !== '' && !/^[A-Za-z0-9._-]{1,32}$/.test(label)) {
+    showError('A profile label may use letters, digits, dot, dash and underscore, up to 32 characters.');
+    return;
+  }
   if (token === '') {
     showError('A token is required; the harness refuses connections without one.');
     return;
   }
 
-  await chrome.storage.local.set({ bridgeUrl, token });
+  await chrome.storage.local.set({ bridgeUrl, token, label });
   bridgeUrlInput.value = bridgeUrl;
   tokenInput.value = token;
+  labelInput.value = label;
   flashSaved();
   // The storage listener in the worker reconnects, but the worker may be
   // asleep; this message wakes it so the operator sees the result immediately.
