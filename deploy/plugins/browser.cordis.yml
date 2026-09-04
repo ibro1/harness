@@ -5,7 +5,11 @@
 # trusts, and it authenticates its own caller with a token in the upgrade URL.
 - insert:
     - id: browser-bridge
-      name: '@deepseek-ai/dsh-host-browser-bridge'
+      # Referenced by path, not by package name: this package is fork-local and
+      # unpublished, so a profile's pnpm install cannot fetch it and a bare name
+      # resolves to nothing. The Loader then skips the row and the upgrade route
+      # never exists, which reaches a browser only as a 502 on the handshake.
+      name: '../../packages/host/browser-bridge/lib/index.js'
       config:
         path: !!js process.env.DSH_BROWSER_BRIDGE_PATH ?? '/browser-bridge'
         token: !!js process.env.DSH_BROWSER_BRIDGE_TOKEN ?? ''
