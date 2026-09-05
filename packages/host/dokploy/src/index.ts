@@ -272,9 +272,21 @@ export function buildDokployTools(readServers: ReadServers, timeoutMs: number): 
         const projects = rows(data)
         if (projects.length === 0) return reply(`No projects on ${server.name}.`)
         const lines = projects.map((project) => {
-          const apps = rows(project['applications']).map(a => `    app "${str(a['name'])}" [${str(a['applicationId'])}] ${str(a['applicationStatus'] || a['status'])}`)
-          const composes = rows(project['compose']).map(c => `    compose "${str(c['name'])}" [${str(c['composeId'])}]`)
-          const body = [...apps, ...composes]
+          // Dokploy nests services under environments[]; older versions kept
+          // them flat on the project. Read the environments when present, else
+          // the project itself, so both layouts list their applications.
+          const environments = rows(project['environments'])
+          const scopes = environments.length > 0 ? environments : [project]
+          const body: string[] = []
+          for (const scope of scopes) {
+            if (environments.length > 1) body.push(`  environment "${str(scope['name'])}"`)
+            for (const a of rows(scope['applications'])) {
+              body.push(`    app "${str(a['name'])}" [${str(a['applicationId'])}] ${str(a['applicationStatus'] || a['status'])}`)
+            }
+            for (const c of rows(scope['compose'])) {
+              body.push(`    compose "${str(c['name'])}" [${str(c['composeId'])}] ${str(c['composeStatus'] || c['status'])}`)
+            }
+          }
           return `- ${str(project['name'])} [${str(project['projectId'])}]\n${body.join('\n') || '    (no applications)'}`
         })
         return reply(`Projects on ${server.name}:\n${lines.join('\n')}`)

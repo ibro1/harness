@@ -125,6 +125,34 @@ describe('dokploy tools', () => {
     void seen
   })
 
+  it('lists applications nested under environments, the real Dokploy shape', async () => {
+    const url = await stubDokploy((endpoint) => {
+      if (endpoint === 'project.all') {
+        return { json: [{
+          projectId: 'p1',
+          name: 'databes local dev',
+          environments: [{
+            name: 'production',
+            applications: [
+              { applicationId: 'KMf5', name: 'docku', applicationStatus: 'idle' },
+              { applicationId: 'h1UC', name: 'chbox', applicationStatus: 'done' },
+            ],
+            compose: [{ composeId: 'c1', name: 'stack', composeStatus: 'done' }],
+          }],
+        }] }
+      }
+      return { status: 404, json: {} }
+    })
+    const tools = mount([{ name: 'main', url, apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
+    const out = await tools.get('dokploy_projects')!.execute({}, exec)
+    expect(out.text).toContain('docku')
+    expect(out.text).toContain('KMf5')
+    expect(out.text).toContain('chbox')
+    expect(out.text).toContain('done')
+    expect(out.text).toContain('stack')
+    expect(out.text).not.toContain('(no applications)')
+  })
+
   it('sends the api key and the application id on a deploy', async () => {
     let receivedKey = ''
     let receivedBody = ''
