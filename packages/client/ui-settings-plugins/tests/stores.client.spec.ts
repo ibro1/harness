@@ -145,6 +145,32 @@ describe('CardForm', () => {
     expect(host.set).not.toHaveBeenCalled()
   })
 
+  it('reports an object-valued field as landed, comparing by content not reference', async () => {
+    // The read-back after a write is a fresh value off the wire; a reference
+    // check would call every array- or object-valued field a failed save even
+    // when it persisted. This is the Dokploy servers case.
+    const host = stubSettingsScope<Record<string, unknown>>()
+    const serversField = {
+      field: 'servers',
+      format: (value: unknown) => JSON.stringify(Array.isArray(value) ? value : [], null, 2),
+      parse: (text: string) => ({ kind: 'set' as const, value: JSON.parse(text) as unknown }),
+    }
+    const subject = new CardForm(host.scope, [serversField])
+    host.publish({ status: 'ready', writable: true, value: { servers: [] }, base: { servers: [] }, user: {} })
+    // The host stores a structurally-equal but referentially-new array.
+    host.set.mockImplementation((field: string, value: unknown) => {
+      // Store a structurally-equal but referentially-new value, as the wire does.
+      const stored = JSON.parse(JSON.stringify(value)) as unknown
+      host.publish({ value: { [field]: stored }, user: { [field]: stored } })
+    })
+
+    subject.actions().edit('servers', '[{"name":"main","url":"https://x","apiKeyEnv":"DOKPLOY_KEY_MAIN"}]')
+    await subject.save()
+
+    expect(host.set).toHaveBeenCalledTimes(1)
+    expect(subject.shell()).toMatchObject({ dirty: false, failed: false, saving: false })
+  })
+
   it('refuses to save while a draft is not a value the field accepts', async () => {
     const { host, subject } = form()
 

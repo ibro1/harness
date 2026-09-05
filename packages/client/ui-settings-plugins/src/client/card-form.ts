@@ -16,6 +16,27 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 
+/**
+ * Structural equality for JSON-shaped settings values. The read-back after a
+ * write is a fresh value off the wire, so a reference check would call every
+ * object- or array-valued field a failure; comparing by content, order-
+ * insensitively for object keys, reports what actually landed.
+ * @param a - one value. @param b - the other. @returns whether they match.
+ */
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+    return a.every((item, index) => jsonEqual(item, b[index]))
+  }
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keys = Object.keys(left)
+  if (keys.length !== Object.keys(right).length) return false
+  return keys.every(key => Object.prototype.hasOwnProperty.call(right, key) && jsonEqual(left[key], right[key]))
+}
+
 /** The write one field's staged text performs when the card is saved. */
 export type FieldWrite =
   | { kind: 'set'; value: unknown }
@@ -307,7 +328,7 @@ export class CardForm<T> {
 
   private async store(field: string, value: unknown): Promise<boolean> {
     await this.scope.set(field, value)
-    return this.userLayer()?.[field] === value
+    return jsonEqual(this.userLayer()?.[field], value)
   }
 
   private stage(field: string, edit: StagedEdit): void {
