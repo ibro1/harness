@@ -392,6 +392,51 @@ export function isValidSessionToken(token: string): boolean {
 }
 
 /**
+ * The host this request was addressed to, as the browser sees it. Behind a
+ * trusted proxy the forwarded host is the real domain; the direct Host header
+ * is the fallback.
+ * @param req - the incoming request.
+ * @returns the lower-cased host, or undefined when none is present.
+ */
+function requestHost(req: IncomingMessage): string | undefined {
+  if (getAuthConfig().trustProxy) {
+    const forwarded = req.headers['x-forwarded-host']
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim()
+    if (first !== undefined && first !== '') return first.toLowerCase()
+  }
+  return req.headers.host?.trim().toLowerCase()
+}
+
+/**
+ * Reject a state-changing POST whose `Origin` names a different site, as
+ * defence in depth beside the session cookie's `SameSite=Lax`. A cross-site
+ * form POST carries the attacker's Origin and is refused; a same-origin POST
+ * matches and passes. A missing Origin is allowed: browsers send one on every
+ * cross-origin POST, so its absence is a non-browser caller (which the session
+ * cookie or API token already gates), not a forged request.
+ * @param req - the incoming request.
+ * @param res - the response, written with 403 when the origin is refused.
+ * @returns true when the request was refused and the response is complete.
+ */
+function crossOriginRejected(req: IncomingMessage, res: ServerResponse): boolean {
+  const origin = req.headers.origin
+  if (origin === undefined || origin === '') return false
+  const host = requestHost(req)
+  let sameOrigin = false
+  try {
+    sameOrigin = host !== undefined && new URL(origin).host.toLowerCase() === host
+  } catch {
+    // An Origin that will not parse is attacker-controlled input, not a same
+    // site request; fall through to the refusal.
+  }
+  if (sameOrigin) return false
+  res.writeHead(403, { ...AUTH_PAGE_HEADERS, 'Connection': 'close' })
+  res.end(renderLoginPage(true))
+  res.on('finish', () => { req.socket.end() })
+  return true
+}
+
+/**
  * Verify a username and password against the configured accounts.
  *
  * Every account's verifier is exercised regardless of whether the name matched,
@@ -844,6 +889,7 @@ export function handleAuthRoutes(
     }
 
     if (req.method === 'POST') {
+      if (crossOriginRejected(req, res)) return true
       const retryAfterMs = loginRetryAfterMs(req)
       if (retryAfterMs > 0) {
         res.writeHead(429, {
@@ -897,6 +943,7 @@ export function handleAuthRoutes(
     }
     const current = sessionCookie(req)
     if (req.method === 'POST') {
+      if (crossOriginRejected(req, res)) return true
       void readBoundedBody(req).then((bodyText) => {
         if (res.writableEnded) return
         const params = new URLSearchParams(bodyText ?? '')
