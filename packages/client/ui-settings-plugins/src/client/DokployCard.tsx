@@ -39,7 +39,7 @@ export function DokployCard(props: DokployCardProps) {
         resetLabel={t('reset')}
         invalidLabel={t('dokployInvalid')}
         multiline
-        placeholder={'[\n  { "name": "main", "url": "https://server.example.com", "apiKeyEnv": "DOKPLOY_KEY_MAIN" }\n]'}
+        placeholder={'[\n  { "name": "main", "url": "https://server.example.com", "apiKey": "your-dokploy-key" }\n]'}
         disabled={disabled}
         {...state.servers}
         onEdit={(text) => { props.edit('servers', text) }}

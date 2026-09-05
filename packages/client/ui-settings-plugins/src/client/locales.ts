@@ -76,7 +76,7 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   dokployTitle: 'Dokploy',
   dokployDescription: 'The Dokploy servers an agent may query and deploy through.',
   dokployServers: 'Servers',
-  dokployServersHint: 'A JSON array of servers, each with a name, a url, and apiKeyEnv — the environment variable holding that server API key. The key itself stays in the environment, never here.',
+  dokployServersHint: 'A JSON array of servers, each with a name, a url, and either apiKeyEnv (the name of an environment variable holding the key — kept out of settings) or apiKey (the key itself, stored here).',
   dokployInvalid: 'Not a valid servers list: a JSON array of objects with string name, url and apiKeyEnv.',
 }
 
@@ -137,6 +137,6 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   dokployTitle: 'Dokploy',
   dokployDescription: 'Agent 可查询并通过其部署的 Dokploy 服务器。',
   dokployServers: '服务器',
-  dokployServersHint: '服务器的 JSON 数组，每项包含 name、url 和 apiKeyEnv（保存该服务器 API 密钥的环境变量名）。密钥本身保留在环境变量中，绝不写在这里。',
+  dokployServersHint: '服务器的 JSON 数组，每项包含 name、url，以及 apiKeyEnv（保存密钥的环境变量名，密钥不写入设置）或 apiKey（直接填写密钥，将保存在此处）。',
   dokployInvalid: '不是有效的服务器列表：应为对象的 JSON 数组，每项的 name、url、apiKeyEnv 均为字符串。',
 }

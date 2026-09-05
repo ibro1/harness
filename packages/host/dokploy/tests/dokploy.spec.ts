@@ -141,6 +141,34 @@ describe('dokploy tools', () => {
     expect(receivedKey).toBe('the-real-key')
   })
 
+  it('uses an inline apiKey when no apiKeyEnv is named', async () => {
+    let receivedKey = ''
+    const url = await stubDokploy(() => ({ json: [] }))
+    server?.on('request', (req) => { receivedKey = String(req.headers['x-api-key'] ?? '') })
+    // No apiKeyEnv; the key is inline. mount()'s fixture uses apiKeyEnv, so build
+    // a server object directly here.
+    const tools = (() => {
+      const map = new Map<string, RecordedTool>()
+      const agentCtx = {
+        inject(_n: string[], fn: (s: unknown) => void) {
+          fn({
+            effect: (f: () => unknown) => f(),
+            tools: { register(t: RecordedTool) { map.set(t.name, t); return () => {} } },
+          })
+          return { dispose: () => Promise.resolve() }
+        },
+      }
+      const ctx = {
+        settings: { register: () => ({ get: () => ({ servers: [{ name: 'main', url, apiKey: 'inline-key' }] }), watch: () => () => {}, patch: () => Promise.resolve() }) },
+        agents: { list: () => [{ ctx: agentCtx }] }, on() {}, effect(f: () => unknown) { f() },
+      }
+      apply(ctx as unknown as Context, { timeoutMs: 5000, path: '/dokploy', token: '' })
+      return map
+    })()
+    await tools.get('dokploy_projects')!.execute({}, exec)
+    expect(receivedKey).toBe('inline-key')
+  })
+
   it('surfaces a Dokploy error status as the tool failing', async () => {
     const url = await stubDokploy(() => ({ status: 401, json: { message: 'Unauthorized' } }))
     const tools = mount([{ name: 'prod', url, apiKeyEnv: 'DOKPLOY_KEY_TEST' }])

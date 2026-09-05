@@ -29,8 +29,10 @@ const NS = 'dokploy'
 interface DokployServer {
   name: string
   url: string
-  /** Name of the environment variable holding this server's API key. */
-  apiKeyEnv: string
+  /** Name of the environment variable holding this server's API key (preferred). */
+  apiKeyEnv?: string
+  /** The API key inline — simpler, but stored in settings and shown in the card. */
+  apiKey?: string
 }
 
 /** The resolved `dokploy` settings section. */
@@ -43,8 +45,9 @@ const CONFIG_SCHEMA: z<DokployConfig> = z.object({
   servers: z.array(z.object({
     name: z.string().required().description('A short label you choose for this server, used when asking a tool to act on it.'),
     url: z.string().required().description('Base URL of the Dokploy server, for example https://server.example.com.'),
-    apiKeyEnv: z.string().required().description('Name of the environment variable that holds this server API key, for example DOKPLOY_KEY_MAIN. The key itself lives in the environment, never in settings.'),
-  })).default([]).description('Dokploy servers this harness may query and deploy through.'),
+    apiKeyEnv: z.string().description('Preferred: name of the environment variable holding this server API key (e.g. DOKPLOY_KEY_MAIN), so the key stays out of settings. Requires that variable to be set on the harness.'),
+    apiKey: z.string().description('Alternative to apiKeyEnv: the API key itself. Simpler, but it is stored here in settings and shown in this form.'),
+  })).default([]).description('Dokploy servers this harness may query and deploy through. Give each server either apiKeyEnv or apiKey.'),
 })
 
 /** The plugin name, for the Loader. */
@@ -157,9 +160,16 @@ async function callDokploy(
   init: { method?: string; body?: unknown } | undefined,
   timeoutMs: number,
 ): Promise<unknown> {
-  const apiKey = process.env[server.apiKeyEnv]?.trim()
+  const fromEnv = server.apiKeyEnv !== undefined && server.apiKeyEnv !== ''
+    ? process.env[server.apiKeyEnv]?.trim()
+    : undefined
+  const inline = server.apiKey !== undefined && server.apiKey.trim() !== '' ? server.apiKey.trim() : undefined
+  const apiKey = fromEnv ?? inline
   if (apiKey === undefined || apiKey === '') {
-    throw new Error(`Dokploy ${server.name} has no API key: set the ${server.apiKeyEnv} environment variable.`)
+    const hint = server.apiKeyEnv !== undefined && server.apiKeyEnv !== ''
+      ? `set the ${server.apiKeyEnv} environment variable, or put the key in this server's apiKey field`
+      : 'give this server an apiKey, or an apiKeyEnv naming a set environment variable'
+    throw new Error(`Dokploy ${server.name} has no API key: ${hint}.`)
   }
   const controller = new AbortController()
   const timer = setTimeout(() => { controller.abort() }, timeoutMs)
