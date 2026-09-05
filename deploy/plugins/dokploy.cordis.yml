@@ -1,0 +1,12 @@
+# Dokploy control, layered over the shipped Web composition.
+#
+# Referenced by path because this package is fork-local and unpublished, the
+# same reason the browser bridge is: a profile's pnpm install cannot fetch it
+# and a bare name resolves to nothing.
+#
+# The servers themselves are not configured here — they live in the `dokploy`
+# user-settings namespace, added and edited in the settings UI like models, so
+# an API key never sits in a compose file.
+- insert:
+    - id: dokploy
+      name: '../../packages/host/dokploy/lib/index.js'

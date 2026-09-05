@@ -186,6 +186,14 @@ if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
   fi
 fi
 
+# Dokploy control is on by default; the servers are configured in the settings
+# UI, and with none configured the tools simply report that. Set DSH_DOKPLOY=0
+# to leave the plugin out entirely.
+if [[ "${DSH_DOKPLOY:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/dokploy.cordis.yml")
+  echo "[entrypoint] Dokploy control enabled; configure servers under Settings -> dokploy"
+fi
+
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
   trusted_args+=(--trusted-host "$host")
