@@ -17,6 +17,7 @@ export type PluginsSettingsLocaleKey =
   | 'subagentModelSelectionPartial' | 'subagentModelSelectionUnavailable'
   | 'subagentModelSelectionUnavailableGroup' | 'subagentModelSelectionEmpty'
   | 'subagentModelSelectionRequired' | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
+  | 'dokployTitle' | 'dokployDescription' | 'dokployServers' | 'dokployServersHint' | 'dokployInvalid'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -72,6 +73,11 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   subagentModelSelectionRequired: 'Select at least one model before saving.',
   subagentModelSelectionConflict: 'Settings changed elsewhere. Discard your draft and try again.',
   subagentModelSelectionOff: 'Subagents use configured defaults or inherit the parent agent\'s model. Saved model choices are retained.',
+  dokployTitle: 'Dokploy',
+  dokployDescription: 'The Dokploy servers an agent may query and deploy through.',
+  dokployServers: 'Servers',
+  dokployServersHint: 'A JSON array of servers, each with a name, a url, and apiKeyEnv — the environment variable holding that server API key. The key itself stays in the environment, never here.',
+  dokployInvalid: 'Not a valid servers list: a JSON array of objects with string name, url and apiKeyEnv.',
 }
 
 /** Simplified Chinese copy. */
@@ -128,4 +134,9 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   subagentModelSelectionRequired: '保存前请至少选择一个模型。',
   subagentModelSelectionConflict: '设置已在其他位置更新。请放弃修改后重试。',
   subagentModelSelectionOff: '关闭后，Subagent 使用配置的默认模型或继承父 Agent 的模型；已选模型会保留。',
+  dokployTitle: 'Dokploy',
+  dokployDescription: 'Agent 可查询并通过其部署的 Dokploy 服务器。',
+  dokployServers: '服务器',
+  dokployServersHint: '服务器的 JSON 数组，每项包含 name、url 和 apiKeyEnv（保存该服务器 API 密钥的环境变量名）。密钥本身保留在环境变量中，绝不写在这里。',
+  dokployInvalid: '不是有效的服务器列表：应为对象的 JSON 数组，每项的 name、url、apiKeyEnv 均为字符串。',
 }

@@ -27,8 +27,10 @@ import { PluginsSettingsSection } from './PluginsSettingsSection.tsx'
 import type { PluginsSettingsSectionInjected, PluginsSettingsTabEntry } from './PluginsSettingsSection.tsx'
 import { SubagentModelSelectionCard } from './SubagentModelSelectionCard.tsx'
 import { WebSearchCard } from './WebSearchCard.tsx'
+import { DokployCard } from './DokployCard.tsx'
 import { AGENT_LOOP_NS, AgentLoopCardController } from './agent-loop-card-controller.ts'
 import { SHELL_NS, BashCardController } from './bash-card-controller.ts'
+import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
 import { ConfigurablePluginsTabController } from './tab-store.ts'
 import {
   SUBAGENT_MODEL_SELECTION_NS, SubagentModelSelectionCardController,
@@ -73,6 +75,7 @@ export function apply(ctx: ClientContext): void {
     ctx.settingsScope.bind({ namespace: SUBAGENT_MODEL_SELECTION_NS }),
     ctx,
   )
+  const dokploy = new DokployCardController(ctx.settingsScope.bind({ namespace: DOKPLOY_NS }))
 
   // The credential a card reports is not part of any settings section, so its
   // scope publishes nothing when one is written. This is the only signal that
@@ -177,6 +180,12 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => agentLoop.inject(),
     }, AgentLoopCard)
+    yield ctx.slots.register({
+      name: 'settings.plugin.item',
+      key: DOKPLOY_NS,
+      locale: NS,
+      inject: () => dokploy.inject(),
+    }, DokployCard)
     yield ctx.slots.register({
       name: 'settings.plugin.item',
       key: SUBAGENT_MODEL_SELECTION_NS,

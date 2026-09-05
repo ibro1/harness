@@ -21,11 +21,12 @@ import type {} from '@deepseek-ai/dsh-settings'
 /** The settings namespace holding the server roster. */
 const NS = 'dokploy'
 
-/** One configured Dokploy server. */
+/** One configured Dokploy server, as stored in settings. */
 interface DokployServer {
   name: string
   url: string
-  apiKey: string
+  /** Name of the environment variable holding this server's API key. */
+  apiKeyEnv: string
 }
 
 /** The resolved `dokploy` settings section. */
@@ -38,7 +39,7 @@ const CONFIG_SCHEMA: z<DokployConfig> = z.object({
   servers: z.array(z.object({
     name: z.string().required().description('A short label you choose for this server, used when asking a tool to act on it.'),
     url: z.string().required().description('Base URL of the Dokploy server, for example https://server.example.com.'),
-    apiKey: z.string().role('secret').required().description('A Dokploy API key with access to the projects you want to manage.'),
+    apiKeyEnv: z.string().required().description('Name of the environment variable that holds this server API key, for example DOKPLOY_KEY_MAIN. The key itself lives in the environment, never in settings.'),
   })).default([]).description('Dokploy servers this harness may query and deploy through.'),
 })
 
@@ -121,6 +122,10 @@ async function callDokploy(
   init: { method?: string; body?: unknown } | undefined,
   timeoutMs: number,
 ): Promise<unknown> {
+  const apiKey = process.env[server.apiKeyEnv]?.trim()
+  if (apiKey === undefined || apiKey === '') {
+    throw new Error(`Dokploy ${server.name} has no API key: set the ${server.apiKeyEnv} environment variable.`)
+  }
   const controller = new AbortController()
   const timer = setTimeout(() => { controller.abort() }, timeoutMs)
   try {
@@ -128,7 +133,7 @@ async function callDokploy(
     const response = await fetch(`${apiBase(server.url)}/api/${endpoint}`, {
       method,
       headers: {
-        'x-api-key': server.apiKey,
+        'x-api-key': apiKey,
         'Accept': 'application/json',
         ...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },

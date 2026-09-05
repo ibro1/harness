@@ -49,7 +49,7 @@ async function stubDokploy(handler: (endpoint: string, body: string) => { status
  * Mount the plugin against a stub settings roster and a single stub agent, and
  * return that agent's registered tools by name.
  */
-function mount(servers: { name: string; url: string; apiKey: string }[]): Map<string, RecordedTool> {
+function mount(servers: { name: string; url: string; apiKeyEnv: string }[]): Map<string, RecordedTool> {
   const tools = new Map<string, RecordedTool>()
   const agentCtx = {
     inject(_names: string[], fn: (scope: unknown) => void) {
@@ -76,6 +76,7 @@ function mount(servers: { name: string; url: string; apiKey: string }[]): Map<st
   return tools
 }
 
+process.env.DOKPLOY_KEY_TEST = 'the-real-key'
 const exec = { signal: new AbortController().signal }
 
 describe('dokploy tools', () => {
@@ -85,24 +86,24 @@ describe('dokploy tools', () => {
   })
 
   it('lists configured servers without revealing keys', async () => {
-    const tools = mount([{ name: 'prod', url: 'https://d.example', apiKey: 'secret-key' }])
+    const tools = mount([{ name: 'prod', url: 'https://d.example', apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
     const out = await tools.get('dokploy_servers')!.execute({}, exec)
     expect(out.text).toContain('prod')
     expect(out.text).toContain('https://d.example')
-    expect(out.text).not.toContain('secret-key')
+    expect(out.text).not.toContain('the-real-key')
   })
 
   it('refuses to guess when several servers are configured', async () => {
     const tools = mount([
-      { name: 'prod', url: 'https://a', apiKey: 'k1' },
-      { name: 'staging', url: 'https://b', apiKey: 'k2' },
+      { name: 'prod', url: 'https://a', apiKeyEnv: 'DOKPLOY_KEY_TEST' },
+      { name: 'staging', url: 'https://b', apiKeyEnv: 'DOKPLOY_KEY_TEST' },
     ])
     await expect(tools.get('dokploy_projects')!.execute({}, exec))
       .rejects.toThrow('Several Dokploy servers are configured (prod, staging); pass server to choose one')
   })
 
   it('reports an unknown server name with the ones that exist', async () => {
-    const tools = mount([{ name: 'prod', url: 'https://a', apiKey: 'k' }])
+    const tools = mount([{ name: 'prod', url: 'https://a', apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
     await expect(tools.get('dokploy_projects')!.execute({ server: 'nope' }, exec))
       .rejects.toThrow('No Dokploy server named "nope"; configured: prod')
   })
@@ -115,7 +116,7 @@ describe('dokploy tools', () => {
       }
       return { status: 404, json: { message: 'not found' } }
     })
-    const tools = mount([{ name: 'prod', url, apiKey: 'k' }])
+    const tools = mount([{ name: 'prod', url, apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
     const out = await tools.get('dokploy_projects')!.execute({}, exec)
     expect(out.text).toContain('Site')
     expect(out.text).toContain('web')
@@ -133,16 +134,16 @@ describe('dokploy tools', () => {
     })
     // Capture the header by wrapping the handler is awkward; assert via a second stub.
     server?.on('request', (req) => { receivedKey = String(req.headers['x-api-key'] ?? '') })
-    const tools = mount([{ name: 'prod', url, apiKey: 'deploy-key' }])
+    const tools = mount([{ name: 'prod', url, apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
     const out = await tools.get('dokploy_deploy')!.execute({ applicationId: 'a1' }, exec)
     expect(out.text).toContain('Started a deployment of application a1 on prod')
     expect(receivedBody).toContain('a1')
-    expect(receivedKey).toBe('deploy-key')
+    expect(receivedKey).toBe('the-real-key')
   })
 
   it('surfaces a Dokploy error status as the tool failing', async () => {
     const url = await stubDokploy(() => ({ status: 401, json: { message: 'Unauthorized' } }))
-    const tools = mount([{ name: 'prod', url, apiKey: 'bad' }])
+    const tools = mount([{ name: 'prod', url, apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
     await expect(tools.get('dokploy_projects')!.execute({}, exec))
       .rejects.toThrow('answered 401')
   })

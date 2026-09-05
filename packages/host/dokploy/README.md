@@ -7,7 +7,9 @@ kind: "package-reference"
 
 ## Summary
 
-Lets an agent see and drive your Dokploy servers. Servers are configured in the `dokploy` user-settings namespace — added and edited in the settings UI the same way models are, one entry per server with a name, a base URL, and an API key marked secret. Four tools reach the model: `dokploy_servers`, `dokploy_projects`, `dokploy_deploy`, `dokploy_status`.
+Lets an agent see and drive your Dokploy servers. Servers are configured in the `dokploy` user-settings namespace — added and edited in the settings UI the same way models are, one entry per server with a name, a base URL, and the name of an environment variable holding that server's API key. The key itself lives in the environment, never in settings, exactly as a model's `apiKeyEnv` does. Four tools reach the model: `dokploy_servers`, `dokploy_projects`, `dokploy_deploy`, `dokploy_status`.
+
+Each server entry is `{ name, url, apiKeyEnv }`. Set the key as an environment variable of that name on the harness (in a container deployment, add it to the compose `environment:` block so it reaches the process), and name that variable in the server entry. A tool call fails with a clear message when the named variable is unset.
 
 The tools resolve a server by its configured name and never take a URL or key from the model, so a prompt cannot point them at an arbitrary host. When several servers are configured and a tool is called without naming one, it refuses and lists the names rather than guessing — deploying to the wrong server is worse than not deploying.
 
