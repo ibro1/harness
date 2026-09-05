@@ -313,3 +313,16 @@ docker exec $(docker ps -qf name=harness) node /app/deploy/sync-models.mjs --dry
 - **The harness executes shell tools as the container user.** The password is
   the boundary. Consider putting Cloudflare Access or a Traefik IP allowlist in
   front of it, or serving it over Tailscale instead of a public domain.
+
+## Two-factor authentication (optional)
+
+Any signed-in account can add a TOTP second factor at `/auth/totp` — scan the
+secret into Google Authenticator, Authy or 1Password, confirm one code, and save
+the one-time backup codes shown once. After that, signing in asks for a code
+after the password. Turn it off from the same page by proving a current code or
+a backup code.
+
+The secret and the hashed backup codes live in `~/.dsh/.totp.json` on the state
+volume, apart from `users.json`, so enrolling never rewrites the password store
+and the factor survives redeploys. There is nothing to configure; the routes are
+part of the gate.

@@ -36,6 +36,7 @@ async function loadComposition(port = 0, gzip = false): Promise<Context> {
     '  config:',
     "    host: '127.0.0.1'",
     `    port: ${String(port)}`,
+    '    authenticate: false',
     ...(gzip
       ? [
         '    compression: gzip',
@@ -101,6 +102,7 @@ describe('real Loader composition', () => {
     expect(HttpServer.Config({ host: '127.0.0.1', port: 0 })).toEqual({
       host: '127.0.0.1',
       port: 0,
+      authenticate: true,
       compression: 'none',
       compressionLevel: 1,
       compressionThresholdBytes: 1024,

@@ -15,6 +15,15 @@
 import { randomBytes, scryptSync, createHash, timingSafeEqual } from 'node:crypto'
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
+import type { TotpEnrollment } from './totp.ts'
+import {
+  backupCodesRemaining,
+  beginEnrollment,
+  confirmEnrollment,
+  disableTotp,
+  totpEnrolled,
+  verifyTotp,
+} from './totp.ts'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
@@ -304,6 +313,67 @@ function sweepSessions(now: number): void {
  * @param user - the account that signed in.
  * @returns the opaque session token.
  */
+/** How long a proven password waits for its second factor before lapsing. */
+const TOTP_PENDING_TTL_MS = 5 * 60 * 1000
+
+/** One password proven, its second factor still owed. */
+interface PendingFactor {
+  user: string
+  expiresAt: number
+}
+
+/** Opaque pending-factor token → the account that proved its password. */
+const pendingFactors = new Map<string, PendingFactor>()
+
+/** Drop lapsed pending-factor tokens. */
+function sweepPending(now: number): void {
+  for (const [token, pending] of pendingFactors) {
+    if (pending.expiresAt <= now) pendingFactors.delete(token)
+  }
+}
+
+/**
+ * Record that an account proved its password and now owes a second factor.
+ * @param user - the account name.
+ * @returns an opaque token naming the pending state, carried in a cookie.
+ */
+function beginPendingFactor(user: string): string {
+  const now = Date.now()
+  sweepPending(now)
+  const token = randomBytes(32).toString('hex')
+  pendingFactors.set(token, { user, expiresAt: now + TOTP_PENDING_TTL_MS })
+  return token
+}
+
+/**
+ * Resolve a pending-factor token to its account, if still live.
+ * @param token - the token from the pending-factor cookie.
+ * @returns the account name, or undefined when unknown or lapsed.
+ */
+function pendingFactorUser(token: string | undefined): string | undefined {
+  if (token === undefined) return undefined
+  sweepPending(Date.now())
+  return pendingFactors.get(token)?.user
+}
+
+/** Read the pending-factor cookie. */
+function pendingFactorCookie(req: IncomingMessage): string | undefined {
+  return parseCookies(req.headers['cookie'])['dsh_totp_pending']
+}
+
+/** Cookie carrying (or clearing, at maxAge 0) the pending-factor token. */
+function pendingCookieValue(req: IncomingMessage, token: string, maxAgeSeconds: number): string {
+  const attributes = [
+    `dsh_totp_pending=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${String(maxAgeSeconds)}`,
+  ]
+  if (useSecureCookie(req)) attributes.push('Secure')
+  return attributes.join('; ')
+}
+
 export function createSessionToken(user: string): string {
   loadSessions()
   const now = Date.now()
@@ -922,6 +992,19 @@ export function handleAuthRoutes(
         }
 
         clearFailures(req)
+        if (totpEnrolled(matched.name)) {
+          // Password proven, but this account owes a second factor: hold a
+          // short-lived pending state and ask for the code, minting no session
+          // yet.
+          const pending = beginPendingFactor(matched.name)
+          res.writeHead(302, {
+            'Set-Cookie': pendingCookieValue(req, pending, Math.ceil(TOTP_PENDING_TTL_MS / 1000)),
+            'Location': '/auth/totp-verify',
+            'Cache-Control': 'no-store',
+          })
+          res.end()
+          return
+        }
         const token = createSessionToken(matched.name)
         res.writeHead(302, {
           'Set-Cookie': sessionCookieValue(req, token, Math.floor(getAuthConfig().sessionTtlMs / 1000)),
@@ -986,6 +1069,108 @@ export function handleAuthRoutes(
     return true
   }
 
+  // The second-factor code-entry step, reached only with a live pending-factor
+  // cookie set when a password proved but its TOTP was still owed.
+  if (rawPath === '/auth/totp-verify') {
+    const pendingToken = pendingFactorCookie(req)
+    const pendingUser = pendingFactorUser(pendingToken)
+    if (pendingUser === undefined) {
+      // No pending factor: nothing to verify, so start over at the password.
+      res.writeHead(302, { 'Location': '/auth/login', 'Cache-Control': 'no-store' })
+      res.end()
+      return true
+    }
+    if (req.method === 'POST') {
+      if (crossOriginRejected(req, res)) return true
+      const retryAfterMs = loginRetryAfterMs(req)
+      if (retryAfterMs > 0) {
+        res.writeHead(429, { ...AUTH_PAGE_HEADERS, 'Retry-After': String(Math.ceil(retryAfterMs / 1000)) })
+        res.end(renderTotpVerifyPage(true))
+        return true
+      }
+      void readBoundedBody(req).then((bodyText) => {
+        if (res.writableEnded) return
+        const code = new URLSearchParams(bodyText ?? '').get('code') ?? ''
+        if (!verifyTotp(pendingUser, code)) {
+          recordFailure(req)
+          res.writeHead(302, { 'Location': '/auth/totp-verify?error=1', 'Cache-Control': 'no-store' })
+          res.end()
+          return
+        }
+        clearFailures(req)
+        pendingFactors.delete(pendingToken as string)
+        const token = createSessionToken(pendingUser)
+        res.writeHead(302, {
+          'Set-Cookie': [
+            sessionCookieValue(req, token, Math.floor(getAuthConfig().sessionTtlMs / 1000)),
+            pendingCookieValue(req, '', 0),
+          ],
+          'Location': resolveSignedInTarget?.() ?? '/',
+          'Cache-Control': 'no-store',
+        })
+        res.end()
+      })
+      return true
+    }
+    const url = new URL(req.url ?? '/', 'http://x')
+    res.writeHead(200, AUTH_PAGE_HEADERS)
+    res.end(renderTotpVerifyPage(url.searchParams.get('error') === '1'))
+    return true
+  }
+
+  // Enrollment and management, behind the gate like every other account page.
+  if (rawPath === '/auth/totp') {
+    const viewer = authenticatedUser(req)
+    if (viewer === undefined) {
+      res.writeHead(302, { 'Location': '/auth/login', 'Cache-Control': 'no-store' })
+      res.end()
+      return true
+    }
+    if (req.method === 'POST') {
+      if (crossOriginRejected(req, res)) return true
+      void readBoundedBody(req).then((bodyText) => {
+        if (res.writableEnded) return
+        const params = new URLSearchParams(bodyText ?? '')
+        const action = params.get('action')
+        if (action === 'enroll') {
+          // Confirm the candidate secret carried through the form by proving a
+          // code from it, then show the backup codes once.
+          const secret = params.get('secret') ?? ''
+          const codes = confirmEnrollment(viewer, secret, params.get('code') ?? '')
+          if (codes === undefined) {
+            const again = beginEnrollment(viewer, totpIssuer(req))
+            res.writeHead(200, AUTH_PAGE_HEADERS)
+            res.end(renderTotpEnrollPage(again, true))
+            return
+          }
+          res.writeHead(200, AUTH_PAGE_HEADERS)
+          res.end(renderTotpBackupPage(codes))
+          return
+        }
+        if (action === 'disable' && totpEnrolled(viewer)) {
+          // Disabling a factor is sensitive: require a current code or backup
+          // code to prove the operator, not just a live session.
+          if (!verifyTotp(viewer, params.get('code') ?? '')) {
+            res.writeHead(200, AUTH_PAGE_HEADERS)
+            res.end(renderTotpManagePage(viewer, true))
+            return
+          }
+          disableTotp(viewer)
+        }
+        res.writeHead(302, { 'Location': '/auth/totp', 'Cache-Control': 'no-store' })
+        res.end()
+      })
+      return true
+    }
+    res.writeHead(200, AUTH_PAGE_HEADERS)
+    if (totpEnrolled(viewer)) {
+      res.end(renderTotpManagePage(viewer, false))
+    } else {
+      res.end(renderTotpEnrollPage(beginEnrollment(viewer, totpIssuer(req)), false))
+    }
+    return true
+  }
+
   if (rawPath === '/auth/logout') {
     const token = sessionCookie(req)
     if (token !== undefined) revokeSessionToken(token)
@@ -1007,6 +1192,133 @@ export function handleAuthRoutes(
  * @param key - the public key line, or undefined when none has been generated.
  * @returns the rendered HTML.
  */
+/** Escape text for safe interpolation into HTML. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** The issuer label an authenticator shows, taken from the request host. */
+function totpIssuer(req: IncomingMessage): string {
+  return requestHost(req) ?? 'DeepSeek Harness'
+}
+
+/** Shared head + card styling for the second-factor pages. */
+function totpPageShell(title: string, inner: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>DeepSeek Harness - ${escapeHtml(title)}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    body { background: #0d1117; color: #c9d1d9; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .card { width: 100%; max-width: 440px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 32px 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    h1 { color: #f0f6fc; font-size: 20px; margin-bottom: 8px; }
+    p { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+    label { display: block; font-size: 13px; color: #8b949e; margin: 16px 0 6px; }
+    input[type=text] { width: 100%; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #c9d1d9; font-size: 18px; letter-spacing: 3px; text-align: center; }
+    button { width: 100%; padding: 11px; margin-top: 20px; background: #238636; border: none; border-radius: 8px; color: #fff; font-size: 15px; cursor: pointer; }
+    button:hover { background: #2ea043; }
+    button.secondary { background: transparent; border: 1px solid #30363d; color: #c9d1d9; }
+    .error { background: rgba(248,81,73,0.15); border: 1px solid #f85149; color: #ff7b72; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+    .secret { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; word-break: break-all; font-size: 13px; color: #f0f6fc; }
+    .codes { list-style: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; columns: 2; }
+    .codes li { padding: 4px 0; font-size: 14px; color: #f0f6fc; }
+    a.link { color: #58a6ff; text-decoration: none; font-size: 13px; }
+    .muted { color: #8b949e; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+${inner}
+  </div>
+</body>
+</html>`
+}
+
+/**
+ * The code-entry page shown after a password succeeds for an enrolled account.
+ * @param error - true to show the wrong-code banner.
+ * @returns the rendered HTML.
+ */
+export function renderTotpVerifyPage(error?: boolean): string {
+  const banner = error === true ? '<div class="error">Incorrect code. Try again.</div>' : ''
+  return totpPageShell('Two-factor', `    <h1>Two-factor authentication</h1>
+    <p>Enter the current code from your authenticator app, or one of your backup codes.</p>
+    ${banner}
+    <form method="POST" action="/auth/totp-verify">
+      <label for="code">Authentication code</label>
+      <input type="text" id="code" name="code" inputmode="text" autocomplete="one-time-code" autofocus>
+      <button type="submit">Verify</button>
+    </form>`)
+}
+
+/**
+ * The enrollment page: a candidate secret carried through the form, confirmed
+ * by a code the operator proves from it.
+ * @param enrollment - the candidate secret and its otpauth URI.
+ * @param error - true to show the wrong-code banner.
+ * @returns the rendered HTML.
+ */
+export function renderTotpEnrollPage(enrollment: TotpEnrollment, error?: boolean): string {
+  const banner = error === true ? '<div class="error">That code did not match the secret. Re-scan and try again.</div>' : ''
+  return totpPageShell('Enable two-factor', `    <h1>Enable two-factor authentication</h1>
+    <p>Scan this secret into an authenticator app (Google Authenticator, Authy, 1Password), then enter the code it shows to confirm.</p>
+    ${banner}
+    <label>Secret</label>
+    <div class="secret">${escapeHtml(enrollment.secret)}</div>
+    <p class="muted" style="margin-top:8px">Or open this link on the device with your authenticator: <a class="link" href="${escapeHtml(enrollment.uri)}">otpauth://…</a></p>
+    <form method="POST" action="/auth/totp">
+      <input type="hidden" name="action" value="enroll">
+      <input type="hidden" name="secret" value="${escapeHtml(enrollment.secret)}">
+      <label for="code">Code from your app</label>
+      <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus>
+      <button type="submit">Confirm and enable</button>
+    </form>
+    <p style="margin-top:16px"><a class="link" href="/">Cancel</a></p>`)
+}
+
+/**
+ * Show the one-time backup codes once, immediately after enrollment.
+ * @param codes - the plaintext backup codes, shown here and never again.
+ * @returns the rendered HTML.
+ */
+export function renderTotpBackupPage(codes: readonly string[]): string {
+  const items = codes.map(code => `<li>${escapeHtml(code)}</li>`).join('')
+  return totpPageShell('Backup codes', `    <h1>Two-factor is on. Save your backup codes.</h1>
+    <p>Each code works once, if you lose your authenticator. They are shown only now — store them somewhere safe.</p>
+    <ul class="codes">${items}</ul>
+    <a href="/auth/totp"><button class="secondary">I have saved them</button></a>`)
+}
+
+/**
+ * The management page for an account that already has a second factor.
+ * @param viewer - the signed-in account.
+ * @param error - true to show the wrong-code banner from a failed disable.
+ * @returns the rendered HTML.
+ */
+export function renderTotpManagePage(viewer: string, error?: boolean): string {
+  const banner = error === true ? '<div class="error">Incorrect code; two-factor is still enabled.</div>' : ''
+  const remaining = backupCodesRemaining(viewer)
+  return totpPageShell('Two-factor', `    <h1>Two-factor authentication is enabled</h1>
+    <p>Signed in as <strong>${escapeHtml(viewer)}</strong>. ${remaining.toString()} backup code${remaining === 1 ? '' : 's'} remaining.</p>
+    ${banner}
+    <p class="muted">To turn it off, prove a current code or a backup code.</p>
+    <form method="POST" action="/auth/totp">
+      <input type="hidden" name="action" value="disable">
+      <label for="code">Authentication code</label>
+      <input type="text" id="code" name="code" inputmode="text" autocomplete="one-time-code">
+      <button type="submit" class="secondary">Disable two-factor</button>
+    </form>
+    <p style="margin-top:16px"><a class="link" href="/">Back</a></p>`)
+}
+
 export function renderGitKeyPage(key: string | undefined): string {
   const body = key === undefined
     ? '<p class="empty">No SSH identity has been generated yet. It is created on the next container start.</p>'
@@ -1118,6 +1430,7 @@ export function renderSessionsPage(
   <div class="card">
     <h1>Sessions</h1>
     <p class="sub">Signed in as <strong>${viewer.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</strong>. Sessions survive a redeploy; revoking one ends it everywhere immediately.</p>
+    <p class="sub"><a href="/auth/totp" style="color:#58a6ff;text-decoration:none">Two-factor authentication →</a></p>
     <table>
       <thead><tr><th>Signed in</th><th>Expires</th><th class="right">&nbsp;</th></tr></thead>
       <tbody>${rows}</tbody>
