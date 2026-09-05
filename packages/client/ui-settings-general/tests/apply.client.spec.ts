@@ -113,8 +113,10 @@ describe('ui-settings-general apply', () => {
     await Promise.resolve()
     for (const [name, component] of SEATS) {
       expect(after.slots.entries(name)[0]!.component).toBe(component)
-      // The self-inflicted ledger notifications hit the duplicate guard.
-      expect(after.slots.entries(name)).toHaveLength(1)
+      // settings.section is a list this package seats twice (General + Account);
+      // every other seat is single. The self-inflicted ledger notifications hit
+      // the duplicate guard.
+      expect(after.slots.entries(name)).toHaveLength(name === 'settings.section' ? 2 : 1)
     }
     await vi.waitFor(() => {
       expect(after.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
@@ -150,7 +152,7 @@ describe('ui-settings-general apply', () => {
     // subscription), not re-registration.
     SEATS.forEach(([name], i) => {
       expect(b.slots.getVersion(name)).toBe(zhVersions[i]!)
-      expect(b.slots.entries(name)).toHaveLength(1)
+      expect(b.slots.entries(name)).toHaveLength(name === 'settings.section' ? 2 : 1)
     })
     expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe('General')
     b.locale.setLocale('zh')

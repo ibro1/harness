@@ -197,7 +197,7 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section',
     id: 'account',
     order: 40,
-    label: 'Account',
+    label: 'account.nav',
     locale: NS,
   }, AccountSection))
 }
