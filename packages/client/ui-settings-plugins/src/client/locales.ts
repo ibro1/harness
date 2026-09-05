@@ -17,7 +17,7 @@ export type PluginsSettingsLocaleKey =
   | 'subagentModelSelectionPartial' | 'subagentModelSelectionUnavailable'
   | 'subagentModelSelectionUnavailableGroup' | 'subagentModelSelectionEmpty'
   | 'subagentModelSelectionRequired' | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
-  | 'dokployTitle' | 'dokployDescription' | 'dokployServers' | 'dokployServersHint' | 'dokployInvalid'
+  | 'dokployTitle' | 'dokployDescription' | 'dokployServers' | 'dokployServersHint' | 'dokployInvalid' | 'dokployServersPlaceholder'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -78,6 +78,7 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   dokployServers: 'Servers',
   dokployServersHint: 'A JSON array of servers, each with a name, a url, and either apiKeyEnv (the name of an environment variable holding the key — kept out of settings) or apiKey (the key itself, stored here).',
   dokployInvalid: 'Not a valid servers list: a JSON array of objects with string name, url and apiKeyEnv.',
+  dokployServersPlaceholder: '[\n  { "name": "main", "url": "https://server.example.com", "apiKey": "your-dokploy-key" }\n]',
 }
 
 /** Simplified Chinese copy. */
@@ -139,4 +140,5 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   dokployServers: '服务器',
   dokployServersHint: '服务器的 JSON 数组，每项包含 name、url，以及 apiKeyEnv（保存密钥的环境变量名，密钥不写入设置）或 apiKey（直接填写密钥，将保存在此处）。',
   dokployInvalid: '不是有效的服务器列表：应为对象的 JSON 数组，每项的 name、url、apiKeyEnv 均为字符串。',
+  dokployServersPlaceholder: '[\n  { "name": "main", "url": "https://server.example.com", "apiKey": "your-dokploy-key" }\n]',
 }

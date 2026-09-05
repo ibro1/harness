@@ -1,11 +1,11 @@
 /** Sidebar footer action ending the browser session held by the password gate. */
 
 import type { ReactNode } from 'react'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './SignOutAction.module.css'
 
 /** Sidebar footer owner share: wide content versus the 56px rail. */
-export type SignOutActionProps = PropsRuntime<'sidebar.footer.action'>
+export type SignOutActionProps = PropsRuntime<'sidebar.footer.action'> & PropsLocale<'settings'>
 
 /**
  * Render the sign-out control beside Settings, labelled only when the sidebar
@@ -15,13 +15,13 @@ export type SignOutActionProps = PropsRuntime<'sidebar.footer.action'>
  * @param props - sidebar footer owner props.
  * @returns the sign-out link.
  */
-export function SignOutAction({ wide }: SignOutActionProps): ReactNode {
+export function SignOutAction({ wide, t }: SignOutActionProps): ReactNode {
   return (
     <a
       className={wide ? css.action : `${css.action} ${css.rail}`}
       href="/auth/logout"
-      title="Sign out"
-      aria-label="Sign out"
+      title={t('signOut')}
+      aria-label={t('signOut')}
     >
       <svg
         viewBox="0 0 24 24"
@@ -38,7 +38,7 @@ export function SignOutAction({ wide }: SignOutActionProps): ReactNode {
         <polyline points="16 17 21 12 16 7" />
         <line x1="21" y1="12" x2="9" y2="12" />
       </svg>
-      {wide ? <span className={css.label}>Sign out</span> : null}
+      {wide ? <span className={css.label}>{t('signOut')}</span> : null}
     </a>
   )
 }

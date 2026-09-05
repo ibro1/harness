@@ -177,6 +177,10 @@
     - id: ui-theme
       name: '@deepseek-ai/dsh-client-ui-theme'
 
+    # Fork-local responsive layer: a mobile stylesheet over the desktop layout.
+    - id: ui-mobile
+      name: '@deepseek-ai/dsh-client-ui-mobile'
+
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
 

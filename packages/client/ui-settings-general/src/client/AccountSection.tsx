@@ -1,25 +1,17 @@
 /** Settings section linking to the account pages the password gate serves. */
 
 import type { ReactNode } from 'react'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './AccountSection.module.css'
 
 /** Settings-section owner share. */
-export type AccountSectionProps = PropsRuntime<'settings.section'>
+export type AccountSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings'>
 
 /** One row: where it goes and why. */
-const ROWS: readonly { href: string; title: string; detail: string }[] = [
-  {
-    href: '/auth/sessions',
-    title: 'Sessions',
-    detail: 'Browsers signed in to this account. Revoke one, or sign out every other browser.',
-  },
-  {
-    href: '/auth/git-key',
-    title: 'Git access key',
-    detail: 'The SSH public key agents use to reach your repositories. Add it as a deploy key or an account key.',
-  },
-]
+const ROWS = [
+  { href: '/auth/sessions', title: 'account.sessions.title', detail: 'account.sessions.detail' },
+  { href: '/auth/git-key', title: 'account.gitKey.title', detail: 'account.gitKey.detail' },
+] as const
 
 /**
  * Render the account rows.
@@ -30,16 +22,16 @@ const ROWS: readonly { href: string; title: string; detail: string }[] = [
  * They open in a new tab so the harness keeps its state.
  * @returns the section content.
  */
-export function AccountSection(_props: AccountSectionProps): ReactNode {
+export function AccountSection({ t }: AccountSectionProps): ReactNode {
   return (
     <div className={css.rows}>
       {ROWS.map(row => (
         <a key={row.href} className={css.row} href={row.href} target="_blank" rel="noreferrer">
           <span className={css.text}>
-            <span className={css.title}>{row.title}</span>
-            <span className={css.detail}>{row.detail}</span>
+            <span className={css.title}>{t(row.title)}</span>
+            <span className={css.detail}>{t(row.detail)}</span>
           </span>
-          <span className={css.open}>Open ↗</span>
+          <span className={css.open}>{t('account.open')}</span>
         </a>
       ))}
     </div>
