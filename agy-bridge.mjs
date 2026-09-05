@@ -14,7 +14,7 @@ import { homedir } from 'node:os'
 // Tied to the browser tools deliberately: turn those off and the grant goes
 // with them, rather than outliving the reason it was made.
 const SKIP_PERMISSIONS = (process.env.DSH_BROWSER_BRIDGE_TOKEN ?? '') !== ''
-  && (process.env.DSH_BROWSER_MCP ?? '1') !== '0'
+  && (process.env.DSH_BROWSER_MCP || '1') !== '0'
 
 /** @returns {string[]} the argument list every agy invocation shares. */
 function agyArgs(model) {

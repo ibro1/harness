@@ -47,6 +47,9 @@ services:
       DSH_BROWSER_BRIDGE_TOKEN: ${DSH_BROWSER_BRIDGE_TOKEN:-}
       DSH_BROWSER_BRIDGE_PATH: ${DSH_BROWSER_BRIDGE_PATH:-}
       DSH_GITHUB_WEBHOOK_PUBLIC_PORT: ${DSH_GITHUB_WEBHOOK_PUBLIC_PORT:-}
+      # 0 withdraws the browser tools from the agy CLI, and with them the
+      # --dangerously-skip-permissions grant that admits them.
+      DSH_BROWSER_MCP: ${DSH_BROWSER_MCP:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh
