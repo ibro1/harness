@@ -8,10 +8,23 @@
     "src"
   ],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../../vendor/schemastery" },
-    { "path": "../../settings/settings" },
-    { "path": "../../core/tools" },
-    { "path": "../../core/agent" }
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../webserver"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../core/agent"
+    }
   ]
 }

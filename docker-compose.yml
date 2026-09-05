@@ -52,6 +52,9 @@ services:
       DSH_BROWSER_MCP: ${DSH_BROWSER_MCP:-}
       # 0 leaves the Dokploy control plugin out entirely.
       DSH_DOKPLOY: ${DSH_DOKPLOY:-}
+      # Set to expose the Dokploy tools to the agy/opencode CLIs over MCP.
+      DSH_DOKPLOY_TOKEN: ${DSH_DOKPLOY_TOKEN:-}
+      DSH_DOKPLOY_PATH: ${DSH_DOKPLOY_PATH:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh

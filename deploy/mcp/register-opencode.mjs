@@ -17,11 +17,16 @@ import { homedir } from 'node:os'
 const CONFIG = process.env.OPENCODE_CONFIG_PATH
   ?? join(homedir(), '.config', 'opencode', 'opencode.jsonc')
 const SERVER = process.argv[2] ?? '/app/deploy/mcp/browser-mcp.mjs'
-const NAME = 'dsh-browser'
+const NAME = process.argv[3] ?? 'dsh-browser'
+// Which env vars carry this server's token and command URL, so one script
+// registers any harness MCP server, not only the browser one.
+const TOKEN_ENV = process.argv[4] ?? 'DSH_BROWSER_BRIDGE_TOKEN'
+const URL_ENV = process.argv[5] ?? 'DSH_BROWSER_COMMAND_URL'
+const DEFAULT_URL = process.argv[6] ?? 'http://127.0.0.1:3081/browser-bridge/command'
 
-const token = process.env.DSH_BROWSER_BRIDGE_TOKEN ?? ''
+const token = process.env[TOKEN_ENV] ?? ''
 if (token === '') {
-  console.error('DSH_BROWSER_BRIDGE_TOKEN is unset; not registering')
+  console.error(`${TOKEN_ENV} is unset; not registering`)
   process.exit(1)
 }
 
@@ -46,9 +51,8 @@ mcp[NAME] = {
   type: 'local',
   command: ['node', SERVER],
   environment: {
-    DSH_BROWSER_BRIDGE_TOKEN: token,
-    DSH_BROWSER_COMMAND_URL: process.env.DSH_BROWSER_COMMAND_URL
-      ?? 'http://127.0.0.1:3081/browser-bridge/command',
+    [TOKEN_ENV]: token,
+    [URL_ENV]: process.env[URL_ENV] ?? DEFAULT_URL,
   },
   enabled: true,
 }

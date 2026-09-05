@@ -72,7 +72,7 @@ function mount(servers: { name: string; url: string; apiKeyEnv: string }[]): Map
     on() {},
     effect(fn: () => unknown) { fn() },
   }
-  apply(ctx as unknown as Context, { timeoutMs: 5000 })
+  apply(ctx as unknown as Context, { timeoutMs: 5000, path: '/dokploy', token: '' })
   return tools
 }
 
@@ -146,5 +146,16 @@ describe('dokploy tools', () => {
     const tools = mount([{ name: 'prod', url, apiKeyEnv: 'DOKPLOY_KEY_TEST' }])
     await expect(tools.get('dokploy_projects')!.execute({}, exec))
       .rejects.toThrow('answered 401')
+  })
+})
+
+
+describe('dokploy MCP surface', () => {
+  it('builds a catalogue of the four tools with their schemas', async () => {
+    const { buildDokployTools } = await import('../src/index.ts')
+    const tools = buildDokployTools(() => [{ name: 'main', url: 'https://x', apiKeyEnv: 'K' }], 5000)
+    expect(tools.map(t => t.name)).toEqual(['dokploy_servers', 'dokploy_projects', 'dokploy_deploy', 'dokploy_status'])
+    const deploy = tools.find(t => t.name === 'dokploy_deploy')
+    expect((deploy?.parameters as { properties: object }).properties).toHaveProperty('applicationId')
   })
 })

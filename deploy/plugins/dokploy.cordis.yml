@@ -1,12 +1,13 @@
 # Dokploy control, layered over the shipped Web composition.
 #
-# Referenced by path because this package is fork-local and unpublished, the
-# same reason the browser bridge is: a profile's pnpm install cannot fetch it
-# and a bare name resolves to nothing.
-#
-# The servers themselves are not configured here — they live in the `dokploy`
-# user-settings namespace, added and edited in the settings UI like models, so
-# an API key never sits in a compose file.
+# Referenced by path because this package is fork-local and unpublished. The
+# servers live in the `dokploy` user-settings namespace (Settings -> dokploy),
+# never here. The command-route token, when set, exposes the tools to the agy
+# and opencode CLIs over MCP; empty leaves that route unmounted (direct-provider
+# agents still get the tools natively).
 - insert:
     - id: dokploy
       name: '../../packages/host/dokploy/lib/index.js'
+      config:
+        path: !!js process.env.DSH_DOKPLOY_PATH || '/dokploy'
+        token: !!js process.env.DSH_DOKPLOY_TOKEN || ''

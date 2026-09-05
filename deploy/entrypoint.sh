@@ -192,6 +192,27 @@ fi
 if [[ "${DSH_DOKPLOY:-1}" != "0" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/dokploy.cordis.yml")
   echo "[entrypoint] Dokploy control enabled; configure servers under Settings -> dokploy"
+
+  # With a command-route token set, expose the Dokploy tools to the agy and
+  # opencode CLIs over MCP, the same way the browser tools are — so a model
+  # reached through those CLIs can use them, not only a direct-provider agent.
+  if [[ -n "${DSH_DOKPLOY_TOKEN:-}" ]]; then
+    dok_url="http://127.0.0.1:$INTERNAL_PORT${DSH_DOKPLOY_PATH:-/dokploy}/command"
+    if command -v agy >/dev/null 2>&1; then
+      agy mcp add --env "DSH_DOKPLOY_TOKEN=$DSH_DOKPLOY_TOKEN" --env "DSH_DOKPLOY_COMMAND_URL=$dok_url" \
+        dsh-dokploy node "$APP_DIR/deploy/mcp/dokploy-mcp.mjs" >/dev/null 2>&1 \
+        && echo "[entrypoint] Registered the Dokploy tools with agy as the MCP server 'dsh-dokploy'" \
+        || echo "[entrypoint] WARNING: could not register the Dokploy MCP server with agy." >&2
+    fi
+    if command -v opencode >/dev/null 2>&1; then
+      DSH_DOKPLOY_COMMAND_URL="$dok_url" \
+        node "$APP_DIR/deploy/mcp/register-opencode.mjs" "$APP_DIR/deploy/mcp/dokploy-mcp.mjs" dsh-dokploy DSH_DOKPLOY_TOKEN DSH_DOKPLOY_COMMAND_URL >/dev/null 2>&1 \
+        && echo "[entrypoint] Registered the Dokploy tools with opencode as the MCP server 'dsh-dokploy'" \
+        || echo "[entrypoint] WARNING: could not register the Dokploy MCP server with opencode." >&2
+    fi
+  else
+    echo "[entrypoint] NOTE: set DSH_DOKPLOY_TOKEN to expose Dokploy tools to the agy/opencode CLIs over MCP."
+  fi
 fi
 
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
