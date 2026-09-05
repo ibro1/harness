@@ -652,7 +652,7 @@ function sessionCookieValue(req: IncomingMessage, token: string, maxAgeSeconds: 
 }
 
 /** The login page. `error` selects the failure banner; `locked` the rate-limit banner. */
-export function renderLoginPage(error?: boolean, locked?: boolean): string {
+export function renderLoginPage(error?: boolean, locked?: boolean, username?: string): string {
   const banner = locked === true
     ? '<div class="error-banner">⏳ Too many attempts. Try again later.</div>'
     : error === true
@@ -837,7 +837,7 @@ export function renderLoginPage(error?: boolean, locked?: boolean): string {
     <form method="POST" action="/auth/login">
       <div class="form-group">
         <label for="username">Username</label>
-        <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="admin">
+        <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="admin" value="${escapeHtml(username ?? '')}">
       </div>
       <div class="form-group">
         <label for="password">Password</label>
@@ -953,8 +953,10 @@ export function handleAuthRoutes(
   if (rawPath === '/auth/login') {
     if (req.method === 'GET') {
       const url = new URL(req.url ?? '/', 'http://x')
+      const accounts = getAuthConfig().users
+      const prefill = accounts.length === 1 ? accounts[0]?.name : undefined
       res.writeHead(200, AUTH_PAGE_HEADERS)
-      res.end(renderLoginPage(url.searchParams.get('error') === '1', url.searchParams.get('locked') === '1'))
+      res.end(renderLoginPage(url.searchParams.get('error') === '1', url.searchParams.get('locked') === '1', prefill))
       return true
     }
 
