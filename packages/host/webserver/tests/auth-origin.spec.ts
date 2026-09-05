@@ -46,10 +46,12 @@ describe('auth Origin guard', () => {
   beforeEach(() => {
     process.env.DSH_AUTH_PASSWORD = 'a-password-for-tests'
     process.env.DSH_TRUST_PROXY = '1'
+    process.env.DSH_PUBLIC_HOST = 'harness.example'
   })
   afterEach(() => {
     delete process.env.DSH_AUTH_PASSWORD
     delete process.env.DSH_TRUST_PROXY
+    delete process.env.DSH_PUBLIC_HOST
   })
 
   it('refuses a login POST from a foreign Origin', () => {
@@ -78,6 +80,22 @@ describe('auth Origin guard', () => {
 
   it('allows a POST with no Origin, since browsers always send one cross-site', () => {
     const req = fakeRequest({ host: 'harness.example' })
+    const res = fakeResponse()
+    handleAuthRoutes(req, res as unknown as ServerResponse, '/auth/login', () => '/')
+    expect(res.status).not.toBe(403)
+  })
+
+  it('allows an opaque "null" Origin, as a no-referrer form POST sends', () => {
+    // The login page sets Referrer-Policy: no-referrer, so a same-site form POST
+    // serialises its Origin as the string "null". Rejecting it locked the gate.
+    const req = fakeRequest({ host: 'harness.example', origin: 'null' })
+    const res = fakeResponse()
+    handleAuthRoutes(req, res as unknown as ServerResponse, '/auth/login', () => '/')
+    expect(res.status).not.toBe(403)
+  })
+
+  it('matches the configured public host even without a forwarded header', () => {
+    const req = fakeRequest({ host: '127.0.0.1:3081', origin: 'https://harness.example' })
     const res = fakeResponse()
     handleAuthRoutes(req, res as unknown as ServerResponse, '/auth/login', () => '/')
     expect(res.status).not.toBe(403)

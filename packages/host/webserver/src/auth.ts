@@ -468,13 +468,33 @@ export function isValidSessionToken(token: string): boolean {
  * @param req - the incoming request.
  * @returns the lower-cased host, or undefined when none is present.
  */
-function requestHost(req: IncomingMessage): string | undefined {
+function stripPort(host: string): string {
+  return host.toLowerCase().replace(/:\d+$/u, '')
+}
+
+/**
+ * The hosts a same-origin request may name, port-stripped: the deployment's
+ * configured public host and any extra trusted hosts, plus the forwarded and
+ * direct Host headers. The configured hosts are the reliable anchor; the
+ * headers cover a deployment that sets neither.
+ * @param req - the incoming request.
+ * @returns the set of acceptable origin hostnames.
+ */
+function acceptableHosts(req: IncomingMessage): Set<string> {
+  const hosts = new Set<string>()
+  const publicHost = process.env.DSH_PUBLIC_HOST?.trim()
+  if (publicHost !== undefined && publicHost !== '') hosts.add(stripPort(publicHost))
+  for (const extra of (process.env.DSH_EXTRA_TRUSTED_HOSTS ?? '').split(/\s+/u)) {
+    if (extra !== '') hosts.add(stripPort(extra))
+  }
   if (getAuthConfig().trustProxy) {
     const forwarded = req.headers['x-forwarded-host']
     const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim()
-    if (first !== undefined && first !== '') return first.toLowerCase()
+    if (first !== undefined && first !== '') hosts.add(stripPort(first))
   }
-  return req.headers.host?.trim().toLowerCase()
+  const host = req.headers.host?.trim()
+  if (host !== undefined && host !== '') hosts.add(stripPort(host))
+  return hosts
 }
 
 /**
@@ -490,16 +510,18 @@ function requestHost(req: IncomingMessage): string | undefined {
  */
 function crossOriginRejected(req: IncomingMessage, res: ServerResponse): boolean {
   const origin = req.headers.origin
-  if (origin === undefined || origin === '') return false
-  const host = requestHost(req)
-  let sameOrigin = false
+  // Absent or opaque: a same-site form POST from a no-referrer page serialises
+  // its Origin as `null`, and a request with no Origin is a non-browser caller.
+  // Neither names a cross-site attacker, and SameSite=Lax still gates the real
+  // cross-site case, so both are allowed.
+  if (origin === undefined || origin === '' || origin === 'null') return false
+  let originHost: string | undefined
   try {
-    sameOrigin = host !== undefined && new URL(origin).host.toLowerCase() === host
+    originHost = stripPort(new URL(origin).host)
   } catch {
-    // An Origin that will not parse is attacker-controlled input, not a same
-    // site request; fall through to the refusal.
+    originHost = undefined // Unparseable Origin never matches an acceptable host.
   }
-  if (sameOrigin) return false
+  if (originHost !== undefined && acceptableHosts(req).has(originHost)) return false
   res.writeHead(403, { ...AUTH_PAGE_HEADERS, 'Connection': 'close' })
   res.end(renderLoginPage(true))
   res.on('finish', () => { req.socket.end() })
@@ -1205,7 +1227,10 @@ function escapeHtml(value: string): string {
 
 /** The issuer label an authenticator shows, taken from the request host. */
 function totpIssuer(req: IncomingMessage): string {
-  return requestHost(req) ?? 'DeepSeek Harness'
+  const publicHost = process.env.DSH_PUBLIC_HOST?.trim()
+  if (publicHost !== undefined && publicHost !== '') return stripPort(publicHost)
+  const host = req.headers.host?.trim()
+  return host !== undefined && host !== '' ? stripPort(host) : 'DeepSeek Harness'
 }
 
 /** Shared head + card styling for the second-factor pages. */
