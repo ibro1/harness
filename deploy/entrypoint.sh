@@ -172,6 +172,18 @@ if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
       echo "[entrypoint] WARNING: could not register the browser MCP server with agy." >&2
     fi
   fi
+
+  # opencode drops the harness's tools for the same reason agy does, and takes
+  # its MCP servers from its config file rather than a subcommand.
+  if [[ "${DSH_BROWSER_MCP:-1}" != "0" ]] && command -v opencode >/dev/null 2>&1; then
+    if DSH_BROWSER_COMMAND_URL="http://127.0.0.1:$INTERNAL_PORT${DSH_BROWSER_BRIDGE_PATH:-/browser-bridge}/command" \
+      node "$APP_DIR/deploy/mcp/register-opencode.mjs" "$APP_DIR/deploy/mcp/browser-mcp.mjs" >/dev/null 2>&1
+    then
+      echo "[entrypoint] Registered the browser tools with opencode as the MCP server 'dsh-browser'"
+    else
+      echo "[entrypoint] WARNING: could not register the browser MCP server with opencode." >&2
+    fi
+  fi
 fi
 
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
