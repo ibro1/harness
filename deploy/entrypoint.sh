@@ -215,6 +215,17 @@ if [[ "${DSH_DOKPLOY:-1}" != "0" ]]; then
   fi
 fi
 
+# DeerFlow remote browser (optional): attach the external DeerFlow headless
+# browser as an MCP server so its tools register as mcp__deerflow__*. Opt-in on
+# its token, which the operator supplies; without it the patch is left out and
+# no tools appear (rather than registering a server that only answers 401).
+if [[ -n "${DEERFLOW_BROWSER_MCP_TOKEN:-}" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/deerflow-browser.cordis.yml")
+  echo "[entrypoint] DeerFlow browser MCP enabled at ${DEERFLOW_BROWSER_MCP_URL:-https://deer.linkfa.de/mcp/browser} (tools: mcp__deerflow__*)"
+else
+  echo "[entrypoint] NOTE: set DEERFLOW_BROWSER_MCP_TOKEN to attach the DeerFlow remote browser tools."
+fi
+
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
   trusted_args+=(--trusted-host "$host")

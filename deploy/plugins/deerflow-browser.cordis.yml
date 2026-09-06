@@ -1,0 +1,50 @@
+# DeerFlow remote browser, layered over the shipped Web composition.
+#
+# Attaches the operator's headless DeerFlow browser — an external MCP server
+# reachable over Streamable HTTP — through the harness's own MCP client
+# (@deepseek-ai/dsh-mcp-client). Its tools then register on ctx.tools and reach
+# the agent like native tools, under the names mcp__deerflow__browser_navigate,
+# mcp__deerflow__browser_get_markdown, and so on (23 tools total, discovered at
+# startup — never hardcoded).
+#
+# The endpoint is POST-only, stateless (issues no Mcp-Session-Id), and offers no
+# SSE channel (GET returns 405). The MCP SDK the client uses handles all three:
+# it sends a session id only if the server issued one, and treats a 405 on the
+# notification stream as "no SSE offered" per spec. No session management is
+# needed or attempted here.
+#
+# Wedge safety: when DeerFlow's CDP link dies (observed after ~8 days' uptime)
+# every tools/call blocks forever while initialize/tools/list still answer, so
+# no connection-loss is detected and reconnect never fires. The per-call
+# timeout below is the guard — each call errors at 45s instead of hanging.
+# Recovery is operator-side: restart BOTH the DeerFlow browser and its MCP
+# server; restarting the MCP server alone does not clear it.
+#
+# The token is supplied by the operator via DEERFLOW_BROWSER_MCP_TOKEN and is
+# never committed; entrypoint.sh only applies this patch when it is set.
+#
+# NOTE ON LOGGED-IN SESSIONS: DeerFlow runs a dedicated browser profile. Whether
+# a YouTube (or any) login survives a container restart is a property of
+# DeerFlow's own deployment — its Chrome profile directory must sit on a
+# persistent volume. This plugin drives the browser; it cannot make DeerFlow
+# persist its profile.
+- insert:
+    # Referenced by path, not package name: mirrors the other fork-local
+    # deployment patches so the Loader resolves it from the built image
+    # regardless of what the web profile's install happened to fetch.
+    - id: deerflow-browser
+      name: '../../packages/mcp/mcp-client/lib/index.js'
+      config:
+        serverName: deerflow
+        transport: streamable-http
+        # `||`, not `??`: Compose sets every declared variable, so an unset
+        # override arrives as '' rather than undefined, which `??` would keep.
+        url: !!js process.env.DEERFLOW_BROWSER_MCP_URL || 'https://deer.linkfa.de/mcp/browser'
+        headers:
+          Authorization: !!js '`Bearer ${process.env.DEERFLOW_BROWSER_MCP_TOKEN || ""}`'
+        # Aggressive per-call timeout (the contract's 30–60s window): the wedge
+        # guard above. Surfaces as a clear tool error, never a hang.
+        toolCallTimeoutMs: 45000
+        # A browser that is down or wedged at boot must not fail harness
+        # startup; its tools reconnect (or the operator recovers it) after.
+        failOnStartupError: false

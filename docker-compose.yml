@@ -55,6 +55,10 @@ services:
       # Set to expose the Dokploy tools to the agy/opencode CLIs over MCP.
       DSH_DOKPLOY_TOKEN: ${DSH_DOKPLOY_TOKEN:-}
       DSH_DOKPLOY_PATH: ${DSH_DOKPLOY_PATH:-}
+      # DeerFlow remote browser MCP. Set the token to attach its tools
+      # (mcp__deerflow__*); blank leaves them out. URL override optional.
+      DEERFLOW_BROWSER_MCP_TOKEN: ${DEERFLOW_BROWSER_MCP_TOKEN:-}
+      DEERFLOW_BROWSER_MCP_URL: ${DEERFLOW_BROWSER_MCP_URL:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh
