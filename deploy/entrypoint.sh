@@ -221,7 +221,37 @@ fi
 # no tools appear (rather than registering a server that only answers 401).
 if [[ -n "${DEERFLOW_BROWSER_MCP_TOKEN:-}" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/deerflow-browser.cordis.yml")
-  echo "[entrypoint] DeerFlow browser MCP enabled at ${DEERFLOW_BROWSER_MCP_URL:-https://deer.linkfa.de/mcp/browser} (tools: mcp__deerflow__*)"
+  deer_url="${DEERFLOW_BROWSER_MCP_URL:-https://deer.linkfa.de/mcp/browser}"
+  echo "[entrypoint] DeerFlow browser MCP enabled at $deer_url (native tools: mcp__deerflow__*)"
+
+  # The direct-provider agents get those native tools; the agy and opencode CLIs
+  # run their own loop and drop them, so — like the browser bridge — the CLIs
+  # get DeerFlow only by registering it with them directly. It already speaks
+  # MCP over HTTP, so no stdio bridge is needed: agy and opencode connect to the
+  # endpoint themselves. Set DEERFLOW_BROWSER_MCP=0 to withhold it from the CLIs
+  # (and, for agy, the --dangerously-skip-permissions grant that admits it).
+  if [[ "${DEERFLOW_BROWSER_MCP:-1}" != "0" ]]; then
+    if command -v agy >/dev/null 2>&1; then
+      # Flags before the name; http is auto-detected from the URL. Idempotent.
+      if agy mcp add --header "Authorization: Bearer $DEERFLOW_BROWSER_MCP_TOKEN" \
+        deerflow "$deer_url" >/dev/null 2>&1
+      then
+        echo "[entrypoint] Registered the DeerFlow browser with agy as the MCP server 'deerflow'"
+        echo "[entrypoint] NOTE: agy runs with --dangerously-skip-permissions while these tools are enabled."
+      else
+        echo "[entrypoint] WARNING: could not register the DeerFlow MCP server with agy." >&2
+      fi
+    fi
+    if command -v opencode >/dev/null 2>&1; then
+      if node "$APP_DIR/deploy/mcp/register-opencode-remote.mjs" \
+        deerflow DEERFLOW_BROWSER_MCP_URL DEERFLOW_BROWSER_MCP_TOKEN "$deer_url" >/dev/null 2>&1
+      then
+        echo "[entrypoint] Registered the DeerFlow browser with opencode as the MCP server 'deerflow'"
+      else
+        echo "[entrypoint] WARNING: could not register the DeerFlow MCP server with opencode." >&2
+      fi
+    fi
+  fi
 else
   echo "[entrypoint] NOTE: set DEERFLOW_BROWSER_MCP_TOKEN to attach the DeerFlow remote browser tools."
 fi

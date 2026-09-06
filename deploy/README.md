@@ -291,6 +291,19 @@ Override the endpoint with `DEERFLOW_BROWSER_MCP_URL` (default
 `https://deer.linkfa.de/mcp/browser`). The config lives in
 `deploy/plugins/deerflow-browser.cordis.yml`.
 
+**Two provider paths, because the CLIs drop native tools.** A direct-provider
+model sees the tools as `mcp__deerflow__*` through the native registration
+above. The agy and opencode CLIs run their own agent loop and ignore the
+harness's tools, so — exactly like the browser bridge — the entrypoint also
+registers DeerFlow *with them*: agy via `agy mcp add --header … deerflow <url>`,
+opencode via a `type: remote` entry in `opencode.jsonc`
+(`deploy/mcp/register-opencode-remote.mjs`). Reached that way the tools are
+named `deerflow_browser_navigate`, etc. Set `DEERFLOW_BROWSER_MCP=0` to withhold
+them from the CLIs; direct providers keep the native tools regardless. As with
+the browser bridge, agy is run with `--dangerously-skip-permissions` while these
+tools are enabled (headless agy otherwise auto-denies MCP calls) — which also
+admits agy's own file and shell tools inside the container.
+
 **It cannot hang the agent.** DeerFlow's CDP link can wedge (observed after
 ~8 days' uptime): `initialize` and `tools/list` keep answering while every tool
 call blocks forever. Each call carries a 45s timeout, so a wedged browser

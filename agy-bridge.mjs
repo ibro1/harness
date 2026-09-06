@@ -11,10 +11,14 @@ import { homedir } from 'node:os'
 // switch that admits them, and it admits agy's own file and shell tools with
 // them — inside this container, which holds the deploy key and the checkout.
 //
-// Tied to the browser tools deliberately: turn those off and the grant goes
-// with them, rather than outliving the reason it was made.
-const SKIP_PERMISSIONS = (process.env.DSH_BROWSER_BRIDGE_TOKEN ?? '') !== ''
-  && (process.env.DSH_BROWSER_MCP || '1') !== '0'
+// Tied to the tools that need it deliberately: turn those off and the grant
+// goes with them, rather than outliving the reason it was made. The DeerFlow
+// remote browser is a second such source — its tools reach agy only over MCP,
+// so they are auto-denied without this switch, exactly like the browser
+// bridge's.
+const SKIP_PERMISSIONS =
+  ((process.env.DSH_BROWSER_BRIDGE_TOKEN ?? '') !== '' && (process.env.DSH_BROWSER_MCP || '1') !== '0')
+  || ((process.env.DEERFLOW_BROWSER_MCP_TOKEN ?? '') !== '' && (process.env.DEERFLOW_BROWSER_MCP || '1') !== '0')
 
 /** @returns {string[]} the argument list every agy invocation shares. */
 function agyArgs(model) {

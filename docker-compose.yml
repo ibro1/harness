@@ -59,6 +59,10 @@ services:
       # (mcp__deerflow__*); blank leaves them out. URL override optional.
       DEERFLOW_BROWSER_MCP_TOKEN: ${DEERFLOW_BROWSER_MCP_TOKEN:-}
       DEERFLOW_BROWSER_MCP_URL: ${DEERFLOW_BROWSER_MCP_URL:-}
+      # 0 withholds the DeerFlow tools from the agy/opencode CLIs (and, for agy,
+      # the --dangerously-skip-permissions grant that admits them). Direct
+      # providers keep the native tools regardless.
+      DEERFLOW_BROWSER_MCP: ${DEERFLOW_BROWSER_MCP:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh
