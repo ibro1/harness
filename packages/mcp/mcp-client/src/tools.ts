@@ -318,46 +318,65 @@ function createExecutor(
     // string/number/null). Fallback to {} lets the MCP server produce a
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
-    const result = await callToolUncached(client, rawName, argsObj, exec, opts)
+    // Time each call and log its outcome (tool name + duration). A transport
+    // error or timeout logs at warn — the signal for a server that answers
+    // initialize/tools/list but blocks every call (a wedged remote browser is
+    // the motivating case) — while a normal return, including a tool-reported
+    // isError, logs at info.
+    const startedAt = Date.now()
+    let outcome = 'ok'
+    try {
+      const result = await callToolUncached(client, rawName, argsObj, exec, opts)
+      if (result.isError === true) outcome = 'error'
 
-    // The SDK may return a legacy `toolResult` shape; normalize to content array.
-    if (!Array.isArray(result.content)) {
-      const rendered: unknown = 'toolResult' in result
-        ? JSON.stringify(result.toolResult)
-        : '(no output)'
-      const text = typeof rendered === 'string' ? rendered : '(no output)'
-      if (result.isError === true) throw new Error(text)
-      return {
-        content: [{ type: 'text', text }],
+      // The SDK may return a legacy `toolResult` shape; normalize to content array.
+      if (!Array.isArray(result.content)) {
+        const rendered: unknown = 'toolResult' in result
+          ? JSON.stringify(result.toolResult)
+          : '(no output)'
+        const text = typeof rendered === 'string' ? rendered : '(no output)'
+        if (result.isError === true) throw new Error(text)
+        return {
+          content: [{ type: 'text', text }],
+          ...result.structuredContent !== undefined
+            ? { structuredContent: result.structuredContent as JsonValue }
+            : {},
+        }
+      }
+
+      // Trust boundary: the SDK's return type erases to `any[]` due to the
+      // union of CallToolResult | CompatibilityCallToolResult; extractText
+      // validates each element.
+      const content = result.content as unknown as JsonValue[]
+      const text = extractText(content, rawName)
+
+      // MCP isError → throw so ToolRuntime produces an isError result for the model.
+      if (result.isError === true) {
+        throw new Error(text)
+      }
+
+      const value: McpResult = {
+        content,
         ...result.structuredContent !== undefined
           ? { structuredContent: result.structuredContent as JsonValue }
           : {},
       }
+      if (containsImage(content)) {
+        const fallback: ContentBlock[] = [{ type: 'text', text: extractText(content, rawName) }]
+        const projected = await prepareImageProjection(ctx, exec, content, rawName)
+        projections.set(exec, { value, fallback, content: projected })
+      }
+      return value
+    } catch (error) {
+      // A throw with outcome still 'ok' is a transport error or the per-call
+      // timeout — not a tool-reported isError (which set 'error' above).
+      if (outcome === 'ok') outcome = 'failed'
+      throw error
+    } finally {
+      const line = `mcp-client(${opts.serverName}): ${rawName} → ${outcome} in ${String(Date.now() - startedAt)}ms`
+      if (outcome === 'failed') ctx.logger.warn(line)
+      else ctx.logger.info(line)
     }
-
-    // Trust boundary: the SDK's return type erases to `any[]` due to the
-    // union of CallToolResult | CompatibilityCallToolResult; extractText
-    // validates each element.
-    const content = result.content as unknown as JsonValue[]
-    const text = extractText(content, rawName)
-
-    // MCP isError → throw so ToolRuntime produces an isError result for the model.
-    if (result.isError === true) {
-      throw new Error(text)
-    }
-
-    const value: McpResult = {
-      content,
-      ...result.structuredContent !== undefined
-        ? { structuredContent: result.structuredContent as JsonValue }
-        : {},
-    }
-    if (containsImage(content)) {
-      const fallback: ContentBlock[] = [{ type: 'text', text: extractText(content, rawName) }]
-      const projected = await prepareImageProjection(ctx, exec, content, rawName)
-      projections.set(exec, { value, fallback, content: projected })
-    }
-    return value
   }
 }
 

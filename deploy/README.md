@@ -275,6 +275,37 @@ browser holds that extension, with your sessions and cookies. In your daily
 profile that reaches every tab you are signed into; in a profile that only
 knows your test app, the blast radius is the test app.
 
+## DeerFlow remote browser (MCP)
+
+A second, unrelated way to give an agent a browser: attach an external
+[DeerFlow](https://deer.linkfa.de) headless browser as an MCP tool server.
+Unlike the extension bridge above — which drives *your* Chrome — this drives a
+remote headless browser the operator runs elsewhere. Its 23 tools attach
+through the harness's own MCP client (`@deepseek-ai/dsh-mcp-client`) and appear
+to the model as `mcp__deerflow__browser_navigate`, `…_get_markdown`, and so on,
+discovered at startup.
+
+Enable it by setting **`DEERFLOW_BROWSER_MCP_TOKEN`** (operator-supplied, never
+committed) in the Dokploy environment; with no token the tools do not attach.
+Override the endpoint with `DEERFLOW_BROWSER_MCP_URL` (default
+`https://deer.linkfa.de/mcp/browser`). The config lives in
+`deploy/plugins/deerflow-browser.cordis.yml`.
+
+**It cannot hang the agent.** DeerFlow's CDP link can wedge (observed after
+~8 days' uptime): `initialize` and `tools/list` keep answering while every tool
+call blocks forever. Each call carries a 45s timeout, so a wedged browser
+produces a clear tool error, not a hang — and the client logs it at warn
+(`mcp-client(deerflow): <tool> → failed in <ms>ms`); successful calls log at
+info. Recovery is operator-side: restart **both** the DeerFlow browser and its
+MCP server — restarting the MCP server alone does not clear it.
+
+**Logged-in sessions do not survive a DeerFlow restart on their own.** The
+browser runs a dedicated profile; a YouTube (or any) login persists across
+container restarts only if DeerFlow's *own* deployment mounts its Chrome
+profile directory on a persistent volume. That is a property of DeerFlow, not
+of this plugin — the harness drives the browser but cannot make it persist its
+profile.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads
