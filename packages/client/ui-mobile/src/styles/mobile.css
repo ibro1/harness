@@ -8,16 +8,51 @@
  */
 
 @media (max-width: 768px) {
-  /* ---- Layout: content full width, sidebar as an overlay drawer ---- */
+  /* ---- Layout: content full width; the sidebar is an off-canvas drawer ----
+
+     The desktop rail has no place on a phone, so it does not sit in the
+     layout. Collapsed, the whole rail is clipped to zero width and only its
+     toggle (the whale) floats out as a hamburger; tapping it opens the rail as
+     a full drawer over the content. The toggle already carries a localized
+     label, so no new copy is introduced. */
 
   /* The details column never claims width on a phone. */
   [data-shell-frame] [data-shell-details] {
     display: none !important;
   }
 
-  /* An expanded sidebar overlays the content as a drawer rather than widening
-     its grid column and crushing the session body. The slim collapsed rail
-     stays in flow, so its existing toggle button remains reachable to open it. */
+  /* Collapsed: the content spans the full width and the rail track is zero. */
+  [data-shell-frame][data-sidebar-collapsed] {
+    grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+  }
+
+  /* Collapsed rail: clipped to nothing. Its content is in flow, so `overflow:
+     hidden` hides all of it; the toggle escapes because it is fixed. */
+  [data-shell-frame][data-sidebar-collapsed] [data-shell-sidebar] {
+    width: 0 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* The toggle floats to the top-left as a hamburger: a round button clear of
+     the status bar, above the content but below the drawer scrim. */
+  [data-shell-frame][data-sidebar-collapsed] [data-sidebar-toggle] {
+    position: fixed !important;
+    top: max(10px, env(safe-area-inset-top)) !important;
+    left: 10px !important;
+    z-index: 998 !important;
+    width: 40px !important;
+    height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    background: var(--dsw-alias-bg-layer-2) !important;
+    box-shadow: var(--dsw-shadow-lv1) !important;
+  }
+
+  /* Expanded: the rail overlays the content as a drawer rather than widening
+     its grid column and crushing the session body. */
   [data-shell-frame]:not([data-sidebar-collapsed]) {
     grid-template-columns: 0 minmax(0, 1fr) 0 !important;
   }
