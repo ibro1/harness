@@ -53,23 +53,35 @@
     flex-direction: column !important;
   }
 
-  /* The section nav becomes a horizontal, scrollable strip above the content. */
+  /* The nav becomes a compact top bar. It keeps its column direction (title
+     then list); the title is hidden to save height, and the section list below
+     lays out as a horizontal tab strip that scrolls sideways. */
   [data-settings-panel] > nav {
     width: 100% !important;
-    flex-direction: row !important;
-    align-items: center;
-    gap: 4px;
-    overflow-x: auto;
-    overflow-y: hidden;
     flex: 0 0 auto !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 10px 10px 0 !important;
   }
 
-  /* Its section list lays its cells in a row, so the labels scroll sideways. */
+  /* Hide the redundant "Settings" title (the modal is obviously settings). */
+  [data-settings-panel] > nav > :first-child {
+    display: none !important;
+  }
+
+  /* The section list is a horizontal, scrollable row of tabs. */
   [data-settings-panel] > nav > :last-child {
-    display: flex !important;
     flex-direction: row !important;
-    flex-wrap: nowrap;
-    gap: 4px;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 6px !important;
+    padding-bottom: 8px;
+  }
+
+  /* Each section cell keeps its width and label rather than shrinking to zero. */
+  [data-settings-panel] > nav > :last-child > * {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
   }
 
   /* The content pane fills the rest and scrolls, instead of clipping. */
