@@ -64,6 +64,15 @@
     display: inline-flex !important;
   }
 
+  /* An active session's header opens with breadcrumb buttons at its top-left,
+     exactly where the floating hamburger sits. While the rail is collapsed
+     (the hamburger is showing), reserve room so the button clears them — the
+     standard [menu] [title] app-bar arrangement. The conversation session
+     header is the only <header> inside the center column. */
+  [data-shell-frame][data-sidebar-collapsed] [data-shell-center] header {
+    padding-left: 58px !important;
+  }
+
   /* Expanded: the rail overlays the content as a drawer rather than widening
      its grid column and crushing the session body. */
   [data-shell-frame]:not([data-sidebar-collapsed]) {
