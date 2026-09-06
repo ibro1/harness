@@ -42,53 +42,111 @@
     backdrop-filter: var(--dsw-mask-blur);
   }
 
-  /* ---- Settings modal: full screen, single column, scrollable ---- */
+  /* ---- Settings modal: a full-screen sheet with a standard mobile app bar ----
+
+     The panel becomes a column: a top app bar (title + close), a scrollable
+     section tab strip, then the scrolling content. `100dvh` tracks the visible
+     viewport as the browser toolbars show and hide, and env() safe-area insets
+     keep the bar clear of the status bar and the content clear of the home
+     indicator. The DOM is reached structurally rather than by hashed class:
+     content's first child is the header (its last child is the close button),
+     its last child is the scrolling options pane. */
 
   [data-settings-panel] {
     width: 100vw !important;
     max-width: 100vw !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
     border-radius: 0 !important;
     flex-direction: column !important;
   }
 
-  /* The nav becomes a compact top bar. It keeps its column direction (title
-     then list); the title is hidden to save height, and the section list below
-     lays out as a horizontal tab strip that scrolls sideways. */
+  /* App bar: the "Settings" title on its own line, kept clear of the status
+     bar, with the section tabs beneath it. */
   [data-settings-panel] > nav {
     width: 100% !important;
     flex: 0 0 auto !important;
     flex-direction: column !important;
-    gap: 8px !important;
-    padding: 10px 10px 0 !important;
+    gap: 0 !important;
+    padding: max(10px, env(safe-area-inset-top)) 0 0 !important;
+    box-sizing: border-box !important;
+    border-bottom: 1px solid var(--dsw-alias-line-1, rgba(0, 0, 0, 0.08)) !important;
   }
 
-  /* Hide the redundant "Settings" title (the modal is obviously settings). */
+  /* Title row: left-aligned, with right padding that leaves room for the
+     floating close button so a long title cannot slide under it. */
   [data-settings-panel] > nav > :first-child {
-    display: none !important;
+    display: block !important;
+    padding: 2px 56px 10px 16px !important;
+    font-size: 17px !important;
+    font-weight: 600 !important;
   }
 
-  /* The section list is a horizontal, scrollable row of tabs. */
+  /* Section tabs: a horizontal strip that scrolls sideways, its own scrollbar
+     hidden so it reads as a clean tab row. */
   [data-settings-panel] > nav > :last-child {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     overflow-x: auto !important;
-    gap: 6px !important;
-    padding-bottom: 8px;
+    gap: 4px !important;
+    padding: 0 8px 8px !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch;
   }
 
-  /* Each section cell keeps its width and label rather than shrinking to zero. */
+  [data-settings-panel] > nav > :last-child::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Each tab keeps its width and label rather than shrinking to zero. */
   [data-settings-panel] > nav > :last-child > * {
     flex: 0 0 auto !important;
     white-space: nowrap !important;
   }
 
-  /* The content pane fills the rest and scrolls, instead of clipping. */
+  /* Content fills the rest of the sheet; its options child owns the scroll. */
   [data-settings-content] {
     width: 100% !important;
     min-width: 0 !important;
     flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+
+  /* The header collapses: both its children float up into the app bar, so the
+     row itself adds no height above the content (empty on most sections). */
+  [data-settings-content] > :first-child {
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  /* Close button floats to the app bar's top-right, level with the title and
+     inside the safe area — not stranded below the tabs. The panel is the
+     positioned ancestor. */
+  [data-settings-content] > :first-child > :last-child {
+    position: absolute !important;
+    top: max(8px, env(safe-area-inset-top)) !important;
+    right: 12px !important;
+    z-index: 6 !important;
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  /* Section action slot (e.g. the Dokploy "Host document" button): sits in the
+     app bar just left of the close, the standard place for a header action.
+     Empty on most sections, so it takes no space there. */
+  [data-settings-content] > :first-child > :first-child {
+    position: absolute !important;
+    top: max(8px, env(safe-area-inset-top)) !important;
+    right: 56px !important;
+    z-index: 5 !important;
+  }
+
+  /* Options pane: the scroller, padded clear of the home indicator. */
+  [data-settings-content] > :last-child {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
     overflow-y: auto !important;
+    padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
   }
 }
