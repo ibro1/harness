@@ -111,6 +111,13 @@ export function Tooltip({ label, side = 'right', delayMs = 0, disabled = false, 
 
   const show = () => {
     if (disabled) return
+    // Tooltips are a hover affordance. On a touch device a tap registers as
+    // focus, which would show the bubble and then strand it when the anchor
+    // moves or re-renders (e.g. the sidebar toggle becoming a floating
+    // hamburger). Suppress on devices that cannot hover; the anchor's own
+    // aria-label carries the accessible name regardless. Absent matchMedia
+    // (jsdom) reads as hover-capable, so tests are unaffected.
+    if (window.matchMedia?.('(hover: none)')?.matches === true) return
     const el = anchor.current
     /* v8 ignore next -- the ref is attached by event time: events fire on the cloned anchor. */
     if (el === null) return
