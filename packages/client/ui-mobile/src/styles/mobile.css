@@ -7,12 +7,6 @@
  * !important because the base widths are inline styles the cascade cannot beat.
  */
 
-/* Desktop defaults: details trigger and scrim are hidden on desktop. */
-[data-details-toggle],
-[data-details-scrim] {
-  display: none !important;
-}
-
 @media (max-width: 768px) {
   /* ---- Layout: content full width; sidebar & details are off-canvas drawers ----
 
@@ -22,45 +16,18 @@
      a full drawer over the content. The toggle already carries a localized
      label, so no new copy is introduced. */
 
-  /* Mobile-only details toggle button (top-right floating control). */
-  [data-details-toggle] {
-    position: fixed !important;
-    top: max(10px, env(safe-area-inset-top)) !important;
-    right: 10px !important;
-    z-index: 1001 !important;
-    width: 40px !important;
-    height: 40px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border-radius: 50% !important;
-    background: var(--dsw-alias-bg-layer-2) !important;
-    box-shadow: var(--dsw-shadow-lv1) !important;
-    border: none !important;
-    color: var(--dsw-alias-label-primary) !important;
-    cursor: pointer !important;
-  }
-
-  /* Show the details toggle only during an active session — its header is
-     present only then, and the details column has nothing before a session —
-     and only while the sidebar is collapsed, so it never floats over the open
-     sidebar drawer nor clutters the empty hero. It stays visible while the
-     details drawer itself is open, acting as the close control. */
-  [data-shell-frame][data-sidebar-collapsed]:has([data-shell-center] header) [data-details-toggle] {
-    display: flex !important;
-  }
-
-  /* Dim scrim behind the open details drawer. Tap scrim to close it. */
-  [data-shell-frame][data-details-collapsed] [data-details-scrim] {
-    display: none !important;
-  }
-
-  [data-shell-frame]:not([data-details-collapsed]) [data-details-scrim] {
-    display: block !important;
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 999 !important;
-    background: var(--dsw-alias-bg-mask-1) !important;
-    backdrop-filter: var(--dsw-mask-blur) !important;
+  /* Dim scrim behind the open details drawer, matching the sidebar drawer.
+     The details panel opens from a tool's own "view details" control in the
+     conversation (which selects what to show), and closes from the panel's own
+     close control — so there is no separate floating button, and the scrim is
+     purely visual. */
+  [data-shell-frame]:not([data-details-collapsed])::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: var(--dsw-alias-bg-mask-1);
+    backdrop-filter: var(--dsw-mask-blur);
   }
 
   /* Collapsed: the details column is hidden on a phone. */
@@ -126,12 +93,9 @@
   }
 
   /* An active session's header opens with breadcrumb buttons at its top-left,
-     and the details toggle at top-right. Reserve room so the buttons clear them. */
+     where the floating hamburger sits. Reserve room so the buttons clear it. */
   [data-shell-frame][data-sidebar-collapsed] [data-shell-center] header {
     padding-left: 58px !important;
-  }
-  [data-shell-frame] [data-shell-center] header {
-    padding-right: 58px !important;
   }
 
   /* Expanded: the rail overlays the content as a drawer rather than widening

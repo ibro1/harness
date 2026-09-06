@@ -6,10 +6,6 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../locale" },
-    { "path": "../ui-layout" },
-    { "path": "../ui-renderer" },
-    { "path": "../ui-slots" }
+    { "path": "../../../vendor/cordis" }
   ]
 }
