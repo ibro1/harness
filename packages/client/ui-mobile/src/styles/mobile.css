@@ -30,7 +30,6 @@
     z-index: 1001 !important;
     width: 40px !important;
     height: 40px !important;
-    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     border-radius: 50% !important;
@@ -41,10 +40,13 @@
     cursor: pointer !important;
   }
 
-  /* While the sidebar drawer is open it sits above the content; the details
-     toggle must not float over it. */
-  [data-shell-frame]:not([data-sidebar-collapsed]) [data-details-toggle] {
-    display: none !important;
+  /* Show the details toggle only during an active session — its header is
+     present only then, and the details column has nothing before a session —
+     and only while the sidebar is collapsed, so it never floats over the open
+     sidebar drawer nor clutters the empty hero. It stays visible while the
+     details drawer itself is open, acting as the close control. */
+  [data-shell-frame][data-sidebar-collapsed]:has([data-shell-center] header) [data-details-toggle] {
+    display: flex !important;
   }
 
   /* Dim scrim behind the open details drawer. Tap scrim to close it. */
