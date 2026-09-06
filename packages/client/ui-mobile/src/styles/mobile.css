@@ -7,8 +7,14 @@
  * !important because the base widths are inline styles the cascade cannot beat.
  */
 
+/* Desktop defaults: details trigger and scrim are hidden on desktop. */
+[data-details-toggle],
+[data-details-scrim] {
+  display: none !important;
+}
+
 @media (max-width: 768px) {
-  /* ---- Layout: content full width; the sidebar is an off-canvas drawer ----
+  /* ---- Layout: content full width; sidebar & details are off-canvas drawers ----
 
      The desktop rail has no place on a phone, so it does not sit in the
      layout. Collapsed, the whole rail is clipped to zero width and only its
@@ -16,9 +22,62 @@
      a full drawer over the content. The toggle already carries a localized
      label, so no new copy is introduced. */
 
-  /* The details column never claims width on a phone. */
-  [data-shell-frame] [data-shell-details] {
+  /* Mobile-only details toggle button (top-right floating control). */
+  [data-details-toggle] {
+    position: fixed !important;
+    top: max(10px, env(safe-area-inset-top)) !important;
+    right: 10px !important;
+    z-index: 1001 !important;
+    width: 40px !important;
+    height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    background: var(--dsw-alias-bg-layer-2) !important;
+    box-shadow: var(--dsw-shadow-lv1) !important;
+    border: none !important;
+    color: var(--dsw-alias-label-primary) !important;
+    cursor: pointer !important;
+  }
+
+  /* While the sidebar drawer is open it sits above the content; the details
+     toggle must not float over it. */
+  [data-shell-frame]:not([data-sidebar-collapsed]) [data-details-toggle] {
     display: none !important;
+  }
+
+  /* Dim scrim behind the open details drawer. Tap scrim to close it. */
+  [data-shell-frame][data-details-collapsed] [data-details-scrim] {
+    display: none !important;
+  }
+
+  [data-shell-frame]:not([data-details-collapsed]) [data-details-scrim] {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 999 !important;
+    background: var(--dsw-alias-bg-mask-1) !important;
+    backdrop-filter: var(--dsw-mask-blur) !important;
+  }
+
+  /* Collapsed: the details column is hidden on a phone. */
+  [data-shell-frame][data-details-collapsed] [data-shell-details] {
+    display: none !important;
+  }
+
+  /* Expanded: the details column overlays the content as a drawer from the right. */
+  [data-shell-frame]:not([data-details-collapsed]) [data-shell-details] {
+    position: fixed !important;
+    inset: 0 0 0 auto !important;
+    width: min(84vw, 360px) !important;
+    max-width: 84vw !important;
+    z-index: 1000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--dsw-alias-bg-layer-1) !important;
+    box-shadow: var(--dsw-shadow-lv1) !important;
+    overflow: auto !important;
   }
 
   /* Collapsed: the content spans the full width and the rail track is zero. */
@@ -65,12 +124,12 @@
   }
 
   /* An active session's header opens with breadcrumb buttons at its top-left,
-     exactly where the floating hamburger sits. While the rail is collapsed
-     (the hamburger is showing), reserve room so the button clears them — the
-     standard [menu] [title] app-bar arrangement. The conversation session
-     header is the only <header> inside the center column. */
+     and the details toggle at top-right. Reserve room so the buttons clear them. */
   [data-shell-frame][data-sidebar-collapsed] [data-shell-center] header {
     padding-left: 58px !important;
+  }
+  [data-shell-frame] [data-shell-center] header {
+    padding-right: 58px !important;
   }
 
   /* Expanded: the rail overlays the content as a drawer rather than widening
