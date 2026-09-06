@@ -51,6 +51,19 @@
     box-shadow: var(--dsw-shadow-lv1) !important;
   }
 
+  /* Show the panel glyph (the universal "open menu" mark) on the hamburger
+     rather than the whale brand mark, which reads as a logo. The rail keeps
+     the whale-at-rest, panel-on-hover swap; only this floating button flips.
+     Structural: the toggle's span child is the brand mark, its svg child is
+     the panel glyph. */
+  [data-shell-frame][data-sidebar-collapsed] [data-sidebar-toggle] > span {
+    display: none !important;
+  }
+
+  [data-shell-frame][data-sidebar-collapsed] [data-sidebar-toggle] > svg {
+    display: inline-flex !important;
+  }
+
   /* Expanded: the rail overlays the content as a drawer rather than widening
      its grid column and crushing the session body. */
   [data-shell-frame]:not([data-sidebar-collapsed]) {
