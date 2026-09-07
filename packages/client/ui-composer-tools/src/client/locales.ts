@@ -3,7 +3,6 @@
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'upload': '上传文件到工作区',
-  'insertNote': '已上传 {names} 至工作区：{paths}',
   'pct': '{pct}%',
   'uploadFailed': '上传失败',
   'remove': '移除 {name}',
@@ -24,7 +23,6 @@ export type ComposerToolsKey = keyof typeof zh
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
   'upload': 'Upload files to workspace',
-  'insertNote': 'Uploaded {names} to the workspace: {paths}',
   'pct': '{pct}%',
   'uploadFailed': 'Upload failed',
   'remove': 'Remove {name}',

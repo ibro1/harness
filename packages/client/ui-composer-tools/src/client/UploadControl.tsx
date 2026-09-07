@@ -76,10 +76,9 @@ export function UploadControl({ sessionId, t, insertDraft }: UploadControlProps)
       if (path !== undefined) landed.push({ name, path })
       remaining -= 1
       if (remaining === 0 && landed.length > 0) {
-        insertDraft(t('insertNote', {
-          names: landed.map(l => l.name).join(', '),
-          paths: landed.map(l => l.path).join(', '),
-        }))
+        // Just the path(s): the agent needs them to read the workspace files,
+        // and a preamble only clutters the prompt.
+        insertDraft(landed.map(l => l.path).join(' '))
       }
     }
     // `items` is 1:1 with `files` (addItems preserves order); pairing avoids a
