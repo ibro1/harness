@@ -64,8 +64,11 @@ services:
       # providers keep the native tools regardless.
       DEERFLOW_BROWSER_MCP: ${DEERFLOW_BROWSER_MCP:-}
       # video-use skill transcription. Set at least one key (Groq is free);
-      # transcribe.py auto-selects groq > openai > elevenlabs, or force one with
-      # TRANSCRIBE_PROVIDER (elevenlabs|groq|openai).
+      # transcribe.py auto-selects diarizing providers first
+      # (deepgram > assemblyai > elevenlabs > groq > openai), or force one with
+      # TRANSCRIBE_PROVIDER.
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}

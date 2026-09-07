@@ -333,18 +333,22 @@ outputs land in `<footage>/edit/`, never in the skill directory.
 **Transcription is provider-agnostic** (a fork-local overlay of `transcribe.py`,
 kept in `deploy/skills/video-use/`). Set at least one key in the environment:
 
-| Key | Backend | Notes |
-|---|---|---|
-| `GROQ_API_KEY` | Groq Whisper | Free, generous — the default choice |
-| `OPENAI_API_KEY` | OpenAI Whisper | Word timestamps, but no diarization/fillers |
-| `ELEVENLABS_API_KEY` | ElevenLabs Scribe | Adds speaker diarization + audio-event/filler tags |
+| Key | Backend | Diarization | Notes |
+|---|---|---|---|
+| `DEEPGRAM_API_KEY` | Deepgram nova-2 | yes | Word timestamps + speakers + fillers; generous free credit |
+| `ASSEMBLYAI_API_KEY` | AssemblyAI | yes | Word timestamps + speakers + disfluencies |
+| `ELEVENLABS_API_KEY` | ElevenLabs Scribe | yes | Word timestamps + speakers + audio-event/filler tags |
+| `GROQ_API_KEY` | Groq Whisper | no | Free, generous; single speaker |
+| `OPENAI_API_KEY` | OpenAI Whisper | no | Single speaker |
 
-It auto-selects the first present in the order groq → openai → elevenlabs, or
-force one with `TRANSCRIBE_PROVIDER`. Every backend is normalized to the same
-transcript JSON the skill reads, so the pipeline is unchanged; only ElevenLabs
-provides diarization, so prefer it (or a future Deepgram/AssemblyAI provider)
-when per-speaker cutting matters. Whisper uploads are capped near 25MB (~70 min
-of mono audio); use ElevenLabs for long single files.
+It auto-selects diarizing providers first —
+deepgram → assemblyai → elevenlabs → groq → openai — or force one with
+`TRANSCRIBE_PROVIDER`. Every backend is normalized to the same transcript JSON
+the skill reads (word/spacing entries, per-word `speaker_id`), so the pipeline
+is unchanged. Only the diarizing providers label speakers; Whisper is fine for
+single-speaker footage. Whisper uploads are capped near 25MB (~70 min of mono
+audio); use a diarizing provider for long single files (they take the lossless
+wav and handle large uploads).
 
 To use it: set a key, redeploy, then in a session point the agent at a folder of
 footage ("edit these into a launch video"). Nothing is transcribed until you
