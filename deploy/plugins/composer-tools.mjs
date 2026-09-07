@@ -19,13 +19,74 @@ export const name = 'composer-tools'
 export const inject = ['webServer', 'sessions']
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
+const DEFAULT_VOICE_MAX_BYTES = 25 * 1024 * 1024 // 25 MiB (Groq's request cap)
 
 export const Config = z.object({
-  /** Absolute route path the composer uploads to. */
+  /** Absolute route path the composer uploads files to. */
   path: z.string().default('/workspace-upload'),
-  /** Largest single upload accepted, in bytes. */
+  /** Largest single file upload accepted, in bytes. */
   maxBytes: z.natural().min(1).default(DEFAULT_MAX_BYTES),
+  /** Absolute route path the composer posts recorded audio to for transcription. */
+  voicePath: z.string().default('/voice-transcribe'),
+  /** Largest audio clip accepted for transcription, in bytes. */
+  voiceMaxBytes: z.natural().min(1).default(DEFAULT_VOICE_MAX_BYTES),
 })
+
+/** Container extension for a recorded-audio content type, for the Groq filename. */
+const AUDIO_EXT = {
+  'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4',
+  'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/flac': 'flac',
+}
+
+/** Read a request body into a Buffer, failing at the cap rather than buffering
+ *  an unbounded upload. Resolves undefined once the cap fires (response owned). */
+function readCappedBody(req, res, maxBytes) {
+  return new Promise((resolve) => {
+    const chunks = []
+    let bytes = 0
+    let done = false
+    req.on('data', (chunk) => {
+      if (done) return
+      bytes += chunk.length
+      if (bytes > maxBytes) {
+        done = true
+        json(res, 413, { error: `audio exceeds the ${maxBytes}-byte limit` })
+        req.destroy()
+        resolve(undefined)
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => { if (!done) { done = true; resolve(Buffer.concat(chunks)) } })
+    req.on('error', () => { if (!done) { done = true; resolve(undefined) } })
+  })
+}
+
+/**
+ * Transcribe recorded audio with Groq Whisper. Node 22 globals only (fetch /
+ * FormData / Blob) — no Python, no dependency.
+ * @returns { ok, text } | { ok:false, status, message }
+ */
+async function transcribeWithGroq(buf, contentType, apiKey) {
+  const type = (contentType || 'audio/webm').split(';')[0].trim()
+  const ext = AUDIO_EXT[type] ?? 'webm'
+  const form = new FormData()
+  form.append('file', new Blob([buf], { type }), `audio.${ext}`)
+  form.append('model', 'whisper-large-v3')
+  form.append('response_format', 'json')
+  const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+  const body = await resp.text()
+  if (!resp.ok) return { ok: false, status: resp.status, message: body.slice(0, 500) }
+  try {
+    return { ok: true, text: String(JSON.parse(body).text ?? '') }
+  } catch {
+    return { ok: false, status: 502, message: 'Groq returned a non-JSON body' }
+  }
+}
 
 /** Boot diagnostics to stderr, matching the browser-bridge convention: the Web
  *  profile composes no logger, so a plugin that never starts leaves no trace. */
@@ -56,6 +117,7 @@ function safeName(raw) {
 
 export function apply(ctx, config) {
   announce(`upload route ${config.path} (max ${config.maxBytes} bytes)`)
+  announce(`voice route ${config.voicePath} (max ${config.voiceMaxBytes} bytes, Groq Whisper)`)
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
@@ -137,4 +199,39 @@ export function apply(ctx, config) {
       })
     },
   }), 'composer-tools: workspace upload route')
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: config.voicePath,
+    // authenticate defaults true — behind the password gate. Relays recorded
+    // audio to Groq Whisper so the browser never holds the API key.
+    handler: async (req, res) => {
+      if (req.method !== 'POST') {
+        json(res, 405, { error: 'method not allowed; use POST' })
+        return
+      }
+      const apiKey = (process.env.GROQ_API_KEY ?? '').trim()
+      if (apiKey === '') {
+        json(res, 503, { error: 'voice transcription unavailable: set GROQ_API_KEY on the harness' })
+        return
+      }
+      const buf = await readCappedBody(req, res, config.voiceMaxBytes)
+      if (buf === undefined) return // response already sent (413 or aborted)
+      if (buf.length === 0) {
+        json(res, 400, { error: 'empty audio' })
+        return
+      }
+      try {
+        const result = await transcribeWithGroq(buf, req.headers['content-type'], apiKey)
+        if (!result.ok) {
+          json(res, 502, { error: `groq ${result.status}: ${result.message}` })
+          return
+        }
+        announce(`transcribed ${buf.length} bytes -> ${result.text.length} chars`)
+        json(res, 200, { text: result.text })
+      } catch (error) {
+        json(res, 500, { error: `transcription failed: ${String(error)}` })
+      }
+    },
+  }), 'composer-tools: voice transcription route')
 }

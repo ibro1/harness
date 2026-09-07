@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-composer-tools",
-  "description": "Fork-local composer tools: upload a file into the current session's workspace from the web composer.",
+  "description": "Fork-local composer tools: upload a file into the current session's workspace, and dictate a prompt by voice, from the web composer.",
   "version": "0.1.2-rc.1",
   "type": "module",
   "main": "lib/index.js",
@@ -16,7 +16,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-ui-renderer"
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-api-session-controller"
       ],
       "platform": "web",
       "immediately": true
@@ -27,6 +28,7 @@
   "peerDependencies": { "@deepseek-ai/cordis": "workspace:^" },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-api-session-controller": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-client-ui-renderer": "workspace:^",

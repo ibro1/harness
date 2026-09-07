@@ -7,7 +7,9 @@ import css from './UploadButton.module.css'
 
 /** The framework supplies `t` (namespace-scoped) and, on a session-scoped slot,
  *  the current `sessionId`. */
-export type UploadButtonProps = PropsRuntime<'conversation.composer.dock'> & PropsLocale<'composer-tools'>
+export type UploadButtonProps = PropsRuntime<'conversation.composer.dock'>
+  & PropsLocale<'composer-tools'>
+  & { insertDraft(text: string): void }
 
 /** The host route the composer posts to; matches composer-tools.mjs's default. */
 const UPLOAD_PATH = '/workspace-upload'
@@ -24,7 +26,7 @@ type Status =
  * shown so the user (and the agent, once told) can reference it.
  * @param props - framework-supplied `sessionId` and `t`.
  */
-export function UploadButton({ sessionId, t }: UploadButtonProps) {
+export function UploadButton({ sessionId, t, insertDraft }: UploadButtonProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
 
@@ -52,6 +54,7 @@ export function UploadButton({ sessionId, t }: UploadButtonProps) {
       }
       if (xhr.status === 200 && typeof body.path === 'string') {
         setStatus({ kind: 'done', name: file.name, path: body.path })
+        insertDraft(t('insertNote', { name: file.name, path: body.path }))
       } else {
         setStatus({
           kind: 'error',

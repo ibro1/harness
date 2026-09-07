@@ -7,6 +7,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../api/session-controller/tsconfig.client.json" },
     { "path": "../locale" },
     { "path": "../ui-renderer" },
     { "path": "../ui-session" },
