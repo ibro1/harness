@@ -1,0 +1,114 @@
+/* Ghost icon buttons that sit in the composer's leading icon row beside the
+   built-in "+". Shape mirrors that button (28px round, centered glyph) but
+   transparent until hover, so they read as secondary controls. */
+.icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.icon:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+}
+
+.icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Recording: tint the mic so the live state is unmistakable. */
+.recording {
+  color: var(--dsw-alias-label-error, #c0392b);
+}
+
+.hidden {
+  display: none;
+}
+
+/* Preview strip: full-width row of file chips below the input (composer.dock). */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 34px;
+  padding: 4px 4px 4px 6px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--dsw-alias-line-1, rgba(0, 0, 0, 0.08));
+}
+
+.chipError {
+  border-color: var(--dsw-alias-label-error, #c0392b);
+}
+
+.thumb {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.thumbIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.metaError {
+  flex: none;
+  font-size: 11px;
+  color: var(--dsw-alias-label-error, #c0392b);
+}
+
+.remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+}

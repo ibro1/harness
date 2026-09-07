@@ -117,7 +117,7 @@ export function Tooltip({ label, side = 'right', delayMs = 0, disabled = false, 
     // hamburger). Suppress on devices that cannot hover; the anchor's own
     // aria-label carries the accessible name regardless. Absent matchMedia
     // (jsdom) reads as hover-capable, so tests are unaffected.
-    if (window.matchMedia?.('(hover: none)')?.matches === true) return
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(hover: none)').matches) return
     const el = anchor.current
     /* v8 ignore next -- the ref is attached by event time: events fire on the cloned anchor. */
     if (el === null) return

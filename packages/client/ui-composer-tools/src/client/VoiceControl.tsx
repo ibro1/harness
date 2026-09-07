@@ -1,26 +1,26 @@
 import { useRef, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only merges: composer.dock SlotMap entry and the session-scope base.
+// Type-only merges: the input.left SlotMap entry and the session-scope base.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import css from './VoiceButton.module.css'
+import css from './tools.module.css'
 
 /** `t` (namespace-scoped) plus the injected composer-draft writer. */
-export type VoiceButtonProps = PropsRuntime<'conversation.composer.dock'>
+export type VoiceControlProps = PropsRuntime<'conversation.input.left'>
   & PropsLocale<'composer-tools'>
-  & { insertDraft(text: string): void }
+  & { insertDraft: (text: string) => void }
 
 /** Host relay; matches composer-tools.mjs's default voicePath. */
 const VOICE_PATH = '/voice-transcribe'
 
-/** Recorder container preferences: opus in webm is the broad default; mp4 is
- *  the Safari fallback. All are accepted by Groq Whisper. */
+/** Container preferences: opus in webm is the broad default; mp4 is the Safari
+ *  fallback. All are accepted by Groq Whisper. */
 const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
 
 function pickMime(): string {
   if (typeof MediaRecorder === 'undefined') return ''
-  for (const m of MIME_CANDIDATES) {
-    if (MediaRecorder.isTypeSupported(m)) return m
+  for (const mime of MIME_CANDIDATES) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime
   }
   return ''
 }
@@ -31,20 +31,33 @@ type Status =
   | { kind: 'transcribing' }
   | { kind: 'error'; text: string }
 
+/** A simple microphone glyph (no mic primitive ships in ui-primitives). */
+function MicGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="6" y="1.5" width="4" height="8" rx="2" fill="currentColor" />
+      <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+      <line x1="8" y1="12" x2="8" y2="14.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /**
- * Compose-dock control: record speech, transcribe it through the host relay
- * (Groq Whisper), and append the text to the composer draft. The API key never
- * reaches the browser — the relay holds it.
+ * Leading-row icon that records speech, transcribes it through the host relay
+ * (Groq Whisper), and appends the text to the composer draft. The API key never
+ * reaches the browser — the relay holds it. Errors surface on the button's
+ * title and a red tint until the next click.
  * @param props - `t` and the injected `insertDraft`.
  */
-export function VoiceButton({ t, insertDraft }: VoiceButtonProps) {
+export function VoiceControl({ t, insertDraft }: VoiceControlProps) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
-  const supported = typeof navigator !== 'undefined'
-    && navigator.mediaDevices !== undefined
-    && typeof MediaRecorder !== 'undefined'
+  // mediaDevices is absent in insecure contexts, and MediaRecorder in older
+  // browsers, despite the DOM types claiming both are always present.
+  const mediaDevices = navigator.mediaDevices as MediaDevices | undefined
+  const supported = mediaDevices !== undefined && typeof MediaRecorder !== 'undefined'
 
   const send = async (blob: Blob) => {
     setStatus({ kind: 'transcribing' })
@@ -58,11 +71,13 @@ export function VoiceButton({ t, insertDraft }: VoiceButtonProps) {
       try {
         body = await resp.json() as { text?: string; error?: string }
       } catch {
-        // non-JSON error page; handled by the status branch below.
+        // Non-JSON error page; handled below.
       }
       if (!resp.ok) {
-        const message = resp.status === 503 ? t('voice.errorKey') : t('voice.error', { message: body.error ?? String(resp.status) })
-        setStatus({ kind: 'error', text: message })
+        setStatus({
+          kind: 'error',
+          text: resp.status === 503 ? t('voice.errorKey') : t('voice.error', { message: body.error ?? String(resp.status) }),
+        })
         return
       }
       const text = (body.text ?? '').trim()
@@ -86,8 +101,7 @@ export function VoiceButton({ t, insertDraft }: VoiceButtonProps) {
       recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data) }
       recorder.onstop = () => {
         for (const track of stream.getTracks()) track.stop()
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        void send(blob)
+        void send(new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' }))
       }
       recorderRef.current = recorder
       recorder.start()
@@ -108,20 +122,22 @@ export function VoiceButton({ t, insertDraft }: VoiceButtonProps) {
   }
 
   const recording = status.kind === 'recording'
+  const label = recording ? t('voice.stop')
+    : status.kind === 'transcribing' ? t('voice.transcribing')
+      : status.kind === 'error' ? status.text
+        : t('voice.record')
+
   return (
-    <span className={css.root}>
-      <button
-        type="button"
-        className={recording ? css.recording : css.button}
-        aria-label={recording ? t('voice.stop') : t('voice.record')}
-        disabled={!supported || status.kind === 'transcribing'}
-        onClick={onClick}
-      >
-        {recording ? t('voice.stop') : t('voice.record')}
-      </button>
-      {status.kind === 'recording' && <span className={css.status}>{t('voice.recording')}</span>}
-      {status.kind === 'transcribing' && <span className={css.status}>{t('voice.transcribing')}</span>}
-      {status.kind === 'error' && <span className={css.error}>{status.text}</span>}
-    </span>
+    <button
+      type="button"
+      className={recording ? `${css.icon} ${css.recording}` : css.icon}
+      aria-label={label}
+      title={label}
+      disabled={!supported || status.kind === 'transcribing'}
+      onMouseDown={(event) => { event.preventDefault() }}
+      onClick={onClick}
+    >
+      <MicGlyph />
+    </button>
   )
 }

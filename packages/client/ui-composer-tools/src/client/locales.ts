@@ -2,13 +2,11 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
-  'upload': '上传到工作区',
-  'uploading': '正在上传 {name}… {pct}%',
-  'done': '已上传 {name} 至工作区',
-  'error': '上传失败：{message}',
-  'errorHttp': '上传失败（HTTP {status}）',
-  'errorNetwork': '上传失败：网络错误',
-  'insertNote': '已上传 {name} 至工作区：{path}',
+  'upload': '上传文件到工作区',
+  'insertNote': '已上传 {names} 至工作区：{paths}',
+  'pct': '{pct}%',
+  'uploadFailed': '上传失败',
+  'remove': '移除 {name}',
   'voice.record': '语音输入',
   'voice.stop': '停止录音',
   'voice.recording': '正在录音…点击停止',
@@ -25,13 +23,11 @@ export type ComposerToolsKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
-  'upload': 'Upload to workspace',
-  'uploading': 'Uploading {name}… {pct}%',
-  'done': 'Uploaded {name} to the workspace',
-  'error': 'Upload failed: {message}',
-  'errorHttp': 'Upload failed (HTTP {status})',
-  'errorNetwork': 'Upload failed: network error',
-  'insertNote': 'Uploaded {name} to the workspace at {path}',
+  'upload': 'Upload files to workspace',
+  'insertNote': 'Uploaded {names} to the workspace: {paths}',
+  'pct': '{pct}%',
+  'uploadFailed': 'Upload failed',
+  'remove': 'Remove {name}',
   'voice.record': 'Voice input',
   'voice.stop': 'Stop recording',
   'voice.recording': 'Recording… click to stop',

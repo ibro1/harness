@@ -12,6 +12,7 @@
     { "path": "../ui-renderer" },
     { "path": "../ui-session" },
     { "path": "../ui-conversation" },
+    { "path": "../ui-primitives" },
     { "path": "../ui-slots" }
   ]
 }
