@@ -7,6 +7,11 @@
  * !important because the base widths are inline styles the cascade cannot beat.
  */
 
+/* The sidebar scrim is off unless a phone has the drawer open (rule below). */
+[data-mobile-sidebar-scrim] {
+  display: none;
+}
+
 @media (max-width: 768px) {
   /* ---- Layout: content full width; sidebar & details are off-canvas drawers ----
 
@@ -114,9 +119,11 @@
     box-shadow: var(--dsw-shadow-lv1);
   }
 
-  /* A dim scrim behind the open drawer. Tap the sidebar toggle to close it. */
-  [data-shell-frame]:not([data-sidebar-collapsed])::before {
-    content: '';
+  /* A dim scrim behind the open drawer; tapping it closes the sidebar. A real
+     element (rendered into shell.overlay, so it shares the frame's stacking
+     context) rather than a ::before pseudo-element, which cannot take a tap. */
+  [data-shell-frame]:not([data-sidebar-collapsed]) [data-mobile-sidebar-scrim] {
+    display: block;
     position: fixed;
     inset: 0;
     z-index: 999;
