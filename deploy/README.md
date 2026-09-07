@@ -319,6 +319,37 @@ profile directory on a persistent volume. That is a property of DeerFlow, not
 of this plugin — the harness drives the browser but cannot make it persist its
 profile.
 
+## video-use skill (conversation-driven video editing)
+
+The image bakes in [video-use](https://github.com/browser-use/video-use) — an
+agent skill for editing footage by conversation (transcribe, cut, grade, burn
+subtitles, overlay animations). It ships in the image (repo at `/opt/video-use`,
+`ffmpeg` and its Python deps installed) because the container FS is ephemeral
+and uid 1000 cannot install packages at runtime; the entrypoint symlinks it into
+`~/.dsh/skills/video-use` (on the state volume) so the harness skill catalog
+discovers it. An agent loads it like any other skill and follows `SKILL.md`;
+outputs land in `<footage>/edit/`, never in the skill directory.
+
+**Transcription is provider-agnostic** (a fork-local overlay of `transcribe.py`,
+kept in `deploy/skills/video-use/`). Set at least one key in the environment:
+
+| Key | Backend | Notes |
+|---|---|---|
+| `GROQ_API_KEY` | Groq Whisper | Free, generous — the default choice |
+| `OPENAI_API_KEY` | OpenAI Whisper | Word timestamps, but no diarization/fillers |
+| `ELEVENLABS_API_KEY` | ElevenLabs Scribe | Adds speaker diarization + audio-event/filler tags |
+
+It auto-selects the first present in the order groq → openai → elevenlabs, or
+force one with `TRANSCRIBE_PROVIDER`. Every backend is normalized to the same
+transcript JSON the skill reads, so the pipeline is unchanged; only ElevenLabs
+provides diarization, so prefer it (or a future Deepgram/AssemblyAI provider)
+when per-speaker cutting matters. Whisper uploads are capped near 25MB (~70 min
+of mono audio); use ElevenLabs for long single files.
+
+To use it: set a key, redeploy, then in a session point the agent at a folder of
+footage ("edit these into a launch video"). Nothing is transcribed until you
+ask — transcription spends API credits.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

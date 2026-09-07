@@ -15,11 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       bash \
       ca-certificates \
       curl \
+      ffmpeg \
       git \
       less \
       openssh-client \
       procps \
       python3 \
+      python3-pip \
       ripgrep \
       socat \
       tini \
@@ -38,6 +40,20 @@ RUN mkdir -p /app \
       /home/node/.config/opencode \
       /home/node/.local/share/opencode \
     && chown -R node:node /app /workspace /home/node
+
+# video-use skill (fork-local): the conversation-driven video editor
+# (github.com/browser-use/video-use). Baked into the image because the
+# container FS is otherwise ephemeral and uid 1000 cannot install packages at
+# runtime; the entrypoint links it into ~/.dsh/skills so the skill catalog
+# discovers it. Only the deps the helpers actually import — librosa and
+# matplotlib are declared upstream but unused, so they are skipped to stay lean.
+RUN git clone --depth 1 https://github.com/browser-use/video-use /opt/video-use \
+    && pip3 install --no-cache-dir --break-system-packages requests numpy pillow \
+    && chown -R node:node /opt/video-use
+
+# Fork-local overlay: a provider-agnostic transcriber (ElevenLabs Scribe plus
+# Groq / OpenAI Whisper) replacing the upstream ElevenLabs-only one.
+COPY --chown=node:node deploy/skills/video-use/transcribe.py /opt/video-use/helpers/transcribe.py
 
 # The client build stamps the source commit into its metadata and reads it from
 # git when this is unset. `.git` is not in the build context (see

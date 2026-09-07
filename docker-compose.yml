@@ -63,6 +63,13 @@ services:
       # the --dangerously-skip-permissions grant that admits them). Direct
       # providers keep the native tools regardless.
       DEERFLOW_BROWSER_MCP: ${DEERFLOW_BROWSER_MCP:-}
+      # video-use skill transcription. Set at least one key (Groq is free);
+      # transcribe.py auto-selects groq > openai > elevenlabs, or force one with
+      # TRANSCRIBE_PROVIDER (elevenlabs|groq|openai).
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      TRANSCRIBE_PROVIDER: ${TRANSCRIBE_PROVIDER:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh

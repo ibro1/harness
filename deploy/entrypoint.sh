@@ -256,6 +256,15 @@ else
   echo "[entrypoint] NOTE: set DEERFLOW_BROWSER_MCP_TOKEN to attach the DeerFlow remote browser tools."
 fi
 
+# video-use skill: link the baked-in repo into the skill catalog root. ~/.dsh
+# is the state volume so the symlink persists; it targets the image copy at
+# /opt/video-use, keeping SKILL.md and helpers/ siblings. Idempotent.
+if [[ -d /opt/video-use ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn /opt/video-use "$HOME/.dsh/skills/video-use"
+  echo "[entrypoint] video-use skill linked (~/.dsh/skills/video-use; transcription provider: ${TRANSCRIBE_PROVIDER:-auto})"
+fi
+
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
   trusted_args+=(--trusted-host "$host")
