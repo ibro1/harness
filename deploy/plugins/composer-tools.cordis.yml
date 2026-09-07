@@ -1,0 +1,13 @@
+# Composer tools, layered over the shipped Web composition.
+#
+# Registers the authenticated /workspace-upload route (see composer-tools.mjs)
+# that lands an uploaded file in the current session's workspace directory. The
+# web composer's upload button (ui-composer-tools) posts to it. Zero-config: the
+# plugin's Config defaults (path /workspace-upload, 2 GiB cap) apply, so nothing
+# is needed in the environment.
+#
+# Referenced by relative path because this plugin is fork-local and unpublished,
+# the same way deploy/webhook/cordis.yml references ./github-command-rule.mjs.
+- insert:
+    - id: composer-tools
+      name: './composer-tools.mjs'

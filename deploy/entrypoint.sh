@@ -265,6 +265,12 @@ if [[ -d /opt/video-use ]]; then
   echo "[entrypoint] video-use skill linked (~/.dsh/skills/video-use; transcription provider: ${TRANSCRIBE_PROVIDER:-auto})"
 fi
 
+# Composer tools: the authenticated /workspace-upload route that lands an
+# uploaded file in the current session's workspace. Always on and zero-config;
+# it sits behind the password gate, so nothing extra is needed to enable it.
+patch_args+=(--patch "$APP_DIR/deploy/plugins/composer-tools.cordis.yml")
+echo "[entrypoint] Composer upload route enabled at /workspace-upload"
+
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
   trusted_args+=(--trusted-host "$host")
