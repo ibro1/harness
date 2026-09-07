@@ -24,9 +24,22 @@ import { UploadStrip } from './UploadStrip.tsx'
 export type { ComposerToolsKey } from './locales.ts'
 
 /** Injected into the two leading-row controls: append text to the active
- *  composer draft. */
-export interface ComposerDraftInsert {
+ *  composer draft, and route image files through the built-in vision
+ *  attachment (so they persist as thumbnails in the sent message and never
+ *  reach the workspace-upload path). */
+export interface ComposerControlInject {
   insertDraft: (text: string) => void
+  /** Attach image files to the draft the way an editor drop does; returns null
+   *  when handled, or an error message (an unsupported media type) so the
+   *  caller can fall back to a workspace upload. */
+  attachImages: (files: readonly File[]) => string | null
+}
+
+/** Injected into the preview strip: clear its rows when the composer submits. */
+export interface ComposerStripInject {
+  /** Subscribe to this session's submit; fires once per send. Returns an
+   *  unsubscribe. */
+  watchSubmit: (onSubmit: () => void) => () => void
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -50,9 +63,9 @@ export const inject = ['slots', 'locale', 'sessions']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-composer-tools: dictionaries')
 
-  // Per-session draft writer, resolved the way ui-commands reaches the input
-  // facade: sessionId → session scope → the session's conversation input.
-  const draftInserter = (sessionId: unknown): ComposerDraftInsert => {
+  // Per-session leading-row inject, resolved the way ui-commands reaches the
+  // input facade: sessionId → session scope → the session's conversation input.
+  const controlInject = (sessionId: unknown): ComposerControlInject => {
     const actx = ctx.sessions.scope(sessionId as never)
     return {
       insertDraft: (text: string) => {
@@ -64,6 +77,34 @@ export function apply(ctx: ClientContext): void {
         const separator = current === '' || /\s$/.test(current) ? '' : ' '
         input.setDraft(current + separator + text)
       },
+      attachImages: (files: readonly File[]): string | null => {
+        if (actx === undefined) return 'no session scope'
+        const conversation = actx.get('conversation')
+        if (conversation === undefined) return 'no conversation service'
+        return conversation.addImagesFromFiles(actx, files)
+      },
+    }
+  }
+
+  // The strip clears itself on send: the input phase enters 'submitting' once
+  // per submit, and the strip is mounted (rendering null while empty) whenever
+  // this slot is active, so the subscription is live exactly when there is
+  // anything to clear.
+  const stripInject = (sessionId: unknown): ComposerStripInject => {
+    const actx = ctx.sessions.scope(sessionId as never)
+    return {
+      watchSubmit: (onSubmit: () => void): (() => void) => {
+        if (actx === undefined) return () => {}
+        const conversation = actx.get('conversation')
+        if (conversation === undefined) return () => {}
+        const input = conversation.input.for(actx)
+        let wasSubmitting = input.state.getSnapshot().phase === 'submitting'
+        return input.state.subscribe(() => {
+          const submitting = input.state.getSnapshot().phase === 'submitting'
+          if (submitting && !wasSubmitting) onSubmit()
+          wasSubmitting = submitting
+        })
+      },
     }
   }
 
@@ -72,7 +113,7 @@ export function apply(ctx: ClientContext): void {
     id: 'workspace-upload',
     order: 10,
     locale: NS,
-    inject: draftInserter,
+    inject: controlInject,
   }, UploadControl))
 
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
@@ -80,7 +121,7 @@ export function apply(ctx: ClientContext): void {
     id: 'voice-input',
     order: 11,
     locale: NS,
-    inject: draftInserter,
+    inject: controlInject,
   }, VoiceControl))
 
   ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
@@ -88,5 +129,6 @@ export function apply(ctx: ClientContext): void {
     id: 'upload-strip',
     order: 10,
     locale: NS,
+    inject: stripInject,
   }, UploadStrip))
 }

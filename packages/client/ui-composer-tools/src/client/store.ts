@@ -107,3 +107,14 @@ export function remove(sessionId: string, id: string): void {
   b.items = b.items.filter(item => item.id !== id)
   emit(b)
 }
+
+/** Drop every row for a session (on send) and free their preview URLs. */
+export function clear(sessionId: string): void {
+  const b = buckets.get(sessionId)
+  if (b === undefined || b.items.length === 0) return
+  for (const item of b.items) {
+    if (item.previewUrl !== undefined) URL.revokeObjectURL(item.previewUrl)
+  }
+  b.items = EMPTY
+  emit(b)
+}

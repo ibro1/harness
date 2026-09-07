@@ -7,11 +7,14 @@ import { IconPaperclipOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import * as store from './store.ts'
 import css from './tools.module.css'
 
-/** `t` (namespace-scoped), the session-scope `sessionId`, and the injected
- *  composer-draft writer. */
+/** `t` (namespace-scoped), the session-scope `sessionId`, the composer-draft
+ *  writer, and the vision-attachment router for images. */
 export type UploadControlProps = PropsRuntime<'conversation.input.left'>
   & PropsLocale<'composer-tools'>
-  & { insertDraft: (text: string) => void }
+  & {
+    insertDraft: (text: string) => void
+    attachImages: (files: readonly File[]) => string | null
+  }
 
 /** Host route; matches composer-tools.mjs's default path. */
 const UPLOAD_PATH = '/workspace-upload'
@@ -55,18 +58,29 @@ function uploadOne(
 }
 
 /**
- * Leading-row icon that picks one or more files and uploads each into the
- * current session's workspace in parallel. Rows and progress live in the shared
- * store (rendered by UploadStrip); when the whole pick finishes, one draft note
- * lists what landed.
- * @param props - `sessionId`, `t`, and `insertDraft`.
+ * Leading-row icon that picks one or more files. Images route through the
+ * built-in vision attachment (a thumbnail that persists in the sent message,
+ * with no path text); every other file uploads into the current session's
+ * workspace in parallel, with rows and progress in the shared store (rendered
+ * by UploadStrip) and one draft note listing the landed paths when the batch
+ * finishes.
+ * @param props - `sessionId`, `t`, `insertDraft`, and `attachImages`.
  */
-export function UploadControl({ sessionId, t, insertDraft }: UploadControlProps) {
+export function UploadControl({ sessionId, t, insertDraft, attachImages }: UploadControlProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const onPick = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? [])
+    const picked = Array.from(event.target.files ?? [])
     event.target.value = ''
+    if (picked.length === 0) return
+
+    // Images go to the vision attachment; only if that rejects the media type
+    // (a non-null message) do they fall back to a workspace upload, so nothing
+    // a user picked is ever silently lost.
+    const images = picked.filter(file => file.type.startsWith('image/'))
+    const others = picked.filter(file => !file.type.startsWith('image/'))
+    const fallback = images.length > 0 && attachImages(images) !== null ? images : []
+    const files = [...others, ...fallback]
     if (files.length === 0) return
 
     const items = store.addItems(sessionId, files)

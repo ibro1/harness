@@ -62,6 +62,18 @@ export interface IConversation {
    * @returns completion of the page pull.
    */
   loadOlder(): Promise<void>
+  /**
+   * Attach browser image files to a session's draft exactly as an editor drop
+   * does: create runtime draft images, register their ids on that session's
+   * input, and release them again if the input refuses them (e.g. a busy
+   * admission phase or the per-message image limit). Non-image media types
+   * reject inside; other files belong on a different path.
+   * @param actx - session scope whose composer receives the images.
+   * @param files - image files to attach.
+   * @returns null when the images were handled (added, or silently refused by a
+   *   full input); an error message when a file's media type is unsupported.
+   */
+  addImagesFromFiles(actx: Context, files: readonly File[]): string | null
 }
 
 /** Create one browser-only draft descriptor; only its id enters input state. */
@@ -308,6 +320,19 @@ export class ConversationController extends Service implements IConversation {
    */
   releaseDraftImages(attachments: readonly ComposerAttachment[]): void {
     for (const attachment of attachments) this.releaseDraftImage(attachment.id)
+  }
+
+  /** Attach image files to a session draft: create, register, release on refusal. */
+  addImagesFromFiles(actx: Context, files: readonly File[]): string | null {
+    try {
+      const images = this.createDraftImages(files)
+      if (!this.input.for(actx).addImages(images.map(image => image.id))) {
+        this.releaseDraftImages(images)
+      }
+      return null
+    } catch (error: unknown) {
+      return error instanceof Error ? error.message : String(error)
+    }
   }
 
   /** Apply one operation to a pending queue occurrence. */
