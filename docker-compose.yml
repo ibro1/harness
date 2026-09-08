@@ -73,6 +73,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       TRANSCRIBE_PROVIDER: ${TRANSCRIBE_PROVIDER:-}
+      # video-use TTS (speak.py): Gemini voiceover with prompt-steered accents.
+      # Durable key from aistudio.google.com/apikey (starts AIzaSy); the
+      # ELEVENLABS_API_KEY above doubles as the second TTS provider.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh

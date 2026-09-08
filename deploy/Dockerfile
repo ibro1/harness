@@ -51,9 +51,14 @@ RUN git clone --depth 1 https://github.com/browser-use/video-use /opt/video-use 
     && pip3 install --no-cache-dir --break-system-packages requests numpy pillow \
     && chown -R node:node /opt/video-use
 
-# Fork-local overlay: a provider-agnostic transcriber (ElevenLabs Scribe plus
-# Groq / OpenAI Whisper) replacing the upstream ElevenLabs-only one.
+# Fork-local overlays. (1) A provider-agnostic transcriber (ElevenLabs Scribe
+# plus Deepgram / AssemblyAI / Groq / OpenAI Whisper) replacing the upstream
+# ElevenLabs-only one. (2) speak.py — a TTS/voiceover helper (Gemini + ElevenLabs)
+# absent upstream. (3) SKILL.md: upstream's text plus the speak.py + GEMINI_API_KEY
+# notes, so the skill catalog surfaces the new helper.
 COPY --chown=node:node deploy/skills/video-use/transcribe.py /opt/video-use/helpers/transcribe.py
+COPY --chown=node:node deploy/skills/video-use/speak.py /opt/video-use/helpers/speak.py
+COPY --chown=node:node deploy/skills/video-use/SKILL.md /opt/video-use/SKILL.md
 
 # The client build stamps the source commit into its metadata and reads it from
 # git when this is unset. `.git` is not in the build context (see
