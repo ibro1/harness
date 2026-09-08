@@ -10,9 +10,9 @@
 // body streams straight to disk under a size cap rather than buffering — a
 // video is gigabytes.
 
-import { createWriteStream } from 'node:fs'
-import { rename, rm, mkdir } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { createWriteStream, createReadStream } from 'node:fs'
+import { rename, rm, mkdir, readdir, stat } from 'node:fs/promises'
+import { basename, join, resolve, relative, extname, isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 
 export const name = 'composer-tools'
@@ -30,7 +30,98 @@ export const Config = z.object({
   voicePath: z.string().default('/voice-transcribe'),
   /** Largest audio clip accepted for transcription, in bytes. */
   voiceMaxBytes: z.natural().min(1).default(DEFAULT_VOICE_MAX_BYTES),
+  /** Absolute route path that lists the session's output files (its `edit/` dir). */
+  filesPath: z.string().default('/workspace-files'),
+  /** Absolute route path that streams one session file back for preview/download. */
+  downloadPath: z.string().default('/workspace-download'),
 })
+
+/** Content type by extension for the download route; octet-stream otherwise. */
+const CONTENT_TYPES = {
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.srt': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json',
+}
+
+/** Coarse media class for the preview the client renders. */
+function kindOf(name) {
+  const ext = extname(name).toLowerCase()
+  if (['.mp4', '.webm', '.mov', '.mkv'].includes(ext)) return 'video'
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) return 'image'
+  if (['.mp3', '.wav', '.m4a', '.ogg', '.flac'].includes(ext)) return 'audio'
+  return 'other'
+}
+
+function contentType(name) {
+  return CONTENT_TYPES[extname(name).toLowerCase()] ?? 'application/octet-stream'
+}
+
+/** Files under `<cwd>/edit/` — the skill's output directory — newest first. */
+async function listOutputs(cwd) {
+  const dir = join(cwd, 'edit')
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return [] // no edit/ yet — the session has produced nothing
+  }
+  const files = []
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    try {
+      const s = await stat(join(dir, entry.name))
+      files.push({ name: entry.name, rel: `edit/${entry.name}`, bytes: s.size, mtime: s.mtimeMs, kind: kindOf(entry.name) })
+    } catch {
+      // vanished between readdir and stat; skip it
+    }
+  }
+  files.sort((a, b) => b.mtime - a.mtime)
+  return files
+}
+
+/** Stream a file with Range support (so <video> can seek) and a disposition of
+ *  the caller's choosing (inline preview vs. attachment download). */
+function streamFile(req, res, abs, size, name, inline) {
+  const type = contentType(name)
+  const disposition = `${inline ? 'inline' : 'attachment'}; filename="${name.replace(/"/g, '')}"`
+  const range = req.headers.range
+  const match = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range) : null
+  if (match) {
+    let start = match[1] === '' ? undefined : Number.parseInt(match[1], 10)
+    let end = match[2] === '' ? undefined : Number.parseInt(match[2], 10)
+    if (start === undefined) {
+      // suffix range "bytes=-N": the last N bytes
+      start = Math.max(0, size - (end ?? 0))
+      end = size - 1
+    } else if (end === undefined || end >= size) {
+      end = size - 1
+    }
+    if (start > end || start >= size) {
+      res.writeHead(416, { 'content-range': `bytes */${size}` })
+      res.end()
+      return
+    }
+    res.writeHead(206, {
+      'content-type': type,
+      'content-length': String(end - start + 1),
+      'content-range': `bytes ${start}-${end}/${size}`,
+      'accept-ranges': 'bytes',
+      'content-disposition': disposition,
+    })
+    if (req.method === 'HEAD') { res.end(); return }
+    createReadStream(abs, { start, end }).pipe(res)
+    return
+  }
+  res.writeHead(200, {
+    'content-type': type,
+    'content-length': String(size),
+    'accept-ranges': 'bytes',
+    'content-disposition': disposition,
+  })
+  if (req.method === 'HEAD') { res.end(); return }
+  createReadStream(abs).pipe(res)
+}
 
 /** Container extension for a recorded-audio content type, for the Groq filename. */
 const AUDIO_EXT = {
@@ -118,6 +209,22 @@ function safeName(raw) {
 export function apply(ctx, config) {
   announce(`upload route ${config.path} (max ${config.maxBytes} bytes)`)
   announce(`voice route ${config.voicePath} (max ${config.voiceMaxBytes} bytes, Groq Whisper)`)
+  announce(`files route ${config.filesPath}; download route ${config.downloadPath}`)
+
+  /** The session's authoritative workspace directory, or undefined with the
+   *  response already written. */
+  const resolveCwd = (res, sessionId) => {
+    if (sessionId === '') {
+      json(res, 400, { error: 'missing ?session=<id>' })
+      return undefined
+    }
+    const cwd = ctx.sessions.get(sessionId)?.header?.cwd
+    if (typeof cwd !== 'string' || cwd === '') {
+      json(res, 409, { error: `session "${sessionId}" is not active or has no workspace directory` })
+      return undefined
+    }
+    return cwd
+  }
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
@@ -234,4 +341,58 @@ export function apply(ctx, config) {
       }
     },
   }), 'composer-tools: voice transcription route')
+
+  // List the current session's outputs (its edit/ directory) so the composer
+  // can show a download/preview panel. Behind the password gate like the rest.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: config.filesPath,
+    handler: async (req, res) => {
+      if (req.method !== 'GET') {
+        json(res, 405, { error: 'method not allowed; use GET' })
+        return
+      }
+      const url = new URL(req.url ?? '/', 'http://x')
+      const cwd = resolveCwd(res, url.searchParams.get('session') ?? '')
+      if (cwd === undefined) return
+      json(res, 200, { files: await listOutputs(cwd) })
+    },
+  }), 'composer-tools: workspace files list route')
+
+  // Stream one file from the session's workspace back to the browser — inline
+  // for a preview, or as an attachment for download. The path is confined to
+  // the session cwd; traversal outside it is rejected.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: config.downloadPath,
+    handler: async (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        json(res, 405, { error: 'method not allowed; use GET' })
+        return
+      }
+      const url = new URL(req.url ?? '/', 'http://x')
+      const cwd = resolveCwd(res, url.searchParams.get('session') ?? '')
+      if (cwd === undefined) return
+
+      const rel = url.searchParams.get('path') ?? ''
+      const abs = resolve(cwd, rel)
+      const within = relative(cwd, abs)
+      if (rel === '' || within === '' || within.startsWith('..') || isAbsolute(within)) {
+        json(res, 400, { error: 'missing or unsafe ?path=<relative path within the workspace>' })
+        return
+      }
+      let info
+      try {
+        info = await stat(abs)
+      } catch {
+        json(res, 404, { error: `not found: ${rel}` })
+        return
+      }
+      if (!info.isFile()) {
+        json(res, 404, { error: `not a file: ${rel}` })
+        return
+      }
+      streamFile(req, res, abs, info.size, basename(abs), url.searchParams.get('inline') === '1')
+    },
+  }), 'composer-tools: workspace download route')
 }

@@ -20,6 +20,7 @@ import { en, zh, type ComposerToolsKey } from './locales.ts'
 import { UploadControl } from './UploadControl.tsx'
 import { VoiceControl } from './VoiceControl.tsx'
 import { UploadStrip } from './UploadStrip.tsx'
+import { OutputsControl } from './OutputsControl.tsx'
 
 export type { ComposerToolsKey } from './locales.ts'
 
@@ -123,6 +124,15 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: controlInject,
   }, VoiceControl))
+
+  // Downloads/previews the session's outputs; needs only the runtime sessionId
+  // and locale, so it takes no extra inject.
+  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+    name: 'conversation.input.left',
+    id: 'workspace-outputs',
+    order: 12,
+    locale: NS,
+  }, OutputsControl))
 
   ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
     name: 'conversation.composer.dock',

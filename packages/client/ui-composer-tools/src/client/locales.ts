@@ -15,6 +15,17 @@ export const zh = {
   'voice.errorKey': '语音转写未配置（缺少 Groq 密钥）',
   'voice.errorNetwork': '语音失败：网络错误',
   'voice.empty': '未检测到语音',
+  'outputs': '会话文件',
+  'outputs.title': '本次会话的产物',
+  'outputs.close': '关闭',
+  'outputs.refresh': '刷新',
+  'outputs.loading': '加载中…',
+  'outputs.error': '无法加载文件',
+  'outputs.empty': '暂无文件——本次会话尚未生成任何内容。',
+  'outputs.mb': '{n} MB',
+  'outputs.kb': '{n} KB',
+  'outputs.b': '{n} B',
+  'outputs.download': '下载 {name}',
 } satisfies Record<string, string>
 
 /** The composer-tools namespace key union. */
@@ -35,4 +46,15 @@ export const en = {
   'voice.errorKey': 'Voice transcription is not configured (no Groq key)',
   'voice.errorNetwork': 'Voice failed: network error',
   'voice.empty': 'No speech detected',
+  'outputs': 'Session files',
+  'outputs.title': 'Session outputs',
+  'outputs.close': 'Close',
+  'outputs.refresh': 'Refresh',
+  'outputs.loading': 'Loading…',
+  'outputs.error': 'Could not load files',
+  'outputs.empty': 'No files yet — the agent has not produced anything in this session.',
+  'outputs.mb': '{n} MB',
+  'outputs.kb': '{n} KB',
+  'outputs.b': '{n} B',
+  'outputs.download': 'Download {name}',
 } satisfies Record<ComposerToolsKey, string>
