@@ -72,7 +72,7 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 
 ## Helpers
 
-- **`speak.py "<text>"`** — TTS / voiceover, provider-agnostic (`--provider gemini|elevenlabs`, Gemini default), cached, writes a mono 16-bit WAV *stem*, prints its duration. Gemini has **no accent/voice-style/speed parameter** — accent, tone and PACE come from `--style` (a natural-language instruction prefixed to the text), e.g. `--style "Read aloud in a warm Nigerian accent, brisk advertising pace — no dawdling."`. Gemini reads ~40% slow without a pace note. `--normalize` (loudnorm to −18 LUFS — generated lines vary up to ~10 dB), `--verify` (round-trip through Scribe to catch mangled words). **Audio-led:** you cannot set a duration — generate the voice, read the printed duration, then cut picture to fit; if a line overruns, shorten the copy and regenerate, never time-stretch. Needs `GEMINI_API_KEY` (or `ELEVENLABS_API_KEY`). Cached on a hash of (provider, model, voice, style, text).
+- **`speak.py "<text>"`** — TTS / voiceover, provider-agnostic (`--provider gemini|elevenlabs`, Gemini default), cached, writes a mono 16-bit WAV *stem*, prints its duration. Gemini has **no accent/voice-style/speed parameter** — accent, tone and PACE come from `--style` (a natural-language instruction prefixed to the text), e.g. `--style "Read aloud in a warm Nigerian accent, brisk advertising pace — no dawdling."`. Gemini reads ~40% slow without a pace note. `--normalize` (loudnorm to −18 LUFS — generated lines vary up to ~10 dB), `--verify` (round-trip through Scribe to catch mangled words). **Audio-led:** you cannot set a duration — generate the voice, read the printed duration, then cut picture to fit; if a line overruns, shorten the copy and regenerate, never time-stretch. Needs `GEMINI_API_KEY` (or `ELEVENLABS_API_KEY`). Cached on a hash of (provider, model, voice, style, text). Gemini is the default and the right choice for an accented read (Nigerian, etc.) — the accent comes from `--style`, there is no accent voice to pick. Generate voiceovers ONLY through this helper (so provider, caching and normalization stay consistent); do not curl a TTS API directly. To force one, pass `--provider gemini` or `--provider elevenlabs`.
 - **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
@@ -289,6 +289,19 @@ Match the source unless the user asked for something specific. Common targets: `
 ```
 
 `grade` is a preset name or raw ffmpeg filter. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST.
+
+## Delivering outputs to the user
+
+Everything you render lands in `<cwd>/edit/` inside the container — a path the user cannot open. Two ways to get a finished file to them, both already wired in this deployment:
+
+1. **The Session-files panel.** The web composer has a folder icon that lists this session's `edit/` outputs with an inline preview and a one-tap download. The user can reach any render there on their own.
+2. **Hand them a direct link.** To point the user straight at a file, print a URL built from two environment variables that are present in your shell:
+
+   `https://$DSH_PUBLIC_HOST/workspace-download?session=$DSH_SESSION_ID&path=<path relative to your cwd>`
+
+   e.g. `https://$DSH_PUBLIC_HOST/workspace-download?session=$DSH_SESSION_ID&path=edit/final.mp4`. Resolve the two variables to their values in the URL you print. It downloads the file; add `&inline=1` to preview in the browser instead. The chat renders the URL as a tappable link. The route is confined to this session's workspace and sits behind the login, so it is safe to share. Use `/workspace-files?session=$DSH_SESSION_ID` to list what is available.
+
+When you finish a render, give the user this link — do not leave them with only the container path.
 
 ## Memory — `project.md`
 

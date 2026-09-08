@@ -211,6 +211,14 @@ const server = createServer(async (req, res) => {
       const stream = body.stream !== false
       const { prompt, savedImages } = formatPrompt(messages, system)
 
+      // The harness sends the originating session id (pi-ai adapter passes it in
+      // the request body). Expose it to the CLI as DSH_SESSION_ID so a skill can
+      // hand the user a download link back to THIS session's workspace, paired
+      // with $DSH_PUBLIC_HOST (e.g. the video-use skill's finished render).
+      const childEnv = body.sessionId !== undefined
+        ? { ...process.env, DSH_SESSION_ID: String(body.sessionId) }
+        : process.env
+
       const id = `chatcmpl-${Date.now()}`
       const created = Math.floor(Date.now() / 1000)
 
@@ -234,7 +242,7 @@ const server = createServer(async (req, res) => {
 
         const proc = spawn('agy', agyArgs(model), {
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: process.env,
+          env: childEnv,
         })
 
         let usage = null
@@ -349,7 +357,7 @@ const server = createServer(async (req, res) => {
       } else {
         const proc = spawn('agy', agyArgs(model), {
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: process.env,
+          env: childEnv,
         })
 
         let fullResponse = ''
