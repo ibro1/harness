@@ -149,6 +149,18 @@ function formatPrompt(messages, system) {
   return { prompt: promptParts.join('\n'), savedImages }
 }
 
+/** A short, human-readable summary of a tool step's arguments for the progress
+ *  line. Prefers a salient field (the command, url, path…) over the raw JSON. */
+function briefParams(info) {
+  const p = info?.parameters
+  if (!p || typeof p !== 'object') return ''
+  const salient = p.CommandLine ?? p.command ?? p.url ?? p.query
+    ?? p.path ?? p.file_path ?? p.selector ?? p.text
+  let s = salient !== undefined ? String(salient) : JSON.stringify(p)
+  s = s.replace(/\s+/g, ' ').trim()
+  return s.length > 140 ? s.slice(0, 137) + '…' : s
+}
+
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -227,6 +239,29 @@ const server = createServer(async (req, res) => {
 
         let usage = null
         let emittedText = false
+        let lastActivity = Date.now()
+
+        const send = (delta) => {
+          res.write(`data: ${JSON.stringify({
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{ index: 0, delta, finish_reason: null }],
+          })}\n\n`)
+          lastActivity = Date.now()
+        }
+        const sendContent = (text) => { emittedText = true; send({ content: text }) }
+        // Tool activity and progress ride the reasoning channel: they surface as
+        // live "thinking" without landing in the saved answer, and — just as
+        // important — each one is a stream event that resets the harness's idle
+        // watchdog, so a long tool-only phase no longer trips the 5-minute
+        // "stream idle timeout" that was silently retrying the whole turn.
+        const sendProgress = (text) => send({ reasoning_content: text })
+
+        // Belt-and-braces for a single quiet tool (a long render, a slow page):
+        // keep the stream warm so the idle watchdog never fires mid-tool.
+        const HEARTBEAT_MS = 40000
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded && Date.now() - lastActivity >= HEARTBEAT_MS) sendProgress('·')
+        }, 10000)
 
         proc.stderr.on('data', d => {
           console.error('[AGY stderr]', d.toString())
@@ -235,50 +270,37 @@ const server = createServer(async (req, res) => {
         const rl = createInterface({ input: proc.stdout })
         rl.on('line', line => {
           if (!line.trim()) return
-          try {
-            const parsed = JSON.parse(line)
-            if (parsed.event === 'step_update' && parsed.step_update?.text_delta) {
-              const text = parsed.step_update.text_delta
-              emittedText = true
-              const chunk = {
-                id,
-                object: 'chat.completion.chunk',
-                created,
-                model,
-                choices: [{
-                  index: 0,
-                  delta: { content: text },
-                  finish_reason: null,
-                }],
+          lastActivity = Date.now()
+          let parsed
+          try { parsed = JSON.parse(line) } catch { return }
+
+          if (parsed.event === 'step_update' && parsed.step_update) {
+            const su = parsed.step_update
+            if (su.step_type === 'tool' && su.tool_name) {
+              // ACTIVE opens a progress line for the call; DONE closes it with a
+              // tick + duration. Both keep the stream alive.
+              if (su.state === 'ACTIVE') {
+                const brief = briefParams(su.tool_info)
+                sendProgress(`\n🔧 ${su.tool_name}${brief ? ` — ${brief}` : ''}`)
+              } else if (su.state === 'DONE') {
+                const secs = typeof su.duration_seconds === 'number' ? ` (${su.duration_seconds.toFixed(1)}s)` : ''
+                sendProgress(` ✓${secs}`)
               }
-              res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+              return
             }
-            if (parsed.event === 'result' && parsed.result) {
-              if (parsed.result.usage) {
-                usage = parsed.result.usage
-              }
-              if (!emittedText && parsed.result.response) {
-                const chunk = {
-                  id,
-                  object: 'chat.completion.chunk',
-                  created,
-                  model,
-                  choices: [{
-                    index: 0,
-                    delta: { content: parsed.result.response },
-                    finish_reason: null,
-                  }],
-                }
-                res.write(`data: ${JSON.stringify(chunk)}\n\n`)
-                emittedText = true
-              }
+            if (su.step_type === 'agent_response' && su.text_delta) {
+              sendContent(su.text_delta)
+              return
             }
-          } catch (e) {
-            // ignore non-json
+          }
+          if (parsed.event === 'result' && parsed.result) {
+            if (parsed.result.usage) usage = parsed.result.usage
+            if (!emittedText && parsed.result.response) sendContent(parsed.result.response)
           }
         })
 
         proc.on('close', code => {
+          clearInterval(heartbeat)
           console.log(`[AGY proc closed] code=${code} emittedText=${emittedText}`)
           const finalChunk = {
             id,
@@ -305,6 +327,7 @@ const server = createServer(async (req, res) => {
         })
 
         proc.on('error', err => {
+          clearInterval(heartbeat)
           console.error('agy process error:', err)
           res.write(`data: {"error": {"message": ${JSON.stringify(String(err))}}}\n\n`)
           res.end()
@@ -317,6 +340,7 @@ const server = createServer(async (req, res) => {
         proc.stdin.end()
 
         res.on('close', () => {
+          clearInterval(heartbeat)
           if (!res.writableEnded && !proc.killed) {
             console.log('[AGY] Client disconnected, killing process')
             proc.kill()
