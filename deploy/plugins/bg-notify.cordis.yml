@@ -1,0 +1,13 @@
+# Background-job completion notifier, layered over the shipped Web composition.
+#
+# Registers the loopback /bg-notify route (see bg-notify.mjs). A detached job
+# the agent launched POSTs to it on completion; the route wakes the originating
+# session (agent.followup) so the agent reports the result and a download link.
+# Its auth is the shared DSH_BG_TOKEN the entrypoint generates and exports as
+# DSH_NOTIFY_URL for the CLIs; with no token the route disables itself.
+#
+# Referenced by relative path because this plugin is fork-local and unpublished,
+# the same way the other deploy/plugins cordis.yml files are.
+- insert:
+    - id: bg-notify
+      name: './bg-notify.mjs'

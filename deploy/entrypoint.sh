@@ -18,6 +18,14 @@ INTERNAL_PORT="${DSH_INTERNAL_PORT:-3081}"
 # harness for the same socket and lost. Keep it in step with the
 # harness-webhook Traefik label in docker-compose.yml.
 WEBHOOK_PUBLIC_PORT="${DSH_GITHUB_WEBHOOK_PUBLIC_PORT:-3083}"
+
+# Background-job completion notifier. A detached job the agent launches pings the
+# loopback /bg-notify route on finish, which wakes the session to report + link.
+# The token is its auth (loopback + secret; not the password gate, since the
+# caller is a container-local process). Generated per boot and exported to the
+# CLIs as DSH_NOTIFY_URL, inherited by the bridges and their agy/opencode children.
+export DSH_BG_TOKEN="${DSH_BG_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+export DSH_NOTIFY_URL="http://127.0.0.1:${INTERNAL_PORT}/bg-notify?token=${DSH_BG_TOKEN}"
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -270,6 +278,11 @@ fi
 # it sits behind the password gate, so nothing extra is needed to enable it.
 patch_args+=(--patch "$APP_DIR/deploy/plugins/composer-tools.cordis.yml")
 echo "[entrypoint] Composer upload route enabled at /workspace-upload"
+
+# Background-job completion notifier (see the DSH_BG_TOKEN block above). Lets a
+# long detached job wake the session on completion instead of blocking a turn.
+patch_args+=(--patch "$APP_DIR/deploy/plugins/bg-notify.cordis.yml")
+echo "[entrypoint] Background notify route enabled at /bg-notify (jobs POST \$DSH_NOTIFY_URL to wake the session)"
 
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
 for host in ${DSH_EXTRA_TRUSTED_HOSTS:-}; do
