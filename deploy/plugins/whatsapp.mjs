@@ -130,10 +130,10 @@ export function apply(ctx) {
   // Serve the `whatsapp` settings namespace so the Settings → Plugins tab lists
   // the card (its key must be both a registered card AND a served namespace).
   // Empty schema: there is nothing to configure — linking happens via the QR.
-  ctx.effect(
-    () => ctx.settings.register('whatsapp', z.object({}).description('WhatsApp is linked from this card by scanning a QR — nothing to configure.'), { base: {} }),
-    'whatsapp: settings namespace',
-  )
+  // Called directly, NOT via ctx.effect: settings.register returns a scope, not
+  // a disposer, so wrapping it makes cordis reject it as an "Invalid effect"
+  // (the same direct call dokploy's host plugin uses).
+  ctx.settings.register('whatsapp', z.object({}).description('WhatsApp is linked from this card by scanning a QR — nothing to configure.'), { base: {} })
 
   const route = (path, handler) =>
     ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `whatsapp: ${path}`)
