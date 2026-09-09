@@ -1,0 +1,9 @@
+# WhatsApp control, layered over the shipped Web composition.
+#
+# Referenced by path because this plugin is fork-local and unpublished. The Node
+# half proxies the whatsmeow sidecar (deploy/whatsapp-svc) and enforces the
+# send-approval gate; the settings card (ui-whatsapp) and the MCP tools both talk
+# to its routes. Disabled at the plugin level when WA_SVC_TOKEN is unset.
+- insert:
+    - id: whatsapp
+      name: './whatsapp.mjs'

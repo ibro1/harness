@@ -7,6 +7,17 @@
 # Debian base is deliberate — both binaries are dynamically linked against
 # glibc and will not run on an Alpine/musl image.
 
+# ---- WhatsApp sidecar: compile the whatsmeow service ahead of the app image ----
+# A static, CGO-free binary (pure-Go SQLite), so it drops into the slim runtime
+# with no shared-library or toolchain baggage. go.mod/go.sum are copied first so
+# the module download layer caches across source-only changes.
+FROM golang:1.27-bookworm AS wa-builder
+WORKDIR /src
+COPY deploy/whatsapp-svc/go.mod deploy/whatsapp-svc/go.sum ./
+RUN go mod download
+COPY deploy/whatsapp-svc/ ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /wa-svc .
+
 FROM node:22-bookworm-slim
 
 # git: the agent's own tooling. ripgrep: the harness search path.
@@ -62,6 +73,11 @@ COPY --chown=node:node deploy/skills/video-use/speak.py /opt/video-use/helpers/s
 # bg-notify hook on completion, so a long render never blocks the agent's turn.
 COPY --chown=node:node deploy/skills/video-use/render.py /opt/video-use/helpers/render.py
 COPY --chown=node:node deploy/skills/video-use/SKILL.md /opt/video-use/SKILL.md
+
+# WhatsApp sidecar binary from the builder stage. /usr/local/bin, not
+# /opt/harness/bin — the latter is a host bind mount at runtime and would shadow
+# anything baked here.
+COPY --from=wa-builder --chmod=755 /wa-svc /usr/local/bin/wa-svc
 
 # The client build stamps the source commit into its metadata and reads it from
 # git when this is unset. `.git` is not in the build context (see

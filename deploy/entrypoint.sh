@@ -26,6 +26,24 @@ WEBHOOK_PUBLIC_PORT="${DSH_GITHUB_WEBHOOK_PUBLIC_PORT:-3083}"
 # CLIs as DSH_NOTIFY_URL, inherited by the bridges and their agy/opencode children.
 export DSH_BG_TOKEN="${DSH_BG_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
 export DSH_NOTIFY_URL="http://127.0.0.1:${INTERNAL_PORT}/bg-notify?token=${DSH_BG_TOKEN}"
+
+# WhatsApp integration (whatsmeow sidecar + Node proxy + MCP). Enabled unless
+# DSH_WHATSAPP=0 or the sidecar binary is missing. Two per-boot tokens: WA_SVC_TOKEN
+# gates the sidecar's loopback API (Node proxy -> sidecar); WA_AGENT_TOKEN gates
+# the command route the MCP calls. The whatsmeow session lives on the state
+# volume, so a scanned device link survives redeploys.
+WHATSAPP_ENABLED=0
+if [[ "${DSH_WHATSAPP:-1}" != "0" ]] && command -v wa-svc >/dev/null 2>&1; then
+  WHATSAPP_ENABLED=1
+  export WA_SVC_TOKEN="${WA_SVC_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+  export WA_AGENT_TOKEN="${WA_AGENT_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+  export WA_SVC_ADDR="127.0.0.1:8003"
+  export WA_SVC_URL="http://127.0.0.1:8003"
+  export WA_COMMAND_URL="http://127.0.0.1:${INTERNAL_PORT}/whatsapp/command"
+  export WA_DB_PATH="$HOME/.dsh/whatsapp/store.db"
+  export WA_LOG="${WA_LOG:-WARN}"
+  mkdir -p "$HOME/.dsh/whatsapp"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -136,6 +154,14 @@ respawn() {
 respawn agy-bridge "$APP_DIR/agy-bridge.mjs" &
 respawn opencode-bridge "$APP_DIR/opencode-bridge.mjs" &
 
+# WhatsApp sidecar (a compiled binary, not a node script — its own respawn loop).
+# It holds the whatsmeow connection and serves the loopback API the Node proxy
+# calls; until a device is linked it just holds a QR.
+if [[ "$WHATSAPP_ENABLED" == "1" ]]; then
+  ( while true; do wa-svc || echo "[entrypoint] wa-svc exited ($?), restarting in 3s" >&2; sleep 3; done ) &
+  echo "[entrypoint] WhatsApp sidecar (whatsmeow) on $WA_SVC_ADDR; session at $WA_DB_PATH"
+fi
+
 # --trusted-host restores the DNS-rebinding / cross-site fence for the public
 # authority. Additional authorities (a second domain, a LAN IP) go in
 # DSH_EXTRA_TRUSTED_HOSTS, space separated.
@@ -220,6 +246,29 @@ if [[ "${DSH_DOKPLOY:-1}" != "0" ]]; then
     fi
   else
     echo "[entrypoint] NOTE: set DSH_DOKPLOY_TOKEN to expose Dokploy tools to the agy/opencode CLIs over MCP."
+  fi
+fi
+
+# WhatsApp integration: the Node proxy plugin (settings card + send-approval
+# gate) plus the whatsmeow tools over MCP. Enabled block set near the top, where
+# the tokens are minted and the sidecar is started.
+if [[ "$WHATSAPP_ENABLED" == "1" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/whatsapp.cordis.yml")
+  echo "[entrypoint] WhatsApp plugin enabled (Settings -> Plugins -> WhatsApp)"
+  # agy/opencode run their own loop and drop native tools, so expose the WhatsApp
+  # tools to them over MCP (like the Dokploy tools). Direct-provider agents get
+  # them natively from the plugin.
+  if command -v agy >/dev/null 2>&1; then
+    agy mcp add --env "WA_COMMAND_URL=$WA_COMMAND_URL" --env "WA_AGENT_TOKEN=$WA_AGENT_TOKEN" \
+      dsh-whatsapp node "$APP_DIR/deploy/mcp/whatsapp-mcp.mjs" >/dev/null 2>&1 \
+      && echo "[entrypoint] Registered the WhatsApp tools with agy as the MCP server 'dsh-whatsapp'" \
+      || echo "[entrypoint] WARNING: could not register the WhatsApp MCP server with agy." >&2
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    WA_COMMAND_URL="$WA_COMMAND_URL" \
+      node "$APP_DIR/deploy/mcp/register-opencode.mjs" "$APP_DIR/deploy/mcp/whatsapp-mcp.mjs" dsh-whatsapp WA_AGENT_TOKEN WA_COMMAND_URL >/dev/null 2>&1 \
+      && echo "[entrypoint] Registered the WhatsApp tools with opencode as the MCP server 'dsh-whatsapp'" \
+      || echo "[entrypoint] WARNING: could not register the WhatsApp MCP server with opencode." >&2
   fi
 fi
 
