@@ -27,6 +27,14 @@ export const inject = ['webServer', 'settings']
 const SVC_URL = (process.env.WA_SVC_URL ?? 'http://127.0.0.1:8003').replace(/\/$/, '')
 const SVC_TOKEN = (process.env.WA_SVC_TOKEN ?? '').trim()
 const AGENT_TOKEN = (process.env.WA_AGENT_TOKEN ?? '').trim()
+// The token another service on this box presents to drive its OWN WhatsApp
+// sessions. Separate from WA_AGENT_TOKEN (this harness's agent) and from
+// DSH_AUTH_API_TOKEN (the whole harness): a marketing app that links its
+// tenants' phones should hold neither of those.
+const EXTERNAL_TOKEN = (process.env.WA_EXTERNAL_TOKEN ?? '').trim()
+// The session the card and the agent drive. External callers may never name it,
+// so a tenant cannot act as, or read, the operator's own WhatsApp.
+const DEFAULT_SESSION = (process.env.WA_DEFAULT_SESSION ?? 'default').trim() || 'default'
 
 /** Pending sends awaiting operator approval: id → {id,to,name,text,createdAt}.
  *  In-memory on purpose: a draft the operator never approves evaporates on
@@ -59,10 +67,16 @@ function json(res, status, body) {
 }
 
 /** Call the sidecar; returns { status, body } (body is parsed JSON or {}). */
-async function svc(path, { method = 'GET', body } = {}) {
+async function svc(path, { method = 'GET', body, session } = {}) {
   const resp = await fetch(`${SVC_URL}${path}`, {
     method,
-    headers: { 'X-WA-Token': SVC_TOKEN, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: {
+      'X-WA-Token': SVC_TOKEN,
+      // Omitted for the card and the agent, so the sidecar applies its default
+      // session — the operator's own account.
+      ...(session === undefined ? {} : { 'X-WA-Session': session }),
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   let parsed = {}
@@ -211,6 +225,70 @@ export function apply(ctx) {
     if (body && typeof body.id === 'string') pending.delete(body.id)
     json(res, 200, { ok: true })
   })
+
+  // ---- External API (another service on this box, one session per tenant) ----
+  //
+  // Reachable over the network, unlike the agent command route, because the
+  // caller is a different container. Three properties make that safe:
+  //
+  //   - its own token (WA_EXTERNAL_TOKEN), so holding it grants WhatsApp
+  //     sessions and nothing else in the harness;
+  //   - a session key is REQUIRED, so a caller cannot fall through to the
+  //     sidecar's default;
+  //   - the default session is refused outright, so no tenant can send as, or
+  //     read, the operator's own linked phone.
+  //
+  // There is deliberately no approval gate here. The gate exists because the
+  // harness's agent is the one drafting; an external service is acting for a
+  // tenant on their own linked account, and owns its own policy.
+  if (EXTERNAL_TOKEN !== '') {
+    const EXTERNAL_ROUTES = {
+      '/whatsapp/api/status': { path: '/status', method: 'GET' },
+      '/whatsapp/api/login': { path: '/login', method: 'POST' },
+      '/whatsapp/api/logout': { path: '/logout', method: 'POST' },
+      '/whatsapp/api/send': { path: '/send', method: 'POST' },
+      '/whatsapp/api/messages': { path: '/messages', method: 'GET' },
+      '/whatsapp/api/chats': { path: '/chats', method: 'GET' },
+      '/whatsapp/api/contacts': { path: '/contacts', method: 'GET' },
+      '/whatsapp/api/resolve': { path: '/resolve', method: 'GET' },
+    }
+    for (const [routePath, target] of Object.entries(EXTERNAL_ROUTES)) {
+      ctx.effect(() => ctx.webServer.register({
+        kind: 'exact',
+        path: routePath,
+        authenticate: false,
+        handler: async (req, res) => {
+          if (SVC_TOKEN === '') { json(res, 503, { error: 'WhatsApp not configured' }); return }
+          const auth = req.headers['authorization'] ?? ''
+          if (auth !== `Bearer ${EXTERNAL_TOKEN}`) { json(res, 401, { error: 'unauthorized' }); return }
+
+          const url = new URL(req.url, 'http://localhost')
+          const session = (req.headers['x-wa-session'] ?? url.searchParams.get('session') ?? '').toString().trim()
+          if (session === '') { json(res, 400, { error: 'X-WA-Session is required' }); return }
+          if (session === DEFAULT_SESSION) {
+            json(res, 403, { error: 'the default session is the operator\'s own account and is not reachable here' })
+            return
+          }
+
+          // Carry through the sidecar's own query parameters (chat, limit,
+          // query), minus the session, which travels as a header.
+          url.searchParams.delete('session')
+          const qs = url.searchParams.toString()
+          const sidecarPath = `${target.path}${qs === '' ? '' : `?${qs}`}`
+
+          const body = target.method === 'POST' ? await readJson(req) : undefined
+          if (target.method === 'POST' && body === undefined) { json(res, 400, { error: 'invalid JSON body' }); return }
+          try {
+            const out = await svc(sidecarPath, { method: target.method, body, session })
+            json(res, out.status, out.body)
+          } catch (error) {
+            json(res, 502, { error: `sidecar unreachable: ${String(error)}` })
+          }
+        },
+      }), `whatsapp: ${routePath}`)
+    }
+    announce(`external API enabled on /whatsapp/api/* (session required, "${DEFAULT_SESSION}" refused)`)
+  }
 
   // ---- Agent command route (loopback + Bearer token; the MCP calls this) ----
   // GET → tool catalogue; POST { name, args } → execute. Mirrors dokploy.
