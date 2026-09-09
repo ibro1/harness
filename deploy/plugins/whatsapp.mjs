@@ -45,8 +45,10 @@ const TOOLS = [
     parameters: { type: 'object', properties: { chat: { type: 'string', description: 'Contact name, phone number, or JID. Omit for the latest across all chats.' }, limit: { type: 'number', description: 'Max messages (default 30).' } }, additionalProperties: false } },
   { name: 'whatsapp_resolve', description: 'Resolve a contact name or phone number to a WhatsApp id, to confirm a recipient before sending.',
     parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false } },
-  { name: 'whatsapp_send', description: 'Queue a WhatsApp message for the user to approve. It is NOT sent until the user approves it in Settings → Plugins → WhatsApp; always tell the user to approve it there.',
-    parameters: { type: 'object', properties: { to: { type: 'string', description: 'Recipient: contact name, phone number, or JID.' }, text: { type: 'string', description: 'Message text.' } }, required: ['to', 'text'], additionalProperties: false } },
+  { name: 'whatsapp_send', description: 'Send or queue a WhatsApp message. BY DEFAULT (send_now omitted/false) the message is NOT sent — it is queued for the user to approve, either by saying "yes"/"send it" in chat (then call whatsapp_approve) or in the WhatsApp card. When you queue, tell the user it is waiting for their approval. Set send_now=true ONLY when the user has explicitly told you to send automatically / take over WhatsApp for this conversation, and has not since told you to stop.',
+    parameters: { type: 'object', properties: { to: { type: 'string', description: 'Recipient: contact name, phone number, or JID.' }, text: { type: 'string', description: 'Message text.' }, send_now: { type: 'boolean', description: 'Send immediately without queuing. Use ONLY if the user authorized automatic sending for this conversation; otherwise omit it so the message is queued for approval.' } }, required: ['to', 'text'], additionalProperties: false } },
+  { name: 'whatsapp_approve', description: 'Approve and send pending WhatsApp draft(s) — call this when the user approves a queued message in chat (e.g. says "yes", "send it"). Pass the draft id, or omit it to approve the single pending draft; if several are pending, ask the user which one.',
+    parameters: { type: 'object', properties: { id: { type: 'string', description: 'The pending draft id to approve. Omit to approve the only pending draft.' } }, additionalProperties: false } },
 ]
 
 function announce(message) { process.stderr.write(`whatsapp: ${message}\n`) }
@@ -66,6 +68,23 @@ async function svc(path, { method = 'GET', body } = {}) {
   let parsed = {}
   try { parsed = await resp.json() } catch { /* non-JSON */ }
   return { status: resp.status, body: parsed }
+}
+
+/** Send one pending draft via the sidecar and drop it from the queue. Shared by
+ *  the card's Approve button and the agent's whatsapp_approve tool. */
+async function sendDraft(draft) {
+  const { status, body } = await svc('/send', { method: 'POST', body: { to: draft.to, text: draft.text } })
+  if (status === 200) { pending.delete(draft.id); return { ok: true, sent: body } }
+  return { ok: false, status, error: body.error ?? `HTTP ${status}` }
+}
+
+/** Resolve a recipient and send immediately (take-over mode). */
+async function sendNow(to, text) {
+  const { status, body: resolved } = await svc(`/resolve?query=${encodeURIComponent(to)}`)
+  if (status !== 200 || typeof resolved.jid !== 'string') return { error: resolved.error ?? `could not resolve "${to}"` }
+  const { status: s2, body: out } = await svc('/send', { method: 'POST', body: { to: resolved.jid, text } })
+  if (s2 === 200) return { sent: true, to: resolved.name || to, text }
+  return { error: out.error ?? `send failed (HTTP ${s2})` }
 }
 
 /** Read a small JSON request body. */
@@ -109,12 +128,36 @@ async function runTool(name, args) {
     case 'whatsapp_resolve': return (await svc(`/resolve?query=${encodeURIComponent(String(args.query ?? ''))}`)).body
     case 'whatsapp_send': {
       if (typeof args.to !== 'string' || typeof args.text !== 'string' || args.text === '') return { error: 'need {to, text}' }
+      // Take-over mode: the user authorized automatic sending, so send now.
+      if (args.send_now === true) return sendNow(args.to, args.text)
+      // Default: queue for the user's approval (chat "yes" → whatsapp_approve, or the card).
       const { status, body: resolved } = await svc(`/resolve?query=${encodeURIComponent(args.to)}`)
       if (status !== 200 || typeof resolved.jid !== 'string') return { error: resolved.error ?? `could not resolve "${args.to}"` }
       const draft = { id: randomUUID(), to: resolved.jid, name: resolved.name || args.to, text: args.text, createdAt: Date.now() }
       pending.set(draft.id, draft)
       return { queued: true, id: draft.id, recipient: draft.name, text: draft.text,
-        note: 'Queued. This message will NOT be sent until the user approves it in Settings → Plugins → WhatsApp. Tell the user to approve it there.' }
+        note: 'Queued — NOT sent yet. Tell the user; they approve by saying "yes"/"send it" (then call whatsapp_approve) or in the WhatsApp card.' }
+    }
+    case 'whatsapp_approve': {
+      const list = [...pending.values()]
+      if (list.length === 0) return { error: 'nothing is pending to approve' }
+      let targets
+      if (typeof args.id === 'string' && args.id !== '') {
+        const draft = pending.get(args.id)
+        if (draft === undefined) return { error: `no pending send with id ${args.id}` }
+        targets = [draft]
+      } else if (list.length === 1) {
+        targets = list
+      } else {
+        return { needId: true, pending: list.map(d => ({ id: d.id, to: d.name, text: d.text })),
+          note: 'Several drafts are pending — ask the user which id to approve.' }
+      }
+      const approved = []
+      for (const draft of targets) {
+        const r = await sendDraft(draft)
+        approved.push({ to: draft.name, text: draft.text, ok: r.ok, ...(r.ok ? {} : { error: r.error }) })
+      }
+      return { approved }
     }
     default: return { error: `no such tool: ${name}` }
   }
@@ -154,9 +197,9 @@ export function apply(ctx) {
     const draft = body && typeof body.id === 'string' ? pending.get(body.id) : undefined
     if (draft === undefined) { json(res, 404, { error: 'no such pending send' }); return }
     try {
-      const { status, body: out } = await svc('/send', { method: 'POST', body: { to: draft.to, text: draft.text } })
-      if (status === 200) { pending.delete(draft.id); json(res, 200, { ok: true, sent: out }); return }
-      json(res, status, out)
+      const r = await sendDraft(draft)
+      if (r.ok) { json(res, 200, { ok: true, sent: r.sent }); return }
+      json(res, r.status ?? 502, { error: r.error })
     } catch (error) {
       json(res, 502, { error: `send failed: ${String(error)}` })
     }
