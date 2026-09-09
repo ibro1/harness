@@ -183,11 +183,11 @@ func (s *service) startPairing(ctx context.Context) {
 			s.setPairError(`this account is using WhatsApp's passkey linking, which this integration cannot complete; on the phone choose "Link with QR code instead"`)
 			s.log.Warnf("pairing requested a WebAuthn passkey; cannot complete")
 		case whatsmeow.QRChannelEventError:
-			s.setPairError(fmt.Sprintf("pairing error: %v", evt.Error))
+			s.failPairing(fmt.Sprintf("pairing error: %v", evt.Error))
 			s.log.Errorf("pairing error: %v", evt.Error)
 			return
 		case "err-client-outdated":
-			s.setPairError("WhatsApp rejected this client as outdated; the whatsmeow build needs updating")
+			s.failPairing("WhatsApp rejected this client as outdated; the whatsmeow build needs updating")
 			s.log.Errorf("pairing rejected: client outdated")
 			return
 		case "err-scanned-without-multidevice":
@@ -195,11 +195,11 @@ func (s *service) startPairing(ctx context.Context) {
 			s.setPairError("scanned without multi-device enabled; enable multi-device on the phone, then rescan")
 			s.log.Warnf("scanned without multidevice enabled")
 		case "err-unexpected-state":
-			s.setPairError("unexpected pairing state (the device may already be paired); reopen the card")
+			s.failPairing("unexpected pairing state (the device may already be paired); reopen the card")
 			s.log.Warnf("unexpected pairing state")
 			return
 		case "timeout":
-			s.setPairError("the QR code expired before pairing completed; press Link to get a fresh code")
+			s.failPairing("the QR code expired before pairing completed; press Link to get a fresh code")
 			s.log.Warnf("pairing timed out")
 			return
 		default:
@@ -210,6 +210,18 @@ func (s *service) startPairing(ctx context.Context) {
 
 func (s *service) setPairError(msg string) {
 	s.mu.Lock()
+	s.pairError = msg
+	s.mu.Unlock()
+}
+
+// failPairing records a terminal failure AND clears the now-dead QR, so the
+// card stops rendering an expired code and re-shows the Link button. Leaving a
+// stale QR up invites the user to keep scanning a dead code, which feeds
+// WhatsApp's "try again later" rate limit.
+func (s *service) failPairing(msg string) {
+	s.mu.Lock()
+	s.qrCode = ""
+	s.qrExpiry = time.Time{}
 	s.pairError = msg
 	s.mu.Unlock()
 }
