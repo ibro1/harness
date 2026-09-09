@@ -121,11 +121,33 @@ func main() {
 	logLevel := env("WA_LOG", "WARN")
 	dbLog := waLog.Stdout("wa-db", logLevel, true)
 
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	// Several whatsmeow clients share this file once more than one session is
+	// live, and each keeps up a chatty stream of small writes (app-state
+	// patches, signal sessions, contacts). Three settings make that safe:
+	//
+	//   WAL          readers no longer block the writer, which is most of the
+	//                contention between sessions.
+	//   NORMAL       WAL's usual durability pairing: far fewer fsyncs, so the
+	//                write lock is held for a fraction of the time.
+	//   busy_timeout a real ceiling for the waits that remain.
+	//
+	// None of those is sufficient on its own. A connection that holds a read
+	// transaction and then needs to write gets SQLITE_BUSY *immediately* rather
+	// than waiting, because backing off could only deadlock — busy_timeout does
+	// not apply to it. Capping the pool at one connection removes that case
+	// entirely: with a single connection there is no cross-connection
+	// contention to resolve. Writes serialize either way in SQLite, so the cost
+	// is latency on concurrent reads, not throughput on writes.
+	db, err := sql.Open("sqlite", "file:"+dbPath+
+		"?_pragma=foreign_keys(1)"+
+		"&_pragma=busy_timeout(15000)"+
+		"&_pragma=journal_mode(WAL)"+
+		"&_pragma=synchronous(NORMAL)")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "wa-svc: open db:", err)
 		os.Exit(1)
 	}
+	db.SetMaxOpenConns(1)
 	container := sqlstore.NewWithDB(db, "sqlite3", dbLog)
 	if err = container.Upgrade(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "wa-svc: store upgrade:", err)
