@@ -58,6 +58,9 @@ RUN git clone --depth 1 https://github.com/browser-use/video-use /opt/video-use 
 # notes, so the skill catalog surfaces the new helper.
 COPY --chown=node:node deploy/skills/video-use/transcribe.py /opt/video-use/helpers/transcribe.py
 COPY --chown=node:node deploy/skills/video-use/speak.py /opt/video-use/helpers/speak.py
+# render.py: a final render auto-backgrounds under the harness and fires the
+# bg-notify hook on completion, so a long render never blocks the agent's turn.
+COPY --chown=node:node deploy/skills/video-use/render.py /opt/video-use/helpers/render.py
 COPY --chown=node:node deploy/skills/video-use/SKILL.md /opt/video-use/SKILL.md
 
 # The client build stamps the source commit into its metadata and reads it from

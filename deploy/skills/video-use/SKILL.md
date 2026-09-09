@@ -77,7 +77,7 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
-- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
+- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline. Under the harness a FINAL render AUTO-BACKGROUNDS and wakes the session with the download link when it finishes (previews/drafts stay inline for QC; `--foreground` forces inline) — so just call it and END your turn; do not wait or poll. It prints the background job id and a progress log path.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
@@ -305,7 +305,7 @@ When you finish a render, give the user this link — do not leave them with onl
 
 ## Long jobs: don't block the turn — notify
 
-A short call (one `speak.py`, a quick render) runs foreground and you wait. But for genuinely long work — a big batch, a multi-minute final render — do NOT sit polling; you will just spin emitting "waiting…". Launch it detached and let it wake the session when it finishes:
+`render.py` already does this for you — a final render auto-backgrounds and notifies, so you never wait on it. For any OTHER genuinely long command (a big multi-file transcription, a long external download) do the same by hand rather than sitting and polling: launch it detached and let it wake the session when it finishes:
 
 ```
 nohup sh -c '<your command>; curl -s -XPOST "$DSH_NOTIFY_URL&session=$DSH_SESSION_ID&label=<short-label>&exit=$?"' >/dev/null 2>&1 &
