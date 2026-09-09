@@ -29,18 +29,39 @@ import { timingSafeEqual } from 'node:crypto'
 export const name = 'llm-gateway'
 export const inject = ['webServer']
 
-const TOKEN = (process.env.DSH_LLM_GATEWAY_TOKEN ?? '').trim()
+/**
+ * Read an env var, treating blank as unset.
+ *
+ * Compose passes an unset variable through `${VAR:-}` as an EMPTY STRING, not
+ * as absent, and `??` only catches null/undefined. Every default in this file
+ * goes through here so a variable the operator never set cannot override one.
+ */
+function env(name) {
+  const value = process.env[name]
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+const TOKEN = env('DSH_LLM_GATEWAY_TOKEN') ?? ''
 
 /** Upstream bridges, keyed by the path segment that selects them. */
 const UPSTREAMS = {
-  agy: (process.env.AGY_BRIDGE_URL ?? 'http://127.0.0.1:8001').replace(/\/$/, ''),
-  opencode: (process.env.OPENCODE_BRIDGE_URL ?? 'http://127.0.0.1:8002').replace(/\/$/, ''),
+  agy: (env('AGY_BRIDGE_URL') ?? 'http://127.0.0.1:8001').replace(/\/$/, ''),
+  opencode: (env('OPENCODE_BRIDGE_URL') ?? 'http://127.0.0.1:8002').replace(/\/$/, ''),
 }
 
-/** A bridge spawns a CLI per request, so a completion can legitimately take
- *  minutes. Long, but not unbounded — a wedged CLI must not hold the socket
- *  open forever. */
-const UPSTREAM_TIMEOUT_MS = Number(process.env.DSH_LLM_GATEWAY_TIMEOUT_MS ?? 600_000)
+/**
+ * A bridge spawns a CLI per request, so a completion can legitimately take
+ * minutes. Long, but not unbounded — a wedged CLI must not hold the socket
+ * open forever.
+ *
+ * A non-numeric or non-positive override is ignored rather than honoured: a
+ * zero here aborts every request the instant it is made, which reads at the
+ * caller as the upstream being down.
+ */
+const UPSTREAM_TIMEOUT_MS = (() => {
+  const configured = Number(env('DSH_LLM_GATEWAY_TIMEOUT_MS'))
+  return Number.isFinite(configured) && configured > 0 ? configured : 600_000
+})()
 
 /** Largest request body accepted, so a bad caller cannot exhaust memory here. */
 const MAX_BODY_BYTES = 2 * 1024 * 1024
