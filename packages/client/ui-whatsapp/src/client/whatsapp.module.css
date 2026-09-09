@@ -1,0 +1,219 @@
+/* WhatsApp plugin card — link by QR, then approve outbound messages. Chrome
+   mirrors the shared PluginCard so it sits cleanly among the other cards. */
+
+.card {
+  list-style: none;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-3);
+  transition: border-color .16s, background .16s;
+}
+
+.card:hover {
+  border-color: var(--dsw-alias-label-dimmed);
+}
+
+.cardOpen {
+  background: var(--dsw-alias-bg-layer-2);
+  border-color: var(--dsw-alias-label-dimmed);
+}
+
+.header {
+  width: 100%;
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.header:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.headText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dsw-alias-label-primary);
+}
+
+.description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.chevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform .16s;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.body {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  margin: 0 16px;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+  margin: 0;
+}
+
+/* Link / connect / disconnect / retry */
+.action {
+  align-self: flex-start;
+  appearance: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--dsw-alias-label-dimmed);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.primary {
+  border: 0;
+  background: var(--dsw-alias-brand-primary);
+  color: #fff;
+}
+
+.danger {
+  color: var(--dsw-alias-label-error, #c0392b);
+}
+
+/* QR pairing */
+.qrWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qr {
+  width: 240px;
+  height: 240px;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  text-align: center;
+  max-width: 320px;
+}
+
+/* Connected row */
+.connected {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connectedName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.jid {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  word-break: break-all;
+}
+
+/* Pending sends */
+.pending {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pendingHead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.pendingList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pendingRow {
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pendingTo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.pendingText {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pendingActions {
+  display: flex;
+  gap: 8px;
+}
+
+.pendingActions .action {
+  padding: 6px 12px;
+  font-size: 12px;
+}

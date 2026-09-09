@@ -67,6 +67,7 @@
     "@deepseek-ai/dsh-client-ui-message-feedback": "workspace:^",
     "@deepseek-ai/dsh-client-ui-mobile": "workspace:^",
     "@deepseek-ai/dsh-client-ui-composer-tools": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-whatsapp": "workspace:^",
     "@deepseek-ai/dsh-client-ui-model-selection": "workspace:^",
     "@deepseek-ai/dsh-client-ui-permission-presets": "workspace:^",
     "@deepseek-ai/dsh-client-ui-plan": "workspace:^",

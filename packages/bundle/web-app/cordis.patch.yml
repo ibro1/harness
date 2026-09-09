@@ -185,6 +185,10 @@
     - id: ui-composer-tools
       name: '@deepseek-ai/dsh-client-ui-composer-tools'
 
+    # Fork-local WhatsApp plugin card (Settings -> Plugins).
+    - id: ui-whatsapp
+      name: '@deepseek-ai/dsh-client-ui-whatsapp'
+
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
 
