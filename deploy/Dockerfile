@@ -59,7 +59,7 @@ RUN mkdir -p /app \
 # discovers it. Only the deps the helpers actually import — librosa and
 # matplotlib are declared upstream but unused, so they are skipped to stay lean.
 RUN git clone --depth 1 https://github.com/browser-use/video-use /opt/video-use \
-    && pip3 install --no-cache-dir --break-system-packages requests numpy pillow \
+    && pip3 install --no-cache-dir --break-system-packages requests numpy pillow yt-dlp \
     && chown -R node:node /opt/video-use
 
 # Fork-local overlays. (1) A provider-agnostic transcriber (ElevenLabs Scribe
@@ -72,6 +72,10 @@ COPY --chown=node:node deploy/skills/video-use/speak.py /opt/video-use/helpers/s
 # render.py: a final render auto-backgrounds under the harness and fires the
 # bg-notify hook on completion, so a long render never blocks the agent's turn.
 COPY --chown=node:node deploy/skills/video-use/render.py /opt/video-use/helpers/render.py
+# download.py: pull a source video/audio/transcript from a URL (YouTube et al.)
+# via yt-dlp + fresh cookies + node + the mweb client, so footage can be fetched
+# for editing. Cookies come from YT_COOKIES_URL/YT_COOKIES_TOKEN (or a file).
+COPY --chown=node:node deploy/skills/video-use/download.py /opt/video-use/helpers/download.py
 COPY --chown=node:node deploy/skills/video-use/SKILL.md /opt/video-use/SKILL.md
 
 # WhatsApp sidecar binary from the builder stage. /usr/local/bin, not
