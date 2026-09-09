@@ -1,0 +1,4 @@
+wa-svc
+*.db
+*.db-*
+/store
