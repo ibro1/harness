@@ -9,7 +9,7 @@ opposite: it does not tell you how to operate the deployment, it tells you
 **where the work stands**. Update it when a thread opens or closes, not when a
 line of code changes.
 
-Last reviewed: 2026-09-09, at `6059bb3585`.
+Last reviewed: 2026-09-09, at `1cccba5251`.
 
 ## 1. Repository and branches
 
@@ -86,7 +86,7 @@ map of features to the code that implements them.
 | Composer tools | `deploy/plugins/composer-tools.mjs`, `packages/client/ui-composer-tools` | Live. File upload into the *session's own* workspace (path resolved host-side from the session store, never client-supplied), voice prompting via Groq Whisper, output download and preview. |
 | Background job notify | `deploy/plugins/bg-notify.mjs` | Live. A finished background job wakes the session instead of blocking it. |
 | Mobile layer | `packages/client/ui-mobile` | Live. Off-canvas sidebar, full-screen settings, right-side details drawer, no tooltips on touch. |
-| WhatsApp | `deploy/whatsapp-svc/` (Go), `deploy/plugins/whatsapp.mjs`, `deploy/mcp/whatsapp-mcp.mjs`, `packages/client/ui-whatsapp` | Code complete, pairing blocked. See open thread 4.1. |
+| WhatsApp | `deploy/whatsapp-svc/` (Go), `deploy/plugins/whatsapp.mjs`, `deploy/mcp/whatsapp-mcp.mjs`, `packages/client/ui-whatsapp` | Live and paired. See 4.1 for the pairing history. |
 | GitHub webhook ingress | `deploy/webhook/` | Live. README §"GitHub webhook ingress". |
 | Dokploy control plugin | `deploy/plugins/dokploy.cordis.yml`, `deploy/mcp/dokploy-mcp.mjs` | Live. |
 
@@ -98,30 +98,33 @@ one hard, visual gate and always shows what is queued.
 
 ## 4. Open threads
 
-### 4.1 WhatsApp pairing — blocked outside the code
+### 4.1 WhatsApp pairing — resolved
 
-**Status:** the code is clean and the diagnosis is conclusive. Do not go
-looking for a bug here.
+**Linked on 2026-09-09** as "Davebukar Technologies"
+(`2348113235992:48@s.whatsapp.net`). The settings card shows Connected with a
+Disconnect button and an empty pending-sends list. Nothing here is open; this
+entry stays as the record of what the failure actually was.
 
-Every socket call was traced: `/status` is a pure read, `/login` is idempotent
-and guarded, one connection and one QR channel per attempt, and the card's 2 s
-poll never touches the socket. Two real defects were found and fixed —
-`5d2f8514f8` surfaces the true reason as `pairError` on `GET /whatsapp/status`
-(it was previously swallowed by an `Info` log that `WA_LOG=WARN` suppressed,
-leaving only a bare socket EOF) and presents as a named CHROME desktop client;
-`6059bb3585` clears the dead QR on a terminal failure, so an expired code no
-longer lures you into rescanning and deepening the throttle.
+The code was never wrong about the connection. Every socket call was traced:
+`/status` is a pure read, `/login` is idempotent and guarded, one connection
+and one QR channel per attempt, and the card's 2 s poll never touches the
+socket. Two real defects were found and fixed — `5d2f8514f8` surfaces the true
+reason as `pairError` on `GET /whatsapp/status` (it was previously swallowed by
+an `Info` log that `WA_LOG=WARN` suppressed, leaving only a bare socket EOF)
+and presents as a named CHROME desktop client; `6059bb3585` clears the dead QR
+on a terminal failure, so an expired code no longer lures you into rescanning.
 
-The remaining `try again later` is WhatsApp rate-limiting the account after
-many manual attempts. Recovery, in order — **each retry re-arms the limit, so
-do not test whether it is back**:
+The `try again later` that followed was WhatsApp rate-limiting the account
+after many manual attempts, and it cleared on its own. If pairing ever fails
+again, the recovery is — **each retry re-arms the limit, so do not test whether
+it is back**:
 
 1. Leave it alone for one to two hours, ideally overnight.
 2. Phone → WhatsApp → Linked Devices. Maximum is four; remove stale entries.
 3. Clean slate: delete `/home/node/.dsh/whatsapp/store.db` on the volume and
    restart the container. The sidecar recreates a fresh device identity.
-4. Scan **once**, promptly, and leave it. If it fails, read `/whatsapp/status`
-   for the named reason before trying again.
+4. Scan **once**, promptly, and leave it. Read `/whatsapp/status` for the named
+   reason before trying again.
 
 A whatsmeow version bump is not the answer — the pin is already at the exact
 upstream tip.
@@ -214,5 +217,11 @@ Dockerfile. Its `DEPLOY.md` holds the go-live checklist and the boundaries that
 are still open.
 
 It calls the harness's WhatsApp sidecar for messaging, which is the only
-coupling between the two. **It has no git remote and has never been pushed** —
-it exists on one box only.
+coupling between the two, and that channel is live now that the sidecar is
+paired. Pushed to `github.com/ibro1/rainmaker` on `main`.
+
+Three boundaries closed on 2026-09-09: the lander deploy targets the endpoint
+Dokploy actually has (`application.dropDeployment`, not the assumed
+`saveDragNDrop`), connector credentials are encrypted at rest — `CREDENTIALS_KEY`
+had been documented but unused, leaving every OAuth token in plain JSONB — and
+LinkedIn attaches the rendered infographic instead of posting the caption alone.
