@@ -112,6 +112,18 @@ function formatPrompt(messages, system) {
   return { prompt: promptParts.join('\n'), attachedFiles }
 }
 
+/** A short, human-readable summary of a tool call's input for the progress
+ *  line. Prefers a salient field over the raw JSON. opencode's exact tool-event
+ *  shape is unverified here (no local auth to spike), so this reads defensively. */
+function briefParams(input) {
+  if (!input || typeof input !== 'object') return ''
+  const salient = input.command ?? input.filePath ?? input.file_path ?? input.path
+    ?? input.pattern ?? input.url ?? input.query ?? input.description
+  let s = salient !== undefined ? String(salient) : JSON.stringify(input)
+  s = s.replace(/\s+/g, ' ').trim()
+  return s.length > 140 ? s.slice(0, 137) + '…' : s
+}
+
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -187,6 +199,14 @@ const server = createServer(async (req, res) => {
         args.push('-f', f)
       }
 
+      // Expose the originating session id (the pi-ai adapter sends it in the
+      // request body) to the CLI as DSH_SESSION_ID, so a skill can build a
+      // download link and the background-notify hook can wake THIS session —
+      // parity with the agy bridge.
+      const childEnv = body.sessionId !== undefined
+        ? { ...ENV, DSH_SESSION_ID: String(body.sessionId) }
+        : ENV
+
       if (stream) {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
@@ -196,11 +216,34 @@ const server = createServer(async (req, res) => {
 
         const proc = spawn('opencode', args, {
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: ENV,
+          env: childEnv,
         })
 
         let usage = null
         let emittedText = false
+        let lastActivity = Date.now()
+        const seenToolStart = new Set()
+        const seenToolDone = new Set()
+
+        const send = (delta) => {
+          res.write(`data: ${JSON.stringify({
+            id, object: 'chat.completion.chunk', created, model: requestedModel,
+            choices: [{ index: 0, delta, finish_reason: null }],
+          })}\n\n`)
+          lastActivity = Date.now()
+        }
+        const sendContent = (text) => { emittedText = true; send({ content: text }) }
+        // Tool activity/progress rides the reasoning channel — live "thinking"
+        // that never pollutes the answer, and every one resets the harness idle
+        // watchdog so a long tool-only phase no longer times out.
+        const sendProgress = (text) => send({ reasoning_content: text })
+
+        // Keep the stream warm through a quiet long-running tool so the idle
+        // watchdog never fires mid-tool.
+        const HEARTBEAT_MS = 40000
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded && Date.now() - lastActivity >= HEARTBEAT_MS) sendProgress('·')
+        }, 10000)
 
         proc.stderr.on('data', d => {
           console.error('[OpenCode stderr]', d.toString())
@@ -209,33 +252,40 @@ const server = createServer(async (req, res) => {
         const rl = createInterface({ input: proc.stdout })
         rl.on('line', line => {
           if (!line.trim()) return
-          try {
-            const parsed = JSON.parse(line)
-            if (parsed.type === 'text' && parsed.part?.text) {
-              const text = parsed.part.text
-              emittedText = true
-              const chunk = {
-                id,
-                object: 'chat.completion.chunk',
-                created,
-                model: requestedModel,
-                choices: [{
-                  index: 0,
-                  delta: { content: text },
-                  finish_reason: null,
-                }],
-              }
-              res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+          lastActivity = Date.now()
+          let parsed
+          try { parsed = JSON.parse(line) } catch { return }
+
+          if (parsed.type === 'text' && parsed.part?.text) {
+            sendContent(parsed.part.text)
+            return
+          }
+          if (parsed.type === 'step_finish' && parsed.part?.tokens) {
+            usage = parsed.part.tokens
+            return
+          }
+          // Tool activity → live progress. opencode's exact tool-event shape is
+          // unverified here (no local auth to spike), so read it defensively;
+          // an unmatched shape simply shows no progress — the heartbeat above
+          // still keeps the stream alive.
+          if (parsed.type === 'tool' && parsed.part) {
+            const p = parsed.part
+            const callId = String(p.callID ?? p.id ?? p.tool ?? '')
+            const toolName = p.tool ?? p.name ?? 'tool'
+            const status = p.state?.status ?? p.status
+            if ((status === 'running' || status === 'pending' || status === undefined) && !seenToolStart.has(callId)) {
+              seenToolStart.add(callId)
+              const brief = briefParams(p.state?.input ?? p.input)
+              sendProgress(`\n🔧 ${toolName}${brief ? ` — ${brief}` : ''}`)
+            } else if ((status === 'completed' || status === 'error') && !seenToolDone.has(callId)) {
+              seenToolDone.add(callId)
+              sendProgress(status === 'error' ? ' ✗' : ' ✓')
             }
-            if (parsed.type === 'step_finish' && parsed.part?.tokens) {
-              usage = parsed.part.tokens
-            }
-          } catch (e) {
-            // ignore non-json
           }
         })
 
         proc.on('close', code => {
+          clearInterval(heartbeat)
           console.log(`[OpenCode proc closed] code=${code} emittedText=${emittedText}`)
           const finalChunk = {
             id,
@@ -262,6 +312,7 @@ const server = createServer(async (req, res) => {
         })
 
         proc.on('error', err => {
+          clearInterval(heartbeat)
           console.error('OpenCode process error:', err)
           res.write(`data: {"error": {"message": ${JSON.stringify(String(err))}}}\n\n`)
           res.end()
@@ -269,6 +320,7 @@ const server = createServer(async (req, res) => {
         })
 
         res.on('close', () => {
+          clearInterval(heartbeat)
           if (!res.writableEnded && !proc.killed) {
             console.log('[OpenCode] Client disconnected, killing process')
             proc.kill()
@@ -277,7 +329,7 @@ const server = createServer(async (req, res) => {
       } else {
         const proc = spawn('opencode', args, {
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: ENV,
+          env: childEnv,
         })
 
         let fullResponse = ''
