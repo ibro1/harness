@@ -2,3 +2,4 @@ wa-svc
 *.db
 *.db-*
 /store
+whatsapp-svc
