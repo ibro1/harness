@@ -89,6 +89,7 @@ map of features to the code that implements them.
 | WhatsApp | `deploy/whatsapp-svc/` (Go), `deploy/plugins/whatsapp.mjs`, `deploy/mcp/whatsapp-mcp.mjs`, `packages/client/ui-whatsapp` | Live and paired. See 4.1 for the pairing history. |
 | GitHub webhook ingress | `deploy/webhook/` | Live. README §"GitHub webhook ingress". |
 | Dokploy control plugin | `deploy/plugins/dokploy.cordis.yml`, `deploy/mcp/dokploy-mcp.mjs` | Live. |
+| LLM gateway | `deploy/plugins/llm-gateway.mjs` | The one authenticated door to the loopback agy/opencode bridges, so another service on this box can use these models. Opt-in on `DSH_LLM_GATEWAY_TOKEN` — a dedicated token, **not** `DSH_AUTH_API_TOKEN`, which would grant the whole harness. Rainmaker is its first consumer. |
 
 WhatsApp send policy, as chosen: the agent drafts and queues; you approve
 either in chat (`whatsapp_approve`) or by clicking **Approve** on the settings

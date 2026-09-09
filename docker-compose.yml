@@ -58,6 +58,11 @@ services:
       # DeerFlow remote browser MCP. Set the token to attach its tools
       # (mcp__deerflow__*); blank leaves them out. URL override optional.
       DEERFLOW_BROWSER_MCP_TOKEN: ${DEERFLOW_BROWSER_MCP_TOKEN:-}
+      # LLM gateway: the one authenticated door to the loopback agy/opencode
+      # bridges, so another service can use this harness's models. Unset leaves
+      # the routes unregistered. Not DSH_AUTH_API_TOKEN — see deploy/.env.example.
+      DSH_LLM_GATEWAY_TOKEN: ${DSH_LLM_GATEWAY_TOKEN:-}
+      DSH_LLM_GATEWAY_TIMEOUT_MS: ${DSH_LLM_GATEWAY_TIMEOUT_MS:-}
       DEERFLOW_BROWSER_MCP_URL: ${DEERFLOW_BROWSER_MCP_URL:-}
       # 0 withholds the DeerFlow tools from the agy/opencode CLIs (and, for agy,
       # the --dangerously-skip-permissions grant that admits them). Direct

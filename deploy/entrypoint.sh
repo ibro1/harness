@@ -330,6 +330,17 @@ echo "[entrypoint] Composer upload route enabled at /workspace-upload"
 
 # Background-job completion notifier (see the DSH_BG_TOKEN block above). Lets a
 # long detached job wake the session on completion instead of blocking a turn.
+# LLM gateway (optional): the one authenticated door to the agy/opencode
+# bridges, so another service on this box can use the harness's models without
+# the bridges — which have no auth of their own — ever getting a domain. Opt-in
+# on its own token, deliberately NOT DSH_AUTH_API_TOKEN: that one grants the
+# whole harness, and a caller that only needs chat completions should not hold
+# it. Without the token the patch is left out and the routes do not exist.
+if [[ -n "${DSH_LLM_GATEWAY_TOKEN:-}" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/llm-gateway.cordis.yml")
+  echo "[entrypoint] LLM gateway enabled at /llm/{agy,opencode}/v1 (bearer DSH_LLM_GATEWAY_TOKEN)"
+fi
+
 patch_args+=(--patch "$APP_DIR/deploy/plugins/bg-notify.cordis.yml")
 echo "[entrypoint] Background notify route enabled at /bg-notify (jobs POST \$DSH_NOTIFY_URL to wake the session)"
 

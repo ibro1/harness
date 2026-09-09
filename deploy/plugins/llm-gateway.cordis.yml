@@ -1,0 +1,10 @@
+# LLM gateway, layered over the shipped Web composition.
+#
+# Referenced by path because this plugin is fork-local and unpublished. It is
+# the only authenticated door to the agy/opencode bridges, which bind loopback
+# with no auth of their own and must never be given a domain. Disabled at the
+# plugin level when DSH_LLM_GATEWAY_TOKEN is unset, so a deploy that never
+# configured it cannot expose them.
+- insert:
+    - id: llm-gateway
+      name: './llm-gateway.mjs'
