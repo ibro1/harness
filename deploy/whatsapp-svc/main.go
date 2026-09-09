@@ -32,7 +32,9 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	waProto "go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -55,10 +57,11 @@ type service struct {
 	db     *sql.DB
 	log    waLog.Logger
 
-	mu       sync.RWMutex
-	qrCode   string
-	qrExpiry time.Time
-	loggedIn bool
+	mu        sync.RWMutex
+	qrCode    string
+	qrExpiry  time.Time
+	loggedIn  bool
+	pairError string // last pairing failure reason, surfaced to the card via /status
 }
 
 var digits = regexp.MustCompile(`\D`)
@@ -91,6 +94,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "wa-svc: get device:", err)
 		os.Exit(1)
 	}
+
+	// Present as an ordinary WhatsApp Web (Chrome) client and give the linked
+	// device a readable label in the phone's linked-devices list. WhatsApp is
+	// less tolerant of clients that advertise an unknown platform, so identify
+	// as a mainstream desktop browser rather than the library default
+	// ("whatsmeow"/UNKNOWN).
+	store.DeviceProps.Os = proto.String("DeepSeek Harness")
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
 
 	svc := &service{
 		client: whatsmeow.NewClient(deviceStore, waLog.Stdout("wa-client", logLevel, true)),
@@ -144,21 +155,63 @@ func (s *service) startPairing(ctx context.Context) {
 	}
 	for evt := range qrChan {
 		switch evt.Event {
-		case "code":
+		case whatsmeow.QRChannelEventCode:
 			s.mu.Lock()
 			s.qrCode = evt.Code
 			s.qrExpiry = time.Now().Add(evt.Timeout)
+			s.pairError = "" // a fresh code clears any earlier failure
 			s.mu.Unlock()
 		case "success":
 			s.mu.Lock()
 			s.qrCode = ""
+			s.pairError = ""
 			s.mu.Unlock()
 			s.setLoggedIn(true)
 			return
+		case whatsmeow.QRChannelEventPasskeyResponse:
+			// WhatsApp's passkey-handoff linking: the server asked us to confirm
+			// the pairing code. Without this call the socket is torn down and the
+			// phone reports "couldn't link device". The channel stays open.
+			if err := s.client.SendPasskeyConfirmation(ctx); err != nil {
+				s.setPairError(fmt.Sprintf("passkey confirmation failed: %v", err))
+				s.log.Errorf("passkey confirmation: %v", err)
+			}
+		case whatsmeow.QRChannelEventPasskeyRequest:
+			// The account is being linked through WhatsApp's WebAuthn passkey
+			// flow, which requires an authenticator response whatsmeow does not
+			// generate for us. Tell the operator to use the QR path instead.
+			s.setPairError(`this account is using WhatsApp's passkey linking, which this integration cannot complete; on the phone choose "Link with QR code instead"`)
+			s.log.Warnf("pairing requested a WebAuthn passkey; cannot complete")
+		case whatsmeow.QRChannelEventError:
+			s.setPairError(fmt.Sprintf("pairing error: %v", evt.Error))
+			s.log.Errorf("pairing error: %v", evt.Error)
+			return
+		case "err-client-outdated":
+			s.setPairError("WhatsApp rejected this client as outdated; the whatsmeow build needs updating")
+			s.log.Errorf("pairing rejected: client outdated")
+			return
+		case "err-scanned-without-multidevice":
+			// The same QR can still be scanned after this, so keep looping.
+			s.setPairError("scanned without multi-device enabled; enable multi-device on the phone, then rescan")
+			s.log.Warnf("scanned without multidevice enabled")
+		case "err-unexpected-state":
+			s.setPairError("unexpected pairing state (the device may already be paired); reopen the card")
+			s.log.Warnf("unexpected pairing state")
+			return
+		case "timeout":
+			s.setPairError("the QR code expired before pairing completed; press Link to get a fresh code")
+			s.log.Warnf("pairing timed out")
+			return
 		default:
-			s.log.Infof("qr event: %s", evt.Event)
+			s.log.Warnf("unhandled qr event: %s", evt.Event)
 		}
 	}
+}
+
+func (s *service) setPairError(msg string) {
+	s.mu.Lock()
+	s.pairError = msg
+	s.mu.Unlock()
 }
 
 func (s *service) setLoggedIn(v bool) {
@@ -261,7 +314,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 func (s *service) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
-	qr, expiry, loggedIn := s.qrCode, s.qrExpiry, s.loggedIn
+	qr, expiry, loggedIn, pairErr := s.qrCode, s.qrExpiry, s.loggedIn, s.pairError
 	s.mu.RUnlock()
 	resp := map[string]any{
 		"loggedIn":  loggedIn,
@@ -274,6 +327,9 @@ func (s *service) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if !loggedIn && qr != "" {
 		resp["qr"] = qr
 		resp["qrExpiresInSec"] = int(time.Until(expiry).Seconds())
+	}
+	if !loggedIn && pairErr != "" {
+		resp["pairError"] = pairErr
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
