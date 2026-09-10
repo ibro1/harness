@@ -1,0 +1,48 @@
+{
+  "//": "Rainmaker's own preset. The identity is LIGHT — warm paper #fcfbf8, cool ink #0d1015 — so `mode` is light and both gradient stops are the same paper colour: design.md bans gradients, and a two-stop background is a gradient whatever the stops are named. Amber #f5b60a is a FILL and an INDICATOR only; it measures 1.75:1 on paper, so `accent_light` (the token the templates use wherever the accent would become TEXT) is ink instead. The geometry — radius 0, hairlines, no shadow — and the three typefaces live in `rainmaker.css`.",
+  "name": "Rainmaker",
+  "badge": "R",
+  "accent": "#f5b60a",
+  "accent_2": "#f5b60a",
+  "accent_light": "#0d1015",
+  "mode": "light",
+  "bg_from": "#fcfbf8",
+  "bg_to": "#fcfbf8",
+  "css_file": "rainmaker.css",
+  "font_family": "Geist",
+  "font_stack": "Geist, system-ui, sans-serif",
+  "forbid": [
+    {
+      "pattern": "\\bchat[ -]?bots?\\b",
+      "why": "Rainmaker does not talk to anyone's customers"
+    },
+    {
+      "pattern": "\\b(front[ -]desk|answers? (your|their) (customers?|clients?|enquir))",
+      "why": "answering customers is FrontStaff's product, not this one"
+    },
+    {
+      "pattern": "\\bcold (email|outreach|calls?|dm)",
+      "why": "Rainmaker does not do outreach"
+    },
+    {
+      "pattern": "\\b(ad spend|media buying|buys? ads|runs? ads|manages? ads|ad budget)\\b",
+      "why": "Rainmaker does not buy or manage advertising"
+    },
+    {
+      "pattern": "\\b\\d+(\\.\\d+)?\\s*(%|x\\b)",
+      "why": "there are no customers and no measured results — publish no statistic"
+    },
+    {
+      "pattern": "\\b(trusted by|join \\d|\\d+\\+? (businesses|customers|teams|users))",
+      "why": "no customer counts, no social proof, none of it is true yet"
+    },
+    {
+      "pattern": "\\$[0-9]",
+      "why": "prices, if ever quoted, are in Naira (₦)"
+    }
+  ],
+  "require": {
+    "pattern": "\\bRainmaker\\b",
+    "why": "the campaign is Rainmaker's own — the page should say so"
+  }
+}

@@ -322,6 +322,22 @@ if [[ -d /opt/video-use ]]; then
   echo "[entrypoint] video-use skill linked (~/.dsh/skills/video-use; transcription provider: ${TRANSCRIBE_PROVIDER:-auto})"
 fi
 
+# campaign-assets skill: same shape as video-use above — a baked image copy
+# linked into the catalog root on the state volume. It renders with headless
+# Chromium, so the link is only reported as usable when a browser is actually on
+# PATH; a skill that advertises itself and then fails at the first render is
+# worse than one that says up front what is missing.
+if [[ -d /opt/campaign-assets ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn /opt/campaign-assets "$HOME/.dsh/skills/campaign-assets"
+  if command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
+    || command -v google-chrome >/dev/null 2>&1; then
+    echo "[entrypoint] campaign-assets skill linked (~/.dsh/skills/campaign-assets)"
+  else
+    echo "[entrypoint] WARNING: campaign-assets skill linked but no chromium on PATH — every render will fail." >&2
+  fi
+fi
+
 # Composer tools: the authenticated /workspace-upload route that lands an
 # uploaded file in the current session's workspace. Always on and zero-config;
 # it sits behind the password gate, so nothing extra is needed to enable it.

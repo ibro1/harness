@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+{{FONT_FACE}}
+  /*
+   * Full-bleed is not optional. Chromium's screenshot is the WINDOW size, but
+   * old headless renders into a shorter viewport — a 1200x627 shot came out
+   * with an 87px white band along the bottom. `--headless=new` fixes it, and
+   * `position:absolute; inset:0` here means the frame fills whatever it gets
+   * regardless. Both, because a silently letterboxed graphic is the kind of
+   * thing nobody notices until it is on the company page.
+   */
+  html, body { margin:0; padding:0; background:{{BG_FROM}}; }
+  * { box-sizing:border-box; -webkit-font-smoothing:antialiased; }
+
+  /* Dark is the default because a feed graphic usually sits on a white
+     surface and a dark card stands out. Light mode exists for brands whose
+     site is light — using their real background only works if the text
+     inverts with it, otherwise white copy lands on a white canvas. */
+  .frame { --ink:#F8FAFC; --ink-2:#E2E8F0; --muted:#94A3B8;
+           --card:rgba(15,23,42,.55); --line:rgba(148,163,184,.16);
+           --bad-ink:#FCA5A5; --bad-stat:#F87171;
+           --bad-card:rgba(69,10,10,.22); --bad-line:rgba(248,113,113,.28);
+           --glow:#16304F; --msg-bg:rgba(2,6,23,.42); }
+  .frame[data-mode="light"] { --ink:#0F172A; --ink-2:#1E293B; --muted:#475569;
+           --card:rgba(255,255,255,.72); --line:rgba(15,23,42,.12);
+           --bad-ink:#B91C1C; --bad-stat:#DC2626;
+           --bad-card:rgba(254,226,226,.75); --bad-line:rgba(220,38,38,.28);
+           --glow:transparent; --msg-bg:rgba(255,255,255,.72); }
+
+  .frame {
+    position:absolute; top:0; left:0;
+    width:var(--w); height:var(--h);
+    background:
+      radial-gradient(1100px 600px at 12% -10%, var(--glow) 0%, transparent 60%),
+      linear-gradient(155deg, {{BG_FROM}} 0%, {{BG_TO}} 55%, {{BG_FROM}} 100%);
+    color:var(--ink);
+    font-family:{{FONT_STACK}}"DejaVu Sans","Liberation Sans",system-ui,sans-serif;
+    display:flex; flex-direction:column;
+    padding:var(--pad); gap:var(--gap);
+    overflow:hidden;
+  }
+
+  /* One template, three canvases. Type and spacing scale off the shortest
+     edge so a portrait crop is not just a landscape one with more air. */
+  .frame[data-shape="landscape"] { --w:1200px; --h:627px; --pad:44px; --gap:18px; --h1:40px; --lead:19px; --card-t:22px; --item:17px; --foot:15px; }
+  /* A 1.91:1 canvas rewards a bold claim, not a dense list. */
+  .frame[data-shape="landscape"] .lead { display:none; }
+  .frame[data-shape="landscape"] li:nth-child(n+4) { display:none; }
+  .frame[data-shape="landscape"] .msg:nth-child(n+3) { display:none; }
+  .frame[data-shape="landscape"] .statusbar { display:none; }
+  .frame[data-shape="landscape"] h1 { max-width:26ch; }
+  .frame[data-shape="square"]    { --w:1200px; --h:1200px; --pad:76px; --gap:38px; --h1:66px; --lead:26px; --card-t:32px; --item:24px; --foot:20px; }
+  .frame[data-shape="portrait"]  { --w:1080px; --h:1350px; --pad:76px; --gap:42px; --h1:70px; --lead:27px; --card-t:34px; --item:25px; --foot:21px; }
+
+  .eyebrow { display:flex; align-items:center; gap:12px; font-size:var(--foot);
+             letter-spacing:.14em; text-transform:uppercase; color:{{ACCENT}}; font-weight:700; }
+  .dot { width:9px; height:9px; border-radius:50%; background:{{ACCENT}}; }
+
+  h1 { font-size:var(--h1); line-height:1.06; margin:0; font-weight:800; letter-spacing:-.02em; max-width:22ch; }
+  .lead { font-size:var(--lead); line-height:1.45; color:var(--muted); margin:0; max-width:58ch; }
+
+  /* Status pills — the "this is real software" row. Reads as system metadata
+     rather than marketing, which is the whole point: a claim in a pill next to
+     a clock is read as a readout, not a boast. */
+  .statusbar { display:flex; flex-wrap:wrap; gap:8px; }
+  .pill { display:inline-flex; align-items:center; gap:7px;
+          font-size:calc(var(--foot) * .88); font-weight:700; letter-spacing:.02em;
+          padding:5px 11px; border-radius:999px;
+          border:1px solid var(--line); color:var(--muted);
+          background:color-mix(in srgb, {{ACCENT}} 7%, transparent); }
+  .pill__dot { width:7px; height:7px; border-radius:50%; background:{{ACCENT}};
+               box-shadow:0 0 0 3px color-mix(in srgb, {{ACCENT}} 22%, transparent); }
+
+  /* Message cards. A timestamped line with a status badge is evidence; a
+     bullet with a tick is a claim. Same data, very different to read. */
+  .msg { display:block; padding:10px 12px; border-radius:12px;
+         border:1px solid var(--line); background:var(--msg-bg); }
+  .msg__head { display:flex; align-items:center; justify-content:space-between;
+               gap:10px; margin-bottom:4px; }
+  .msg__time { font-size:calc(var(--item) * .74); font-weight:700; color:var(--muted);
+               font-variant-numeric:tabular-nums; }
+  .msg__badge { font-size:calc(var(--item) * .68); font-weight:800; letter-spacing:.03em;
+                text-transform:uppercase; padding:3px 8px; border-radius:999px; }
+  .msg__text { font-size:calc(var(--item) * .95); line-height:1.3; color:var(--ink-2); }
+  .card--bad  .msg__badge { background:var(--bad-line); color:var(--bad-ink); }
+  .card--good .msg__badge { background:color-mix(in srgb, {{ACCENT}} 20%, transparent);
+                            color:{{ACCENT_LIGHT}}; }
+
+  /* Animation, driven from outside.
+     A headless screenshot always renders an animation at t=0, so frames cannot
+     be captured by waiting. Instead every animated rule is PAUSED and given a
+     negative delay: `animation-delay:-0.6s; animation-play-state:paused`
+     renders the exact state 0.6s into the loop. Stepping that delay across
+     renders walks the animation deterministically, with no timing races.
+     Defaults are `0s`/`running`, so a static PNG and the live page are
+     unaffected — at t=0 every keyframe below is its resting state. */
+  @keyframes ca-pulse   { 0%,100% { opacity:1 } 50% { opacity:.42 } }
+  @keyframes ca-breathe { 0%,100% { transform:scale(1); opacity:1 }
+                          50%     { transform:scale(1.18); opacity:.65 } }
+
+  .card--bad .msg__badge,
+  .card--bad .stat {
+    animation: ca-pulse 2s ease-in-out infinite;
+    animation-delay: {{FRAME_DELAY}};
+    animation-play-state: {{ANIM_STATE}};
+  }
+  .pill__dot {
+    animation: ca-breathe 2s ease-in-out infinite;
+    animation-delay: {{FRAME_DELAY}};
+    animation-play-state: {{ANIM_STATE}};
+  }
+
+  /* Progressive reveal — per-item keyframes.
+     See the note above: staggering a SHARED keyframe with negative delays
+     gives a rolling wave where only the first item ever appears to arrive.
+     Each item instead gets its own keyframe whose hidden prefix is longer
+     than the last, so all six reset together and then arrive in sequence.
+     The single {{FRAME_DELAY}} still drives frame stepping for the GIF. */
+  @keyframes ca-rev0 {
+    0%, 3%       { opacity:0; transform:translateY(9px) }
+    8%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev1 {
+    0%, 12%       { opacity:0; transform:translateY(9px) }
+    17%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev2 {
+    0%, 21%       { opacity:0; transform:translateY(9px) }
+    26%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev3 {
+    0%, 30%       { opacity:0; transform:translateY(9px) }
+    35%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev4 {
+    0%, 39%       { opacity:0; transform:translateY(9px) }
+    44%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev5 {
+    0%, 48%       { opacity:0; transform:translateY(9px) }
+    53%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev6 {
+    0%, 57%       { opacity:0; transform:translateY(9px) }
+    62%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  @keyframes ca-rev7 {
+    0%, 66%       { opacity:0; transform:translateY(9px) }
+    71%, 90%  { opacity:1; transform:translateY(0) }
+    97%, 100%           { opacity:0; transform:translateY(0) }
+  }
+  .frame[data-reveal="on"] li {
+    animation-duration: 4s;
+    animation-timing-function: ease-out;
+    animation-iteration-count: infinite;
+    animation-delay: {{FRAME_DELAY}};
+    animation-play-state: {{ANIM_STATE}};
+  }
+  .frame[data-reveal="on"] .card--bad li:nth-child(1) { animation-name: ca-rev0 }
+  .frame[data-reveal="on"] .card--good li:nth-child(1) { animation-name: ca-rev1 }
+  .frame[data-reveal="on"] .card--bad li:nth-child(2) { animation-name: ca-rev2 }
+  .frame[data-reveal="on"] .card--good li:nth-child(2) { animation-name: ca-rev3 }
+  .frame[data-reveal="on"] .card--bad li:nth-child(3) { animation-name: ca-rev4 }
+  .frame[data-reveal="on"] .card--good li:nth-child(3) { animation-name: ca-rev5 }
+  /* A fourth bullet per column is common and used to sit there fully visible
+     while the first three arrived, which reads as a rendering fault rather
+     than a design. Same per-item rule as above, two keyframes further on. */
+  .frame[data-reveal="on"] .card--bad li:nth-child(4) { animation-name: ca-rev6 }
+  .frame[data-reveal="on"] .card--good li:nth-child(4) { animation-name: ca-rev7 }
+
+  /* These target `li`, not `.msg`. fill.py renders plain <li> with a
+     <span class="mark">; `.msg` is left over from an earlier markup and
+     matches nothing, so the reveal silently did not run and every GIF
+     came out 40 identical frames. Verified: 21 of 40 frames now carry a
+     real changed region instead of a 1px sliver. */
+  /* The pulse is redundant once the reveal carries the motion. */
+  .frame[data-reveal="on"] .card--bad .msg__badge { animation:none; opacity:1 }
+
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:calc(var(--gap) * .8);
+         flex:1 1 0; min-height:0; align-items:stretch; }
+  .frame[data-shape="portrait"] .cols { grid-template-columns:1fr; }
+
+  .card { border-radius:20px; padding:calc(var(--pad) * .5); display:flex; flex-direction:column;
+          gap:12px; border:1px solid var(--line); background:var(--card);
+          min-height:0; overflow:hidden; }
+  .card--bad  { border-color:var(--bad-line); background:var(--bad-card); }
+  .card--good { border-color:color-mix(in srgb, {{ACCENT}} 38%, transparent);
+                background:color-mix(in srgb, {{ACCENT}} 10%, transparent); }
+
+  .card h2 { font-size:var(--card-t); margin:0; font-weight:800; letter-spacing:-.01em; }
+  .card--bad h2  { color:var(--bad-ink); }
+  .card--good h2 { color:{{ACCENT_LIGHT}}; }
+
+  ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column;
+       gap:11px; min-height:0; overflow:hidden; flex:0 1 auto; }
+  li { font-size:var(--item); line-height:1.35; display:flex; gap:11px; align-items:flex-start; color:var(--ink-2); }
+  .mark { flex:none; width:22px; height:22px; border-radius:6px; display:grid; place-items:center;
+          font-size:14px; font-weight:800; margin-top:2px; }
+  .card--bad  .mark { background:var(--bad-line); color:var(--bad-ink); }
+  .card--good .mark { background:color-mix(in srgb, {{ACCENT}} .16%, transparent); color:{{ACCENT_LIGHT}}; }
+
+  .stat { margin-top:auto; flex:0 0 auto; padding-top:14px; border-top:1px solid var(--line);
+          font-size:calc(var(--card-t) * .92); font-weight:800; letter-spacing:-.01em; }
+  .card--bad  .stat { color:#F87171; }
+  .card--good .stat { color:{{ACCENT}}; }
+  .stat small { display:block; font-size:var(--foot); font-weight:600; color:var(--muted);
+                letter-spacing:0; margin-top:5px; }
+
+  footer { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:20px;
+           font-size:var(--foot); color:var(--muted); }
+  .brand { display:flex; align-items:center; gap:11px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
+  .brand img { height:34px; width:auto; max-width:230px; object-fit:contain; }
+  .brand .badge { width:30px; height:30px; border-radius:9px; display:grid; place-items:center;
+                  background:linear-gradient(140deg,{{ACCENT}},{{ACCENT2}}); color:#04121F; font-weight:900; }
+  .cta { color:var(--ink); font-weight:700; }
+
+  /* The brand's own stylesheet, from the preset's `css_file`. Last in the
+     cascade on purpose. Empty for every preset that does not declare one. */
+{{BRAND_CSS}}
+</style>
+</head>
+<body>
+  <div class="frame" data-shape="{{SHAPE}}" data-mode="{{MODE}}" data-reveal="{{REVEAL}}">
+    <div class="eyebrow"><span class="dot"></span>{{EYEBROW}}</div>
+
+    <h1>{{HEADLINE}}</h1>
+    <p class="lead">{{SUBHEAD}}</p>
+    <div class="statusbar">{{STATUS_BAR}}</div>
+
+    <div class="cols">
+      <div class="card card--bad">
+        <h2>{{LEFT_TITLE}}</h2>
+        <ul>{{LEFT_ITEMS}}</ul>
+        <div class="stat">{{LEFT_STAT}}<small>{{LEFT_STAT_NOTE}}</small></div>
+      </div>
+      <div class="card card--good">
+        <h2>{{RIGHT_TITLE}}</h2>
+        <ul>{{RIGHT_ITEMS}}</ul>
+        <div class="stat">{{RIGHT_STAT}}<small>{{RIGHT_STAT_NOTE}}</small></div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="brand">{{BRANDMARK}}{{BRAND}}</div>
+      <div class="cta">{{CTA}}</div>
+    </footer>
+  </div>
+</body>
+</html>

@@ -354,6 +354,76 @@ To use it: set a key, redeploy, then in a session point the agent at a folder of
 footage ("edit these into a launch video"). Nothing is transcribed until you
 ask — transcription spends API credits.
 
+## campaign-assets skill (marketing graphics and a capture page)
+
+The image bakes in `campaign-assets` — an agent skill that turns **one JSON
+content file** into three social-sized comparison graphics (1200×627 landscape,
+1200×1200 square, 1080×1350 portrait), an optional animated GIF of the same
+artwork revealing line by line, and a matching lead-capture page that carries
+the identical headline. Rendering is headless Chromium against an HTML template:
+no Node project, no `npm install`, no Puppeteer, no build step.
+
+It has no upstream — the source of record is `deploy/skills/campaign-assets/`.
+It is baked for the same reason video-use is (ephemeral FS, uid 1000 cannot
+install at runtime) at `/opt/campaign-assets`, and the entrypoint symlinks it
+into `~/.dsh/skills/campaign-assets` on the state volume so the catalog
+discovers it.
+
+**It needs no keys and no configuration.** Everything it depends on is already
+in the image: Pillow, `ffmpeg` for the GIF's `palettegen` and stitch, and
+`chromium` plus `fonts-dejavu-core`/`fonts-liberation`, which joined the apt
+list for this skill. The renderer resolves the browser with `command -v
+chromium-browser || chromium || google-chrome` and always passes `--no-sandbox`,
+which is required under uid 1000 without user namespaces. The fonts matter more
+than they look: bookworm-slim ships neither family, and the templates fall back
+to them whenever a brand supplies no font of its own — without them every
+graphic renders in a substitute face.
+
+### Start with the brand
+
+The skill's own first rule, and the failure it was written from: a graphic in
+invented colours with a letter where the logo goes looks fine alone and wrong
+beside the real site.
+
+```sh
+python3 scripts/brandinit.py https://theirsite.com brands/<name>.json
+```
+
+That reads the live site for name, logo, palette and positioning, and the
+colour ranking is frequency-based — it can pick a heavily used UI colour over
+the real brand one, so confirm what it found before building on it.
+
+Two presets ship as references: `brands/generic.json` (neutral, no voice rules)
+and `brands/rainmaker.json` (a **light-ground** brand — it demonstrates
+`accent_light` for the slots where the accent is used as text, and `css_file`
+for a stylesheet that overrides the template's geometry and embeds its own
+fonts). Both templates carry a `{{BRAND_CSS}}` hook, last in `<style>`, so a
+brand can override anything without forking the template.
+
+### Build
+
+```sh
+bash scripts/build.sh <content.json> <out-dir> [brand.json] [shape ...]
+WITH_GIF=on bash scripts/build.sh content.json out/ brands/rainmaker.json
+```
+
+A brand may declare `forbid` patterns and a `require` pattern; a violation
+**fails the build** rather than shipping and waiting to be spotted.
+
+### Posting to LinkedIn (optional, and the only part that needs keys)
+
+`scripts/publish.py` can post a rendered graphic to LinkedIn. It is the one
+part of the skill that is credentialed, and it is off unless you set
+`LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` (plus `LINKEDIN_REDIRECT_URI`
+for the auth round trip). The access token it obtains is written **outside the
+repo**, under `XDG_CONFIG_HOME`, on purpose: it is a 60-day bearer credential
+for your identity, and a token committed to a repo with a remote is a published
+token. Rendering never touches this path.
+
+To use it: nothing to enable for rendering. In a session, ask for an
+infographic, a LinkedIn graphic, a campaign visual or a capture page, and the
+agent loads the skill and follows `SKILL.md`.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

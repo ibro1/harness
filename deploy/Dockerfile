@@ -25,8 +25,11 @@ FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash \
       ca-certificates \
+      chromium \
       curl \
       ffmpeg \
+      fonts-dejavu-core \
+      fonts-liberation \
       git \
       less \
       openssh-client \
@@ -77,6 +80,23 @@ COPY --chown=node:node deploy/skills/video-use/render.py /opt/video-use/helpers/
 # for editing. Cookies come from YT_COOKIES_URL/YT_COOKIES_TOKEN (or a file).
 COPY --chown=node:node deploy/skills/video-use/download.py /opt/video-use/helpers/download.py
 COPY --chown=node:node deploy/skills/video-use/SKILL.md /opt/video-use/SKILL.md
+
+# campaign-assets skill (fork-local, no upstream): one JSON content file
+# produces three social-sized comparison graphics, an optional animated GIF and
+# a matching lead-capture page, all rendered by headless Chromium against an
+# HTML template. Baked for the same reason video-use is — the container FS is
+# ephemeral and uid 1000 cannot install at runtime — and the entrypoint links
+# it into ~/.dsh/skills so the catalog discovers it.
+#
+# It needs nothing that is not already here: Pillow (installed above), ffmpeg
+# (palettegen + the GIF stitch), and `chromium`, which is why that package and
+# the two font sets joined the apt list. `build.sh` resolves the browser with
+# `command -v chromium-browser || chromium || google-chrome` and always passes
+# `--no-sandbox`, which is required under uid 1000 without user namespaces.
+# The templates fall back to DejaVu/Liberation when a brand supplies no font of
+# its own; bookworm-slim ships neither, and without them every graphic renders
+# in a substitute face.
+COPY --chown=node:node deploy/skills/campaign-assets/ /opt/campaign-assets/
 
 # WhatsApp sidecar binary from the builder stage. /usr/local/bin, not
 # /opt/harness/bin — the latter is a host bind mount at runtime and would shadow

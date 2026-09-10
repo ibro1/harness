@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{HEADLINE}} · {{BRAND}}</title>
+<meta name="description" content="{{SUBHEAD}}">
+
+<!-- The share card IS the infographic. One content file drives both, so the
+     graphic in the feed and the page behind it can never drift apart — which
+     is the usual way a funnel starts underperforming without anyone noticing. -->
+<meta property="og:title" content="{{HEADLINE}}">
+<meta property="og:description" content="{{SUBHEAD}}">
+<meta property="og:image" content="{{OG_IMAGE}}">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+
+<style>
+{{FONT_FACE}}
+  :root {
+    --ink:#F8FAFC; --muted:#94A3B8; --ink-2:#E2E8F0;
+    --line:rgba(148,163,184,.16);
+    --card:rgba(15,23,42,.62); --field:rgba(2,6,23,.6); --placeholder:#64748B;
+    --glow:#16304F;
+    --accent:{{ACCENT}}; --accent-2:{{ACCENT2}}; --bad:#F87171;
+  }
+  /* Light mode is not a nicety here: adopting a brand's real background
+     without inverting the ink puts white copy on a white page, which is
+     exactly what shipped. */
+  body[data-mode="light"]{
+    --ink:#0F172A; --ink-2:#1E293B; --muted:#475569;
+    --line:rgba(15,23,42,.12);
+    --card:rgba(255,255,255,.86); --field:#FFFFFF; --placeholder:#94A3B8;
+    --glow:transparent;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    min-height:100vh; color:var(--ink);
+    font-family:{{FONT_STACK}}system-ui,-apple-system,"Segoe UI","DejaVu Sans",sans-serif;
+    background:
+      radial-gradient(1100px 700px at 10% -10%, var(--glow) 0%, transparent 60%),
+      linear-gradient(160deg,{{BG_FROM}} 0%,{{BG_TO}} 55%,{{BG_FROM}} 100%);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .wrap{width:100%; max-width:1080px; display:grid; grid-template-columns:1.15fr .85fr; gap:56px; align-items:center}
+  @media (max-width:880px){ .wrap{grid-template-columns:1fr; gap:34px} }
+
+  .eyebrow{display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.14em;
+           text-transform:uppercase;color:{{ACCENT}};font-weight:700;margin-bottom:18px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  h1{font-size:clamp(30px,4.6vw,52px);line-height:1.08;margin:0 0 16px;font-weight:800;letter-spacing:-.02em}
+  .lead{font-size:clamp(15px,1.7vw,19px);line-height:1.55;color:var(--muted);margin:0 0 26px;max-width:52ch}
+
+  ul{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:12px}
+  li{display:flex;gap:11px;align-items:flex-start;font-size:16px;line-height:1.4;color:var(--ink-2)}
+  .tick{flex:none;width:21px;height:21px;border-radius:6px;display:grid;place-items:center;
+        background:color-mix(in srgb, {{ACCENT}} .16%, transparent);color:var(--accent);font-size:13px;font-weight:800;margin-top:1px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:30px}
+  .card h2{margin:0 0 6px;font-size:21px;font-weight:800;letter-spacing:-.01em}
+  .card p{margin:0 0 20px;font-size:14.5px;line-height:1.5;color:var(--muted)}
+
+  label{display:block;font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:8px}
+  input{width:100%;padding:14px 15px;font-size:16px;border-radius:12px;color:var(--ink);
+        background:var(--field);border:1px solid var(--line);outline:none}
+  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, {{ACCENT}} .14%, transparent)}
+  input::placeholder{color:var(--placeholder)}
+
+  button{width:100%;margin-top:14px;padding:14px 18px;font-size:16px;font-weight:800;
+         border:0;border-radius:12px;cursor:pointer;color:{{ON_ACCENT}};
+         background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  button:disabled{opacity:.65;cursor:progress}
+
+  .note{margin-top:13px;font-size:12.5px;color:var(--muted);line-height:1.45}
+  .msg{margin-top:14px;font-size:14px;line-height:1.5;display:none;border-radius:10px;padding:11px 13px}
+  .msg--ok{display:block;background:color-mix(in srgb, {{ACCENT}} .12%, transparent);color:{{ACCENT_LIGHT}};border:1px solid color-mix(in srgb, {{ACCENT}} .3%, transparent)}
+  .msg--bad{display:block;background:rgba(248,113,113,.12);color:#FCA5A5;border:1px solid rgba(248,113,113,.3)}
+
+  footer{margin-top:26px;display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px}
+  footer img{height:30px;width:auto;max-width:210px;object-fit:contain}
+  .badge{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+         background:linear-gradient(140deg,var(--accent),var(--accent-2));color:{{ON_ACCENT}};font-weight:900}
+
+  /* The brand's own stylesheet, from the preset's `css_file`. Last in the
+     cascade on purpose. Empty for every preset that does not declare one. */
+{{BRAND_CSS}}
+</style>
+</head>
+<body data-mode="{{MODE}}">
+  <main class="wrap">
+    <section>
+      <div class="eyebrow"><span class="dot"></span>{{EYEBROW}}</div>
+      <h1>{{HEADLINE}}</h1>
+      <p class="lead">{{SUBHEAD}}</p>
+      <ul>{{BENEFITS}}</ul>
+      <footer>{{BRANDMARK}}{{BRAND}}</footer>
+    </section>
+
+    <section class="card">
+      <h2>{{FORM_TITLE}}</h2>
+      <p>{{FORM_BLURB}}</p>
+
+      <form id="capture" novalidate>
+        <label for="v">{{FIELD_LABEL}}</label>
+        <input id="v" name="{{FIELD_NAME}}" type="{{FIELD_TYPE}}"
+               inputmode="{{FIELD_INPUTMODE}}" placeholder="{{FIELD_PLACEHOLDER}}"
+               autocomplete="{{FIELD_AUTOCOMPLETE}}" required>
+        <button type="submit" id="go">{{CTA_BUTTON}}</button>
+        <p class="note">{{PRIVACY_NOTE}}</p>
+        <div class="msg" id="msg" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+<script>
+(function () {
+  var ENDPOINT = "{{FORM_ENDPOINT}}";
+  var form = document.getElementById("capture");
+  var input = document.getElementById("v");
+  var button = document.getElementById("go");
+  var msg = document.getElementById("msg");
+
+  function say(text, ok) {
+    msg.textContent = text;
+    msg.className = "msg " + (ok ? "msg--ok" : "msg--bad");
+  }
+
+  /*
+   * A lead form that appears to work and quietly drops submissions is worse
+   * than one that is obviously broken: the campaign runs, the graphics get
+   * impressions, and the leads are simply gone. So an unconfigured endpoint
+   * refuses loudly here rather than showing a thank-you.
+   */
+  if (!ENDPOINT || ENDPOINT.indexOf("{{") === 0) {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      say("This page has no form endpoint configured, so nothing was saved. Set form_endpoint in the content file and rebuild.", false);
+    });
+    return;
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var value = input.value.trim();
+    if (!value) { say("Please fill this in first.", false); return; }
+
+    button.disabled = true;
+    var original = button.textContent;
+    button.textContent = "Sending…";
+
+    fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        {{FIELD_NAME}}: value,
+        source: "{{CAMPAIGN_ID}}",
+        submitted_at: new Date().toISOString()
+      })
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        form.reset();
+        say("{{SUCCESS_MESSAGE}}", true);
+      })
+      .catch(function (err) {
+        // Named, not swallowed. Whoever is watching the campaign needs to know
+        // the difference between "nobody signed up" and "the form is down".
+        say("That did not go through (" + err.message + "). Please try again.", false);
+      })
+      .finally(function () {
+        button.disabled = false;
+        button.textContent = original;
+      });
+  });
+})();
+</script>
+</body>
+</html>

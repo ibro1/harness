@@ -1,0 +1,11 @@
+{
+  "//": "Neutral default. No voice rules, no forbidden terms — use this for any product that does not have its own preset, and add one when it does.",
+  "name": "",
+  "badge": "",
+  "accent": "#22D3EE",
+  "accent_2": "#3B82F6",
+  "bg_from": "#0B1120",
+  "bg_to": "#101C33",
+  "forbid": [],
+  "require": null
+}

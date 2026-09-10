@@ -1,0 +1,55 @@
+{
+  "//": "Rainmaker's campaign for Rainmaker. No statistic, no customer count, no testimonial — there are no customers to quote, and a guess set in the brand's real typeface reads as measured fact. Every line here is something the product actually does.",
+  "brand": "Rainmaker",
+  "eyebrow": "Made by the thing it advertises",
+  "headline": "Say what you’re selling. Rainmaker builds the campaign.",
+  "subhead": "One sentence from you becomes a landing page, social posts, an email sequence, the artwork and a captioned vertical ad. You approve every word before any of it goes out.",
+  "status_bar": [
+    {
+      "text": "brief: one sentence",
+      "dot": true
+    },
+    {
+      "text": "page · posts · email"
+    },
+    {
+      "text": "artwork · captioned ad"
+    },
+    {
+      "text": "approved before it ships"
+    }
+  ],
+  "left_title": "Getting a campaign out by hand",
+  "left_items": [
+    "The page waits on whoever has time to build one.",
+    "Posts, email and page drift apart in three tools.",
+    "Artwork is a separate ask in someone else’s queue.",
+    "By the time it is all live, the idea has gone cold."
+  ],
+  "right_title": "With Rainmaker",
+  "right_items": [
+    "One sentence from the operator starts the build.",
+    "Page, posts and email written from that one sentence.",
+    "Artwork drawn, vertical ad cut and captioned.",
+    "The page goes up and the leads come back to you."
+  ],
+  "cta": "Start a campaign",
+  "benefits": [
+    "A landing page, social posts and an email sequence, from one sentence.",
+    "Artwork and a captioned vertical ad, drawn in your own colours.",
+    "Published to its own address, with every lead collected in one place.",
+    "Nothing goes out until you have approved the words."
+  ],
+  "form_title": "Start with one sentence",
+  "form_blurb": "Leave a number and we’ll send you the campaign Rainmaker built for itself — this page, the artwork, the posts and the ad.",
+  "field_label": "Your WhatsApp number",
+  "field_name": "whatsapp",
+  "field_type": "tel",
+  "field_inputmode": "tel",
+  "field_autocomplete": "tel",
+  "field_placeholder": "+234 801 234 5678",
+  "cta_button": "Send it to me",
+  "privacy_note": "One message, then nothing else. No list, no sharing.",
+  "success_message": "Sent. Look out for it on WhatsApp.",
+  "og_image": "https://rainmaker.linkfa.de/proof/campaign-landscape.png"
+}
