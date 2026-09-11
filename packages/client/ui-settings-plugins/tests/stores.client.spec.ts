@@ -9,6 +9,7 @@ import { RemoteError, stubSettingsScope, type StubSettingsScope } from '@deepsee
 import { CardForm, numberField, textField } from '../src/client/card-form.ts'
 import { AgentLoopCardController, type AgentLoopSettings } from '../src/client/agent-loop-card-controller.ts'
 import { BashCardController, type BashSettings } from '../src/client/bash-card-controller.ts'
+import { DokployCardController, type DokploySettings } from '../src/client/dokploy-card-controller.ts'
 import {
   SettingsDescribeMirror, type SettingsMirrorSnapshot,
 } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
@@ -1182,5 +1183,67 @@ describe('ConfigurablePluginsTabController', () => {
 
     expect(controller.inject().hooks.configurablePlugins.getSnapshot())
       .toEqual({ loaded: true, namespaces: [] })
+  })
+})
+
+describe('the Dokploy card', () => {
+  /** A ready, writable `dokploy` scope with no servers configured. */
+  function card() {
+    const host = stubSettingsScope<DokploySettings>()
+    const controller = new DokployCardController(host.scope)
+    const face = controller.inject()
+    host.publish({ status: 'ready', writable: true, value: { servers: [] }, base: { servers: [] }, user: {} })
+    return { host, face, state: () => face.hooks.dokployCard.getSnapshot() }
+  }
+
+  it('accepts a row that carries the key inline, which is what the placeholder shows', () => {
+    const { face, state } = card()
+
+    face.edit('servers', '[{"name":"main","url":"https://server.example.com","apiKey":"dk-live"}]')
+
+    // The field used to demand `apiKeyEnv` on every row, so typing the form's
+    // own placeholder left Save disabled and said only that the list was
+    // invalid. The Host has always accepted either key form.
+    expect(state().servers.invalid).toBe(false)
+    expect(state()).toMatchObject({ dirty: true, invalid: false })
+  })
+
+  it('accepts a row that names an environment variable instead', () => {
+    const { face, state } = card()
+
+    face.edit('servers', '[{"name":"main","url":"https://server.example.com","apiKeyEnv":"DOKPLOY_KEY_MAIN"}]')
+
+    expect(state().servers.invalid).toBe(false)
+  })
+
+  it('refuses a row with neither key form, which could never authenticate', () => {
+    const { face, state } = card()
+
+    face.edit('servers', '[{"name":"main","url":"https://server.example.com"}]')
+
+    expect(state().servers.invalid).toBe(true)
+  })
+
+  it('refuses a bare object, an empty key and a missing url', () => {
+    const { face, state } = card()
+
+    // A single server pasted without the enclosing array — the first thing
+    // anyone types, and worth failing on rather than silently coercing.
+    face.edit('servers', '{"name":"main","url":"https://x","apiKey":"dk-live"}')
+    expect(state().servers.invalid).toBe(true)
+
+    face.edit('servers', '[{"name":"main","url":"https://x","apiKey":"   "}]')
+    expect(state().servers.invalid).toBe(true)
+
+    face.edit('servers', '[{"name":"main","apiKey":"dk-live"}]')
+    expect(state().servers.invalid).toBe(true)
+  })
+
+  it('reads an empty list as clearing the field, not as a parse failure', () => {
+    const { face, state } = card()
+
+    face.edit('servers', '   ')
+
+    expect(state().servers.invalid).toBe(false)
   })
 })
