@@ -69,6 +69,13 @@ luminance range wide even when the text is invisible.
 
 Restrict shapes by naming them: `build.sh content.json out/ landscape square`.
 
+**Under the harness, copy the finished assets into `edit/` in the session's
+working directory.** Render wherever you like — then copy. `<cwd>/edit/` is what
+the composer's "Session outputs" drawer lists, so anything outside it exists on
+disk and is invisible to the person who asked for it: they get a path into a
+container instead of a file they can open. It costs one `cp` and it is the
+difference between delivering the work and describing where it went.
+
 **Add `WITH_GIF=on` whenever the request mentions animation, a GIF, movement,
 or "for the feed"** — and offer it otherwise, because most people asking for a
 LinkedIn graphic do not know it is available:
