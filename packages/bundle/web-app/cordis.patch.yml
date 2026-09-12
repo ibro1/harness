@@ -189,6 +189,13 @@
     - id: ui-whatsapp
       name: '@deepseek-ai/dsh-client-ui-whatsapp'
 
+    # Fork-local social plugin card (Settings -> Plugins). Shows what each
+    # connected account can post to and whether its credential is about to
+    # lapse — LinkedIn's expires every 60 days with no refresh, and the card is
+    # where that becomes visible instead of being asked for.
+    - id: ui-social
+      name: '@deepseek-ai/dsh-client-ui-social'
+
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
 

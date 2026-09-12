@@ -93,6 +93,12 @@ function mount(options: MountOptions = {}): Mounted {
     tools: {
       register(tool: RecordedTool) { tools.set(tool.name, tool); return () => {} },
     },
+    // The plugin also mounts the human-facing routes; this suite is about the
+    // model-facing tools, so the web server only has to accept them. Their own
+    // coverage lives in routes.spec.ts.
+    webServer: {
+      register() { return () => {} },
+    },
     social: {
       targets: () => Promise.resolve(options.targets ?? TARGETS),
       post(request: SocialPostRequest): Promise<SocialPostResult> {

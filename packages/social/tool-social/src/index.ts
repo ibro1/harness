@@ -16,6 +16,15 @@
  * `ctx.social.post()` — so no other caller and no listener order can arrive at
  * a publication that skipped it.
  *
+ * The same seam has a second consumer here, for a human rather than a model:
+ * the two HTTP routes in `./routes.ts` that the Settings → Plugins card reads.
+ * They surface the seam's *state* — what can be posted to, what is about to
+ * stop working, and which targets skip the approval gate — plus the one write
+ * a person needs that is not a sign-in: disconnecting a stored credential. They
+ * live in this package because they consume exactly what the tools consume,
+ * `ctx.social.targets()` and the composition's `postWithoutApproval`; a third
+ * package would only be able to re-derive both from here.
+ *
  * @module @deepseek-ai/dsh-tool-social
  */
 
@@ -28,17 +37,24 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { SocialMedia, SocialTarget } from '@deepseek-ai/dsh-social'
 import type {} from '@deepseek-ai/dsh-user-approval'
+// Type-only merge: declares `Context.settings`, resolved optionally below.
+import type {} from '@deepseek-ai/dsh-settings'
+import { parseDeclaredKeys, registerSocialRoutes } from './routes.ts'
 
 /** The plugin name, for the Loader. */
 export const name = 'tool-social'
 
 /**
- * The services these tools read. `approval` is deliberately absent: it is
- * resolved per call with `ctx.get('approval')` so a composition missing it
- * fails the POST closed with a legible refusal, instead of silently keeping
- * the whole plugin — including the harmless catalog — unmounted.
+ * The services this package reads. `webServer` is required because the human
+ * surface is half of what this package is for, and a composition that mounts it
+ * without a web server would silently ship a card nobody can reach.
+ *
+ * `approval`, `credentials`, and `settings` are deliberately absent: each is
+ * resolved where it is used with `ctx.get(...)`, so a composition missing one
+ * fails that one operation closed with a legible refusal instead of keeping the
+ * whole plugin — including the harmless catalog — unmounted.
  */
-export const inject = ['tools', 'social']
+export const inject = ['tools', 'social', 'webServer']
 
 /** Composition config. */
 export interface Config {
@@ -48,11 +64,24 @@ export interface Config {
    * turn it off for a real account. Empty by default: everything asks.
    */
   postWithoutApproval?: string[]
+  /**
+   * Social provider name to the address (`<scope>/<id>`) of the credential
+   * record holding its grant, for `POST /social/disconnect`.
+   *
+   * Needed only where the address cannot be derived: the seam publishes no
+   * provider-to-record lookup, so the route otherwise looks for a stored record
+   * whose scope is the provider's own name or `social-<provider>`, which is how
+   * the providers shipped beside this package are packaged. One plugin serving
+   * two providers — `social-meta` serves `facebook` and `instagram` — derives
+   * neither and must be named here.
+   */
+  credentialKeys?: Record<string, string>
 }
 
 /** Validate and default the composition config. */
 export const Config: z<Config> = z.object({
   postWithoutApproval: z.array(z.string()).default([]).description('Social target ids that may be posted to without a human approval prompt, by exact id (for example a staging channel). Every other target asks. Leave empty so every post asks.'),
+  credentialKeys: z.dict(z.string()).default({}).description('Social provider name to the credential record address (<scope>/<id>) holding its grant, for the Disconnect button. Only needed where the address cannot be derived from the provider name, such as social-meta, whose one record backs both facebook and instagram.'),
 })
 
 /** The canonical output of `social_targets`: text for the model to read. */
@@ -343,15 +372,29 @@ function buildSocialTools(ctx: Context, exempt: ReadonlySet<string>): ToolDefini
 }
 
 /**
- * Register the social catalog and posting tools.
- * @param ctx - the plugin context, injecting `tools` and `social`.
+ * Register the social catalog and posting tools, the two human-facing HTTP
+ * routes, and the `social` settings namespace that lists the card.
+ * @param ctx - the plugin context, injecting `tools`, `social`, and `webServer`.
  * @param config - validated composition config.
  */
 export function apply(ctx: Context, config: Config = {}): void {
   // The schema already defaulted an omitted list to empty; the `??` narrows the
   // optional-input TYPE, and never decides policy.
   const exempt = new Set(config.postWithoutApproval ?? [])
+  // Throws on a malformed address, so a typo fails at load rather than when
+  // somebody presses Disconnect.
+  const credentialKeys = parseDeclaredKeys(config.credentialKeys ?? {})
   for (const tool of buildSocialTools(ctx, exempt)) {
     ctx.effect(() => ctx.tools.register(tool), `tool-social: ${tool.name}`)
   }
+  registerSocialRoutes(ctx, exempt, credentialKeys)
+  // The Settings → Plugins tab dispatches one card per settings namespace the
+  // Host serves, so the card is listed only while `social` is a served
+  // namespace. There is nothing to configure from a form — accounts are
+  // connected by asking the agent, and `postWithoutApproval` is a composition
+  // decision, not a user preference — so the schema is empty and its presence
+  // is the whole contribution. Called directly, NOT through `ctx.effect`:
+  // `settings.register` returns a scope rather than a disposer (it files its
+  // own effect), and wrapping it makes Cordis reject an invalid effect.
+  ctx.get('settings')?.register('social', z.object({}).description('Social accounts are connected by asking the agent to sign in, and this card shows what they can post to. Nothing here is edited from a form.'), { base: {} })
 }

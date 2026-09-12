@@ -31,6 +31,15 @@
     },
     {
       "path": "../social"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../host/webserver"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

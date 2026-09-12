@@ -95,6 +95,7 @@
     { "path": "./packages/client/ui-theme" },
     { "path": "./packages/client/ui-mobile" },
     { "path": "./packages/client/ui-composer-tools" },
+    { "path": "./packages/client/ui-social" },
     { "path": "./packages/client/ui-whatsapp" },
     { "path": "./packages/client/ui-settings" },
     { "path": "./packages/client/ui-settings-general" },

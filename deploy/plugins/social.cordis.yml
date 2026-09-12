@@ -22,6 +22,15 @@
       name: '../../packages/social/tool-social/lib/index.js'
       config:
         postWithoutApproval: []
+        # A provider's credential record is named after the plugin that owns it,
+        # which is derivable for linkedin and youtube and not for Meta: one
+        # `social-meta/default` record backs both the facebook and instagram
+        # providers. Named here so Disconnect works on them, and so the card
+        # can say that removing one removes both rather than offering a button
+        # that would fail.
+        credentialKeys:
+          facebook: 'social-meta/default'
+          instagram: 'social-meta/default'
 
     - id: social-linkedin
       name: '../../packages/social/social-linkedin/lib/index.js'
