@@ -14,6 +14,18 @@
 # undone, and a post cannot be recalled. `postWithoutApproval` exempts exact
 # target ids and nothing else: there is no global off switch and no wildcard.
 - insert:
+    # The authorization seam, which no shipped composition mounts: `llm-pi-ai`
+    # is the only other plugin that injects it and it is not in the default
+    # tree. Every provider below waits on it — it is how a human hands over a
+    # credential — so it is mounted here rather than left to a deployment to
+    # discover from three plugins sitting pending forever.
+    - id: authorization
+      # By path, like every other entry here. A bare package name has to be a
+      # dependency of whatever manifest resolves this profile, and getting that
+      # wrong is what stopped the last deployment from booting at all.
+      name: '../../packages/credentials/authorization/lib/index.js'
+      config: {}
+
     - id: social
       name: '../../packages/social/social/lib/index.js'
       config: {}
