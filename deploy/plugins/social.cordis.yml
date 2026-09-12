@@ -1,0 +1,40 @@
+# Social posting, layered over the shipped Web composition.
+#
+# The registry, the approval-gated tools, and the three providers. Referenced by
+# path because these packages are fork-local and unpublished.
+#
+# Nothing here holds a credential. Each provider registers an authorization flow
+# on the authorization seam and stores its tokens through the credential seam,
+# so a token never reaches settings and never reaches this file. Sign in by
+# asking the agent to connect the account; it walks the OAuth flow.
+#
+# `social_post` asks a human before it publishes. This is the first capability
+# in the harness that speaks publicly under the operator's name — every other
+# tool reads data or acts on infrastructure they control, where a mistake can be
+# undone, and a post cannot be recalled. `postWithoutApproval` exempts exact
+# target ids and nothing else: there is no global off switch and no wildcard.
+- insert:
+    - id: social
+      name: '../../packages/social/social/lib/index.js'
+      config: {}
+
+    - id: tool-social
+      name: '../../packages/social/tool-social/lib/index.js'
+      config:
+        postWithoutApproval: []
+
+    - id: social-linkedin
+      name: '../../packages/social/social-linkedin/lib/index.js'
+      config:
+        redirectUri: !!js process.env.SOCIAL_LINKEDIN_REDIRECT_URI || ''
+
+    - id: social-meta
+      name: '../../packages/social/social-meta/lib/index.js'
+      config:
+        redirectUri: !!js process.env.SOCIAL_META_REDIRECT_URI || ''
+        publicMediaBaseUrl: !!js process.env.SOCIAL_META_PUBLIC_MEDIA_BASE_URL || ''
+
+    - id: social-youtube
+      name: '../../packages/social/social-youtube/lib/index.js'
+      config:
+        redirectUri: !!js process.env.SOCIAL_YOUTUBE_REDIRECT_URI || ''

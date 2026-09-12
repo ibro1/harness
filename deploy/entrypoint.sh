@@ -220,6 +220,23 @@ if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
   fi
 fi
 
+# Social posting. Off by default, and deliberately so: it is the one capability
+# that can speak publicly under the operator's name, and a post cannot be
+# recalled. DSH_SOCIAL=1 turns it on. Even then every post asks for approval
+# first unless a specific target id is exempted in the plugin's config.
+if [[ "${DSH_SOCIAL:-0}" == "1" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/social.cordis.yml")
+  echo "[entrypoint] Social posting enabled (social_targets, social_post); connect accounts by asking the agent to sign in"
+  for pair in "LinkedIn:SOCIAL_LINKEDIN_REDIRECT_URI" "Meta:SOCIAL_META_REDIRECT_URI" "YouTube:SOCIAL_YOUTUBE_REDIRECT_URI"; do
+    social_label="${pair%%:*}"
+    social_var="${pair#*:}"
+    if [[ -z "${!social_var:-}" ]]; then
+      echo "[entrypoint] NOTE: ${social_label} has no redirect URI (${social_var}); its sign-in will fail until one is set and registered byte-for-byte with the app." >&2
+    fi
+  done
+  unset social_label social_var
+fi
+
 # Session outputs: one directory a skill publishes a finished file into, and the
 # capability `capture` writes its screenshots through. On by default because it
 # is inert until something publishes — set DSH_OUTPUTS=0 to leave it out.
