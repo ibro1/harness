@@ -388,10 +388,15 @@ function summarize(value: Omit<CaptureValue, 'text'>): string {
     ? `Captured ${value.requestedUrl}`
     : `Captured ${value.requestedUrl} (ended at ${value.finalUrl})`)
   lines.push(`Title: ${value.title === '' ? '(none)' : value.title}`)
-  const where = value.image.published
-    ? `published to the session outputs as ${value.image.rel ?? value.image.name}`
-    : `written to ${value.image.path ?? value.image.name}`
-  lines.push(`Image: ${value.image.name}, ${String(value.image.bytes)} bytes, ${where}`)
+  lines.push(`Image: ${value.image.name}, ${String(value.image.bytes)} bytes`)
+  // Said outright, because a model that cannot tell whether a file has been
+  // delivered goes looking for it: the first real run answered this summary by
+  // running pwd, ls and grep across the workspace and then copying the image
+  // into two further directories. Delivery is finished here, and saying so is
+  // cheaper than the hunt.
+  lines.push(value.image.published
+    ? `Delivered: it is in the session outputs drawer at ${value.image.rel ?? value.image.name}, a path relative to this session's working directory. The reader can open and download it already — do not copy it anywhere else.`
+    : `Written to ${value.image.path ?? value.image.name}. The session outputs capability is not mounted, so this one did not reach the drawer.`)
   lines.push(`Viewport ${String(value.viewport.width)}x${String(value.viewport.height)} at ${String(value.viewport.deviceScaleFactor)}x`
     + `${value.viewport.mobile ? ', mobile' : ''}${value.viewport.darkMode ? ', dark mode' : ''}`
     + `; document ${String(value.scrollWidth)}x${String(value.scrollHeight)}`)
@@ -437,7 +442,8 @@ export function buildCaptureTools(config: Config, deps: CaptureDeps = {}): ToolD
       description: 'Screenshot a web page AND measure it: the PNG plus the geometry read back from the live DOM — '
         + 'scrollWidth against the viewport width (horizontal overflow as a number), the page title and final URL, '
         + 'every image that failed to load, the box of an optional CSS selector, and how many elements the document holds. '
-        + 'Use it instead of a plain headless screenshot whenever a claim about a page has to be checked rather than eyeballed.',
+        + 'Use it instead of a plain headless screenshot whenever a claim about a page has to be checked rather than eyeballed. '
+        + 'The image is delivered to the session outputs drawer by this tool; it needs no copying afterwards.',
       parameters: {
         url: {
           type: 'string',

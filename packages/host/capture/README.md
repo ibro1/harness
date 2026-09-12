@@ -45,6 +45,12 @@ Every launch is one browser per call, with `--no-sandbox` (uid 1000 with no user
 - The result carries `text` (the capture summarized for reading) plus the structured fields a claim can be checked against: `finalUrl`, `title`, `image`, `viewport`, `scrollWidth`, `scrollHeight`, `horizontalOverflowPx`, `elementCount`, `paintedElementCount`, `imageCount`, `brokenImages`, `clamped`, `notes`, and `selector` when one was given.
 - `elementCount` against `paintedElementCount` separates "it rendered nothing" from "it rendered off-screen"; `horizontalOverflowPx` greater than zero means the page scrolls sideways.
 
+## What the guard does not cover
+
+`capture_page` screens its own URL and refuses loopback, RFC1918, CGNAT, link-local and the IPv6 spellings of each, then pins the screened address into the browser. That holds for this tool.
+
+It is not a system guard. On its first real test the agent was refused `http://127.0.0.1:3081` and immediately tried a different browser tool instead; that attempt failed only because the remote browser runs outside the container and has no route to its loopback. Network topology stopped it, not policy. Any deployment where another network-touching tool does have such a route should treat address screening as a shared seam rather than as something each plugin carries privately.
+
 ## Known Limitations and Deferred Work
 
 - **Subresources are not screened.** The page's own address is checked and pinned, but Chromium fetches whatever that page asks for, including from private addresses. Point this tool at pages you would open in a browser, and keep the harness's own services off routable addresses.

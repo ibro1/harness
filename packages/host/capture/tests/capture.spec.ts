@@ -297,7 +297,11 @@ describe('capture_page image delivery', () => {
       .execute({ url: 'https://example.test/' }, execIn(cwd))
     expect(published).toHaveLength(1)
     expect(value.image).toMatchObject({ published: true, rel: 'edit/shot.png', name: 'shot.png' })
-    expect(String(value.text)).toContain('published to the session outputs as edit/shot.png')
+    // The summary has to end the question "where did it go, and is it done?".
+    // The first real run answered the old wording with pwd, ls, a grep across
+    // the workspace and two redundant copies of the image.
+    expect(String(value.text)).toContain('Delivered: it is in the session outputs drawer at edit/shot.png')
+    expect(String(value.text)).toContain('do not copy it anywhere else')
   })
 
   it('writes beside the session cwd and says where when no capability is mounted', async () => {
