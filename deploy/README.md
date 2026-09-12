@@ -354,6 +354,73 @@ To use it: set a key, redeploy, then in a session point the agent at a folder of
 footage ("edit these into a launch video"). Nothing is transcribed until you
 ask — transcription spends API credits.
 
+## Social posting (LinkedIn, Facebook Pages, Instagram, YouTube)
+
+Posting as you, to accounts you own. Off unless `DSH_SOCIAL=1`: it is the one
+capability in the harness that speaks publicly under your name, and a post
+cannot be recalled. Even enabled, every post asks you first — the request shows
+the target, the full text verbatim, and each attachment — so the switch is belt
+and braces on top of a gate that already stops.
+
+The entrypoint prints one line when it mounts, directly above the session-outputs
+line. **If that line is absent, the plugin is not loaded**, whatever the
+Environment tab says — every variable has to be passed through in
+`docker-compose.yml` as well, and one that is not reaches nothing:
+
+```
+[entrypoint] Social posting enabled (social_targets, social_post); connect accounts by asking the agent to sign in
+```
+
+### What to set
+
+| Variable | Value |
+|---|---|
+| `DSH_SOCIAL` | `1` |
+| `SOCIAL_LINKEDIN_REDIRECT_URI` | e.g. `https://<host>/social/callback/linkedin` |
+| `SOCIAL_META_REDIRECT_URI` | e.g. `https://<host>/social/callback/meta` |
+| `SOCIAL_YOUTUBE_REDIRECT_URI` | e.g. `https://<host>/social/callback/youtube` |
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn app → Auth |
+| `META_APP_ID` / `META_APP_SECRET` | Meta app → Settings → Basic |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud → Credentials, type Web application |
+| `SOCIAL_META_PUBLIC_MEDIA_BASE_URL` | optional; see Instagram below |
+
+**No user token is ever set here.** Access and refresh tokens are obtained by
+the sign-in flow and kept in the credential store, never in settings and never
+in this file. The variables above are app identities, resolved by name.
+
+Each redirect URI must be registered byte-for-byte with the app it belongs to.
+After consent the browser lands on a page that does not exist, which is
+expected: the address bar carries the code, and you paste that back to the
+agent.
+
+### Connecting an account
+
+Ask the agent — "connect my LinkedIn account". It returns the consent URL, you
+sign in, you paste the redirected address back. Settings → Plugins → Social then
+shows what each account can post to and whether its credential is about to
+lapse.
+
+### What will not work immediately, and why it is not a misconfiguration
+
+- **LinkedIn** posts as soon as it is connected; `w_member_social` is self-serve.
+  Its token lasts 60 days and the tier grants no refresh, so it has to be
+  reconnected — the card warns a week ahead.
+- **LinkedIn company Pages** need `w_organization_social` through the Community
+  Management API, which is a separate LinkedIn approval. Organisation targets
+  appear only when the token actually carries that scope.
+- **Facebook and Instagram** need Meta App Review for `pages_manage_posts` and
+  `instagram_content_publish`. Until then the app works only for people with a
+  role on it, and the targets list themselves as not ready with the missing
+  permission named.
+- **Instagram** takes no binary upload — media is fetched from a public URL. Set
+  `SOCIAL_META_PUBLIC_MEDIA_BASE_URL` to a base a local file's name can be
+  appended to, or Instagram targets carry that constraint as their reason.
+- **YouTube** needs the YouTube Data API v3 enabled on the project and you added
+  as a test user while the app is unverified. `videos.insert` is quota-heavy —
+  roughly six uploads a day on the default allowance — and an unverified project
+  can have uploads forced private regardless of what was requested, which the
+  tool reports as what actually happened.
+
 ## campaign-assets skill (marketing graphics and a capture page)
 
 The image bakes in `campaign-assets` — an agent skill that turns **one JSON

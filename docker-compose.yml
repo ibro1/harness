@@ -55,6 +55,40 @@ services:
       # Set to expose the Dokploy tools to the agy/opencode CLIs over MCP.
       DSH_DOKPLOY_TOKEN: ${DSH_DOKPLOY_TOKEN:-}
       DSH_DOKPLOY_PATH: ${DSH_DOKPLOY_PATH:-}
+      # 0 leaves each of these plugins out. They default to on, so the absence
+      # of the variable is harmless — which is exactly why their absence went
+      # unnoticed until DSH_SOCIAL, which defaults to OFF and so has nothing to
+      # fall back on. A switch the deployment cannot reach is not a switch.
+      DSH_OUTPUTS: ${DSH_OUTPUTS:-}
+      DSH_CAPTURE: ${DSH_CAPTURE:-}
+      DSH_CLOUDFLARE: ${DSH_CLOUDFLARE:-}
+      DSH_POSTGRES: ${DSH_POSTGRES:-}
+      # Set to expose the Cloudflare and Postgres tools over MCP, as with Dokploy.
+      DSH_CLOUDFLARE_TOKEN: ${DSH_CLOUDFLARE_TOKEN:-}
+      DSH_CLOUDFLARE_PATH: ${DSH_CLOUDFLARE_PATH:-}
+      DSH_POSTGRES_TOKEN: ${DSH_POSTGRES_TOKEN:-}
+      DSH_POSTGRES_PATH: ${DSH_POSTGRES_PATH:-}
+      # Social posting. 1 mounts it; it is the one capability that speaks
+      # publicly under the operator's name, so it is off unless asked for.
+      DSH_SOCIAL: ${DSH_SOCIAL:-}
+      # Each provider's OAuth redirect URI, registered byte-for-byte with the
+      # app it belongs to. A sign-in fails without one.
+      SOCIAL_LINKEDIN_REDIRECT_URI: ${SOCIAL_LINKEDIN_REDIRECT_URI:-}
+      SOCIAL_META_REDIRECT_URI: ${SOCIAL_META_REDIRECT_URI:-}
+      SOCIAL_YOUTUBE_REDIRECT_URI: ${SOCIAL_YOUTUBE_REDIRECT_URI:-}
+      # Instagram takes no binary upload: media is fetched from a public URL,
+      # and a local file is mapped onto this base. Blank leaves Instagram
+      # listing the constraint as its reason instead of failing at post time.
+      SOCIAL_META_PUBLIC_MEDIA_BASE_URL: ${SOCIAL_META_PUBLIC_MEDIA_BASE_URL:-}
+      # The app identities the providers resolve by name at sign-in. No user
+      # token is ever set here: those are obtained by the OAuth flow and kept in
+      # the credential store.
+      LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID:-}
+      LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET:-}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # DeerFlow remote browser MCP. Set the token to attach its tools
       # (mcp__deerflow__*); blank leaves them out. URL override optional.
       DEERFLOW_BROWSER_MCP_TOKEN: ${DEERFLOW_BROWSER_MCP_TOKEN:-}
