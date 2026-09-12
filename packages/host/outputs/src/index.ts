@@ -449,6 +449,7 @@ export function buildOutputTools(outputs: SessionOutputs, resolveCwd: ResolveCwd
         'Writing a file somewhere in the workspace does not deliver it: only a published file can be opened or downloaded by the person you are working for, and telling them a path instead reaches nobody.',
         'Publish every finished deliverable — a rendered image, a cut video, an exported document — as soon as it is final.',
         'The file is copied, so the original stays where you wrote it and you may keep working on it.',
+        'Publishing is the whole of delivery: do not also copy the file into another directory afterwards.',
       ].join(' '),
       parameters: {
         path: {
@@ -470,7 +471,13 @@ export function buildOutputTools(outputs: SessionOutputs, resolveCwd: ResolveCwd
           ? ''
           : ` A file named ${basename(args.path)} was already published, so this one is ${published.name}.`
         return {
-          text: `Published ${published.rel} (${formatBytes(published.bytes)}).${renamed} It is now in this session's outputs; the original at ${args.path} is untouched.`,
+          // "Delivered" and "do not copy", not just the path. Twice in testing a
+          // model published correctly and then copied the file into a second
+          // directory it had seen another skill use, because naming where a
+          // file went does not tell it whether anything is left to do.
+          text: `Delivered: ${published.rel} (${formatBytes(published.bytes)}) is in this session's outputs drawer, `
+            + `where the reader can open and download it.${renamed} The original at ${args.path} is untouched. `
+            + 'Do not copy it anywhere else — publishing is the delivery.',
         }
       },
       presentCall: args => ({

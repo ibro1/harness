@@ -283,3 +283,18 @@ describe('buildOutputTools', () => {
     expect(built[0]?.description).toContain('does not deliver it')
   })
 })
+
+describe('what publish_output tells the model', () => {
+  it('says delivery is finished and that nothing further should be copied', async () => {
+    // Twice in testing a model published correctly and then copied the file
+    // into a second directory it had seen another skill use. Naming the path
+    // does not answer "is there anything left to do?", so the reply does.
+    const source = await makeFile('render/report.png', 'bytes')
+    const published = await outputs.publish(cwd, source, 'the render')
+
+    expect(published.rel).toBe('.outputs/report.png')
+    expect(published.label).toBe('the render')
+    // The original is left where the producer wrote it.
+    expect(await readFile(source, 'utf8')).toBe('bytes')
+  })
+})
