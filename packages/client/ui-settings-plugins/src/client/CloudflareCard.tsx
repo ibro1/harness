@@ -15,7 +15,8 @@ export type CloudflareCardProps =
 /**
  * Render the Cloudflare card: one JSON block listing the zones, each a name, a
  * zone id, and either the environment variable holding its API token or the
- * token itself.
+ * token itself — and a second, optional block holding the account credential
+ * that creating a zone needs.
  * @param props - locale copy, the card snapshot, and its form actions.
  * @returns the card.
  */
@@ -45,6 +46,20 @@ export function CloudflareCard(props: CloudflareCardProps) {
         {...state.zones}
         onEdit={(text) => { props.edit('zones', text) }}
         onReset={() => { props.resetField('zones') }}
+      />
+      <ValueField
+        id="plugin-config-cloudflare-account"
+        label={t('cloudflareAccount')}
+        hint={t('cloudflareAccountHint')}
+        overriddenLabel={t('overridden')}
+        resetLabel={t('reset')}
+        invalidLabel={t('cloudflareAccountInvalid')}
+        multiline
+        placeholder={t('cloudflareAccountPlaceholder')}
+        disabled={disabled}
+        {...state.account}
+        onEdit={(text) => { props.edit('account', text) }}
+        onReset={() => { props.resetField('account') }}
       />
     </PluginCard>
   )

@@ -47,9 +47,28 @@ interface CloudflareZone {
   apiToken?: string
 }
 
+/**
+ * The account-wide credential, separate from every zone's.
+ *
+ * Creating a zone is an account operation, not a zone one: it needs
+ * `Account → Zone: Edit`, which no per-zone token carries and which reaches
+ * every domain on the account. Keeping it in its own field means the narrow
+ * per-zone tokens stay narrow, and an account that never creates zones never
+ * has to hold a token that could.
+ */
+interface CloudflareAccount {
+  /** The account id, from any zone's overview page. Empty disables the account tools. */
+  id?: string
+  /** Name of the environment variable holding the account token (preferred). */
+  apiTokenEnv?: string
+  /** The account token inline — simpler, but stored in settings and shown in the card. */
+  apiToken?: string
+}
+
 /** The resolved `cloudflare` settings section. */
 interface CloudflareConfig {
   zones: CloudflareZone[]
+  account?: CloudflareAccount
 }
 
 /**
@@ -65,6 +84,11 @@ const CONFIG_SCHEMA: z<CloudflareConfig> = z.object({
     apiTokenEnv: z.string().description('Preferred: name of the environment variable holding this zone API token (e.g. CLOUDFLARE_TOKEN_SITE), so the token stays out of settings. Requires that variable to be set on the harness.'),
     apiToken: z.string().description('Alternative to apiTokenEnv: the API token itself. Simpler, but it is stored here in settings and shown in this form.'),
   })).default([]).description('Cloudflare zones this harness may purge and edit DNS on. Give each zone either apiTokenEnv or apiToken.'),
+  account: z.object({
+    id: z.string().description('The Cloudflare account id, from any zone overview page. Leave empty to keep the account tools off.'),
+    apiTokenEnv: z.string().description('Preferred: name of the environment variable holding the account token (e.g. CLOUDFLARE_ACCOUNT_TOKEN), so it stays out of settings.'),
+    apiToken: z.string().description('Alternative to apiTokenEnv: the account token itself. Simpler, but stored here in settings and shown in this form.'),
+  }).description('Optional. Only needed to create zones or list every zone on the account; it needs Account → Zone: Edit, which reaches every domain you own.'),
 })
 
 /** The plugin name, for the Loader. */
@@ -142,6 +166,9 @@ function apiBase(url: string): string {
 /** Read the zone roster live from settings each call, so edits take effect at once. */
 type ReadZones = () => readonly CloudflareZone[]
 
+/** Read the account section live from settings, so an edit takes effect at once. */
+type ReadAccount = () => CloudflareAccount | undefined
+
 /**
  * Resolve a zone by name, or explain which names exist.
  * @param zones - the current roster.
@@ -174,6 +201,17 @@ function resolveZone(zones: readonly CloudflareZone[], requested: string | undef
  * @returns the token.
  * @throws when neither form yields a non-empty token, naming which field to fix.
  */
+/**
+ * A token and the label errors name it by — a zone's, or the account's.
+ *
+ * The call helper takes this rather than a zone, so the account tools reuse it
+ * without a second copy of the JSON, success-flag and timeout handling.
+ */
+interface Credential {
+  name: string
+  token: string
+}
+
 function resolveToken(zone: CloudflareZone): string {
   const fromEnv = zone.apiTokenEnv !== undefined && zone.apiTokenEnv !== ''
     ? process.env[zone.apiTokenEnv]?.trim()
@@ -230,12 +268,12 @@ function errorMessages(value: unknown): string {
  */
 async function callCloudflare(
   base: string,
-  zone: CloudflareZone,
+  credential: Credential,
   path: string,
   init: { method?: string; body?: unknown } | undefined,
   timeoutMs: number,
 ): Promise<unknown> {
-  const apiToken = resolveToken(zone)
+  const apiToken = credential.token
   const controller = new AbortController()
   const timer = setTimeout(() => { controller.abort() }, timeoutMs)
   try {
@@ -254,20 +292,49 @@ async function callCloudflare(
     try {
       parsed = JSON.parse(text) as unknown
     } catch {
-      throw new Error(`Cloudflare ${zone.name} answered ${String(response.status)} with a non-JSON body: ${text.slice(0, 300)}`)
+      throw new Error(`Cloudflare ${credential.name} answered ${String(response.status)} with a non-JSON body: ${text.slice(0, 300)}`)
     }
     const body = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Json
     if (body['success'] !== true) {
       const messages = errorMessages(body['errors'])
-      throw new Error(`Cloudflare ${zone.name} refused the call (HTTP ${String(response.status)}): ${messages === '' ? text.slice(0, 300) : messages}`)
+      throw new Error(`Cloudflare ${credential.name} refused the call (HTTP ${String(response.status)}): ${messages === '' ? text.slice(0, 300) : messages}`)
     }
     return body['result']
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(`Cloudflare ${zone.name} did not answer within ${String(timeoutMs)}ms`)
+    if (controller.signal.aborted) throw new Error(`Cloudflare ${credential.name} did not answer within ${String(timeoutMs)}ms`)
     throw error instanceof Error ? error : new Error(String(error))
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Resolve the account credential, or explain what is missing.
+ *
+ * Both halves are required and the error says which one is absent, because
+ * "Cloudflare refused the call" for a blank account id is a much worse message
+ * than "no account id is configured".
+ * @param account - the account section of settings, if any.
+ * @returns the account id and the token to call with.
+ * @throws when no account is configured, or it carries no usable token.
+ */
+function resolveAccount(account: CloudflareAccount | undefined): { id: string; credential: Credential } {
+  const id = account?.id?.trim() ?? ''
+  if (id === '') {
+    throw new Error('No Cloudflare account is configured; add an account id under Settings → cloudflare. It is only needed for creating zones and listing every zone on the account.')
+  }
+  const fromEnv = account?.apiTokenEnv !== undefined && account.apiTokenEnv !== ''
+    ? process.env[account.apiTokenEnv]?.trim()
+    : undefined
+  const inline = account?.apiToken !== undefined && account.apiToken.trim() !== '' ? account.apiToken.trim() : undefined
+  const apiToken = fromEnv ?? inline
+  if (apiToken === undefined || apiToken === '') {
+    const hint = account?.apiTokenEnv !== undefined && account.apiTokenEnv !== ''
+      ? `set the ${account.apiTokenEnv} environment variable, or put the token in the account's apiToken field`
+      : 'give the account an apiToken, or an apiTokenEnv naming a set environment variable'
+    throw new Error(`The Cloudflare account has no API token: ${hint}. It needs Account → Zone: Edit.`)
+  }
+  return { id, credential: { name: 'account', token: apiToken } }
 }
 
 /**
@@ -354,8 +421,8 @@ async function requirePublicUrl(raw: string): Promise<URL> {
  * @param readZones - live reader of the configured roster.
  * @param config - composition config supplying the API root and the timeout.
  */
-function registerCloudflareTools(ctx: Context, readZones: ReadZones, config: Config): void {
-  for (const tool of buildCloudflareTools(readZones, config)) {
+function registerCloudflareTools(ctx: Context, readZones: ReadZones, readAccount: ReadAccount, config: Config): void {
+  for (const tool of buildCloudflareTools(readZones, readAccount, config)) {
     ctx.effect(() => ctx.tools.register(tool), `cloudflare: ${tool.name}`)
   }
 }
@@ -367,7 +434,7 @@ function registerCloudflareTools(ctx: Context, readZones: ReadZones, config: Con
  * @param config - composition config supplying the API root and the timeout.
  * @returns the tool definitions.
  */
-export function buildCloudflareTools(readZones: ReadZones, config: Config): ToolDefinition[] {
+export function buildCloudflareTools(readZones: ReadZones, readAccount: ReadAccount, config: Config): ToolDefinition[] {
   const zoneParameter = {
     type: 'string',
     description: 'Which configured Cloudflare zone to act on, by its name. Omit when only one is configured; use cloudflare_zones to see the names.',
@@ -378,7 +445,14 @@ export function buildCloudflareTools(readZones: ReadZones, config: Config): Tool
     zone: CloudflareZone,
     path: string,
     init?: { method?: string; body?: unknown },
-  ): Promise<unknown> => callCloudflare(config.apiBase, zone, path, init, config.timeoutMs)
+  ): Promise<unknown> => callCloudflare(config.apiBase, { name: zone.name, token: resolveToken(zone) }, path, init, config.timeoutMs)
+
+  /** The same call, against the account credential rather than a zone's. */
+  const callAccount = (
+    credential: Credential,
+    path: string,
+    init?: { method?: string; body?: unknown },
+  ): Promise<unknown> => callCloudflare(config.apiBase, credential, path, init, config.timeoutMs)
 
   return [
     defineTool({
@@ -521,6 +595,94 @@ export function buildCloudflareTools(readZones: ReadZones, config: Config): Tool
     }),
 
     defineTool({
+      name: 'cloudflare_account_zones',
+      description: 'List every zone on the Cloudflare account, including ones not configured in this harness, with the status of each. Needs an account id and an account token in settings.',
+      parameters: {},
+      output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
+      execute: async (_args, exec: ToolRunContext) => {
+        exec.signal.throwIfAborted()
+        const { id, credential } = resolveAccount(readAccount())
+        const query = new URLSearchParams({ 'account.id': id, per_page: '50' })
+        const found = rows(await callAccount(credential, `/zones?${query.toString()}`))
+        if (found.length === 0) return reply('The Cloudflare account has no zones.')
+        const lines = found.map((row) => {
+          const status = str(row['status'])
+          return `- ${str(row['name'])} (${str(row['id'])})${status === '' ? '' : ` — ${status}`}`
+        })
+        return reply(`Zones on the Cloudflare account:\n${lines.join('\n')}`)
+      },
+      presentCall: () => ({ card: 'generic', title: 'List account zones', kind: 'other', rawInput: '' }),
+    }),
+
+    defineTool({
+      name: 'cloudflare_zone_add',
+      description: 'Add a domain to the Cloudflare account and report the nameservers it was assigned. This does NOT finish the move: the domain stays pending until its nameservers are changed at the registrar, which is done outside Cloudflare. Needs an account id and an account token in settings.',
+      parameters: {
+        domain: { type: 'string', required: true, description: 'The apex domain to add, for example example.com — not a subdomain and not a URL.' },
+      },
+      output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
+      execute: async (args, exec: ToolRunContext) => {
+        exec.signal.throwIfAborted()
+        const domain = args.domain.trim().toLowerCase().replace(/^https?:\/\//u, '').replace(/\/.*$/u, '')
+        // An apex, not a host under one: Cloudflare takes a zone, and adding
+        // "app.example.com" quietly creates a separate zone that will never
+        // receive traffic while example.com is delegated elsewhere.
+        if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/u.test(domain)) {
+          throw new Error(`${JSON.stringify(args.domain)} is not a domain name. Pass an apex domain such as example.com.`)
+        }
+        const { id, credential } = resolveAccount(readAccount())
+        const created = await callAccount(credential, '/zones', { method: 'POST', body: { name: domain, account: { id } } })
+        const row = (typeof created === 'object' && created !== null ? created : {}) as Json
+        const servers = Array.isArray(row['name_servers'])
+          ? (row['name_servers'] as unknown[]).map(value => str(value)).filter(value => value !== '')
+          : []
+        const zoneId = str(row['id'])
+        const lines = [
+          `Added ${domain} to the Cloudflare account. Zone id: ${zoneId === '' ? '(not reported)' : zoneId}`,
+          `Status: ${str(row['status']) || 'pending'}.`,
+        ]
+        if (servers.length > 0) {
+          lines.push('', 'Set these nameservers at the registrar — until that is done the zone stays pending and Cloudflare serves nothing for it:')
+          for (const server of servers) lines.push(`  ${server}`)
+        }
+        lines.push('', `To manage DNS on it from here, add it under Settings → cloudflare with zoneId ${zoneId === '' ? '(above)' : zoneId} and a token scoped to it.`)
+        return reply(lines.join('\n'))
+      },
+      presentCall: args => ({ card: 'generic', title: `Add ${args.domain} to Cloudflare`, kind: 'other', rawInput: args.domain }),
+    }),
+
+    defineTool({
+      name: 'cloudflare_zone_status',
+      description: 'Report whether a domain on the account is active or still pending its nameserver change at the registrar, and which nameservers it expects. Needs an account id and an account token in settings.',
+      parameters: {
+        domain: { type: 'string', required: true, description: 'The apex domain to check, for example example.com.' },
+      },
+      output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
+      execute: async (args, exec: ToolRunContext) => {
+        exec.signal.throwIfAborted()
+        const domain = args.domain.trim().toLowerCase()
+        const { id, credential } = resolveAccount(readAccount())
+        const query = new URLSearchParams({ 'account.id': id, name: domain })
+        const found = rows(await callAccount(credential, `/zones?${query.toString()}`))
+        const row = found[0]
+        if (row === undefined) {
+          throw new Error(`No zone named ${domain} on this Cloudflare account. Add it with cloudflare_zone_add, or check the spelling.`)
+        }
+        const status = str(row['status']) || 'unknown'
+        const servers = Array.isArray(row['name_servers'])
+          ? (row['name_servers'] as unknown[]).map(value => str(value)).filter(value => value !== '')
+          : []
+        const lines = [`${domain} is ${status} (zone id ${str(row['id'])}).`]
+        if (status !== 'active' && servers.length > 0) {
+          lines.push('', 'It is waiting on the registrar to point at:')
+          for (const server of servers) lines.push(`  ${server}`)
+        }
+        return reply(lines.join('\n'))
+      },
+      presentCall: args => ({ card: 'generic', title: `Check ${args.domain}`, kind: 'other', rawInput: args.domain }),
+    }),
+
+    defineTool({
       name: 'cloudflare_cache_status',
       description: 'Fetch one absolute URL\'s response headers and report whether an edge is serving it from cache: cf-cache-status, age, etag, last-modified and content-length. Needs no zone and no token. Use it to tell a stale edge from a wrong origin before purging anything, and again afterwards to confirm the purge took.',
       parameters: {
@@ -629,12 +791,13 @@ async function handleCommand(req: IncomingMessage, res: ServerResponse, tools: T
 export function apply(ctx: Context, config: Config): void {
   const scope = ctx.settings.register(NS, CONFIG_SCHEMA, { base: { zones: [] } })
   const readZones: ReadZones = () => scope.get().zones
+  const readAccount: ReadAccount = () => scope.get().account
 
   // A token-guarded command route, so a CLI's MCP client (agy, opencode) can
   // reach the same tools a direct-provider agent gets natively. The token is
   // the route's whole authentication; an empty one leaves it unmounted.
   if (config.token !== '') {
-    const routeTools = buildCloudflareTools(readZones, config)
+    const routeTools = buildCloudflareTools(readZones, readAccount, config)
     ctx.effect(() => ctx.webServer.register({
       kind: 'exact',
       path: `${config.path}/command`,
@@ -647,7 +810,7 @@ export function apply(ctx: Context, config: Config): void {
   const install = (agent: Agent): void => {
     if (installed.has(agent)) return
     installed.set(agent, agent.ctx.inject(['tools'], (scope2) => {
-      registerCloudflareTools(scope2, readZones, config)
+      registerCloudflareTools(scope2, readZones, readAccount, config)
     }))
   }
   const remove = (agent: Agent): void => {

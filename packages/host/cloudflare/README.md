@@ -34,6 +34,16 @@ Composition config, all defaulted:
 
 Every tool except `cloudflare_cache_status` takes an optional `zone`, needed only when more than one is configured.
 
+## The account tools, and why they are separate
+
+`cloudflare_zone_add`, `cloudflare_zone_status` and `cloudflare_account_zones` act on the account rather than on one zone, and they are off until an `account` id and token are configured.
+
+Creating a zone needs `Account → Zone: Edit`, which reaches every domain on the account. A per-zone token reaches one zone, which is what makes the zone roster safe to hand a model. Folding the two into one credential would quietly widen every zone token to the account, so the account credential lives in its own settings field and stays empty for anyone who never creates a zone.
+
+`cloudflare_zone_add` does not finish the job and says so. Cloudflare assigns nameservers and the zone stays `pending` until those are set at the registrar, which is outside Cloudflare entirely. The tool returns the nameservers and names the manual step; `cloudflare_zone_status` answers whether it has taken effect.
+
+A new zone is usable for DNS as soon as it exists, because `cloudflare_dns_set` resolves by zone id — but it has to be added to the zone roster with its own scoped token first, and the tool's reply includes the id to paste.
+
 ## Known Limitations and Deferred Work
 
 - **Cloudflare answers `200` with `success: false`** for many failures, so the HTTP status decides nothing: every response is parsed, `success` is checked, and the `errors[].message` text becomes the tool's failure message.

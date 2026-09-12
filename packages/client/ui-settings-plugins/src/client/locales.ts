@@ -20,6 +20,7 @@ export type PluginsSettingsLocaleKey =
   | 'dokployTitle' | 'dokployDescription' | 'dokployServers' | 'dokployServersHint' | 'dokployInvalid' | 'dokployServersPlaceholder'
   | 'postgresTitle' | 'postgresDescription' | 'postgresDatabases' | 'postgresDatabasesHint' | 'postgresInvalid' | 'postgresDatabasesPlaceholder'
   | 'cloudflareTitle' | 'cloudflareDescription' | 'cloudflareZones' | 'cloudflareZonesHint' | 'cloudflareInvalid' | 'cloudflareZonesPlaceholder'
+  | 'cloudflareAccount' | 'cloudflareAccountHint' | 'cloudflareAccountInvalid' | 'cloudflareAccountPlaceholder'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -87,6 +88,10 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   cloudflareZonesHint: 'A JSON array of zones, each with a name, a zoneId, and either apiTokenEnv (the name of an environment variable holding the token — kept out of settings) or apiToken (the token itself, stored here).',
   cloudflareInvalid: 'Not a valid zones list: a JSON array of objects, each with a string name and zoneId, and either apiTokenEnv or apiToken.',
   cloudflareZonesPlaceholder: '[\n  { "name": "site", "zoneId": "your-cloudflare-zone-id", "apiToken": "your-cloudflare-token" }\n]',
+  cloudflareAccount: 'Account (optional)',
+  cloudflareAccountHint: 'Only needed to add a domain to the account or list every zone on it. An object with an id, and either apiTokenEnv or apiToken. This token needs Account → Zone: Edit, which reaches every domain you own — the per-zone tokens above do not, so leave this empty unless you want zone creation.',
+  cloudflareAccountInvalid: 'Not a valid account: a JSON object with a string id, and either apiTokenEnv or apiToken. Leave it empty to turn the account tools off.',
+  cloudflareAccountPlaceholder: '{\n  "id": "your-cloudflare-account-id",\n  "apiToken": "your-account-scoped-token"\n}',
   postgresTitle: 'Postgres',
   postgresDescription: 'The Postgres databases an agent may read. Reads are enforced read-only by the server; a database must opt in before an agent can write to it.',
   postgresDatabases: 'Databases',
@@ -161,6 +166,10 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   cloudflareZonesHint: '站点的 JSON 数组，每项包含 name、zoneId，以及 apiTokenEnv（保存令牌的环境变量名，令牌不写入设置）或 apiToken（直接填写令牌，将保存在此处）。',
   cloudflareInvalid: '不是有效的站点列表：应为对象的 JSON 数组，每项需包含字符串 name 和 zoneId，以及 apiTokenEnv 或 apiToken 之一。',
   cloudflareZonesPlaceholder: '[\n  { "name": "site", "zoneId": "your-cloudflare-zone-id", "apiToken": "your-cloudflare-token" }\n]',
+  cloudflareAccount: '账户（可选）',
+  cloudflareAccountHint: '仅在向账户添加域名或列出账户下全部站点时需要。一个包含 id，以及 apiTokenEnv 或 apiToken 的 JSON 对象。该令牌需要 Account → Zone: Edit 权限，可触及你名下的每一个域名——上面的按站点令牌则不会；除非要创建站点，否则请留空。',
+  cloudflareAccountInvalid: '不是有效的账户配置：应为 JSON 对象，包含字符串 id，以及 apiTokenEnv 或 apiToken 之一。留空即关闭账户相关工具。',
+  cloudflareAccountPlaceholder: '{\n  "id": "your-cloudflare-account-id",\n  "apiToken": "your-account-scoped-token"\n}',
   postgresTitle: 'Postgres',
   postgresDescription: 'Agent 可读取的 Postgres 数据库。读取由服务器强制为只读；数据库需显式开启后 Agent 才能写入。',
   postgresDatabases: '数据库',

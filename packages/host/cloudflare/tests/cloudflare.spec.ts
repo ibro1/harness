@@ -76,6 +76,7 @@ function ok(result: unknown): { json: unknown } {
 function mount(
   zones: { name: string; zoneId: string; apiTokenEnv?: string; apiToken?: string }[],
   apiBase = 'http://127.0.0.1:1',
+  account?: { id?: string; apiTokenEnv?: string; apiToken?: string },
 ): Map<string, RecordedTool> {
   const tools = new Map<string, RecordedTool>()
   const agentCtx = {
@@ -92,7 +93,7 @@ function mount(
   const ctx = {
     settings: {
       register() {
-        return { get: () => ({ zones }), watch: () => () => {}, patch: () => Promise.resolve() }
+        return { get: () => ({ zones, account }), watch: () => () => {}, patch: () => Promise.resolve() }
       },
     },
     agents: { list: () => [{ ctx: agentCtx }] },
@@ -108,13 +109,16 @@ process.env.CLOUDFLARE_TOKEN_TEST = 'the-real-token'
 const exec = { signal: new AbortController().signal }
 
 describe('cloudflare tools', () => {
-  it('registers the five tools on an agent', () => {
+  it('registers every tool on an agent', () => {
     const tools = mount([])
     expect([...tools.keys()].sort()).toEqual([
+      'cloudflare_account_zones',
       'cloudflare_cache_status',
       'cloudflare_dns_list',
       'cloudflare_dns_set',
       'cloudflare_purge',
+      'cloudflare_zone_add',
+      'cloudflare_zone_status',
       'cloudflare_zones',
     ])
   })
@@ -282,18 +286,114 @@ describe('cloudflare_cache_status', () => {
 })
 
 describe('cloudflare MCP surface', () => {
-  it('builds a catalogue of the five tools with their schemas', async () => {
+  it('builds a catalogue of every tool with its schema', async () => {
     const { buildCloudflareTools } = await import('../src/index.ts')
     const tools = buildCloudflareTools(
       () => [{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }],
+      () => undefined,
       { timeoutMs: 5000, path: '/cloudflare', token: '', apiBase: 'https://api.cloudflare.com/client/v4' },
     )
     expect(tools.map(t => t.name)).toEqual([
-      'cloudflare_zones', 'cloudflare_purge', 'cloudflare_dns_list', 'cloudflare_dns_set', 'cloudflare_cache_status',
+      'cloudflare_zones', 'cloudflare_purge', 'cloudflare_dns_list', 'cloudflare_dns_set',
+      'cloudflare_account_zones', 'cloudflare_zone_add', 'cloudflare_zone_status', 'cloudflare_cache_status',
     ])
     const purge = tools.find(t => t.name === 'cloudflare_purge')
     expect((purge?.parameters as { properties: object }).properties).toHaveProperty('everything')
     const set = tools.find(t => t.name === 'cloudflare_dns_set')
     expect((set?.parameters as { required: string[] }).required.sort()).toEqual(['content', 'name', 'type'])
+  })
+})
+
+describe('cloudflare account tools', () => {
+  const ACCOUNT = { id: 'acct-1', apiToken: 'account-token' }
+
+  it('refuses every account tool until an account id is configured', async () => {
+    const tools = mount([])
+    for (const name of ['cloudflare_account_zones', 'cloudflare_zone_add', 'cloudflare_zone_status']) {
+      await expect(tools.get(name)!.execute({ domain: 'example.com' }, exec))
+        .rejects.toThrow('No Cloudflare account is configured')
+    }
+  })
+
+  it('refuses when the account has an id but no usable token', async () => {
+    const tools = mount([], 'http://127.0.0.1:1', { id: 'acct-1', apiTokenEnv: 'CLOUDFLARE_ACCOUNT_UNSET' })
+    await expect(tools.get('cloudflare_account_zones')!.execute({}, exec))
+      .rejects.toThrow('CLOUDFLARE_ACCOUNT_UNSET')
+  })
+
+  it('lists every zone on the account, scoped to the configured account id', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok([
+      { id: 'z1', name: 'one.example', status: 'active' },
+      { id: 'z2', name: 'two.example', status: 'pending' },
+    ]), seen)
+    const tools = mount([], base, ACCOUNT)
+
+    const { text } = await tools.get('cloudflare_account_zones')!.execute({}, exec)
+
+    expect(seen[0]?.path).toContain('account.id=acct-1')
+    // The account token, not a zone's — the zone roster is empty here.
+    expect(seen[0]?.authorization).toBe('Bearer account-token')
+    expect(text).toContain('one.example (z1) — active')
+    expect(text).toContain('two.example (z2) — pending')
+  })
+
+  it('adds a zone and reports the nameservers the registrar still needs', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok({
+      id: 'z9', name: 'new.example', status: 'pending',
+      name_servers: ['ada.ns.cloudflare.com', 'bob.ns.cloudflare.com'],
+    }), seen)
+    const tools = mount([], base, ACCOUNT)
+
+    const { text } = await tools.get('cloudflare_zone_add')!.execute({ domain: 'New.Example' }, exec)
+
+    expect(seen[0]?.method).toBe('POST')
+    // Lower-cased, and the account id travels in the body Cloudflare expects.
+    expect(JSON.parse(seen[0]?.body ?? '{}')).toEqual({ name: 'new.example', account: { id: 'acct-1' } })
+    expect(text).toContain('Zone id: z9')
+    expect(text).toContain('ada.ns.cloudflare.com')
+    // The half of the job that is not Cloudflare's must be said out loud.
+    expect(text).toContain('registrar')
+  })
+
+  it('strips a scheme and a path rather than sending a URL as a domain', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok({ id: 'z9', status: 'pending' }), seen)
+    const tools = mount([], base, ACCOUNT)
+
+    await tools.get('cloudflare_zone_add')!.execute({ domain: 'https://new.example/app' }, exec)
+
+    expect(JSON.parse(seen[0]?.body ?? '{}')).toMatchObject({ name: 'new.example' })
+  })
+
+  it('refuses something that is not a domain before spending a call', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok({}), seen)
+    const tools = mount([], base, ACCOUNT)
+
+    await expect(tools.get('cloudflare_zone_add')!.execute({ domain: 'not a domain' }, exec))
+      .rejects.toThrow('is not a domain name')
+    expect(seen).toHaveLength(0)
+  })
+
+  it('reports a pending zone and what it is waiting for', async () => {
+    const base = await stubCloudflare(() => ok([
+      { id: 'z9', name: 'new.example', status: 'pending', name_servers: ['ada.ns.cloudflare.com'] },
+    ]))
+    const tools = mount([], base, ACCOUNT)
+
+    const { text } = await tools.get('cloudflare_zone_status')!.execute({ domain: 'new.example' }, exec)
+
+    expect(text).toContain('new.example is pending')
+    expect(text).toContain('ada.ns.cloudflare.com')
+  })
+
+  it('says plainly when the account has no such zone', async () => {
+    const base = await stubCloudflare(() => ok([]))
+    const tools = mount([], base, ACCOUNT)
+
+    await expect(tools.get('cloudflare_zone_status')!.execute({ domain: 'absent.example' }, exec))
+      .rejects.toThrow('No zone named absent.example')
   })
 })

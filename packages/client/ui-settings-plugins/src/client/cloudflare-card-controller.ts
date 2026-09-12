@@ -17,12 +17,16 @@ export const CLOUDFLARE_NS = 'cloudflare'
 export interface CloudflareSettings {
   /** The configured zones, edited as one JSON block. */
   zones?: unknown
+  /** The optional account credential, edited as one JSON block. */
+  account?: unknown
 }
 
 /** What the Cloudflare card renders. */
 export interface CloudflareCardState extends CardShell {
   /** The zones list, staged as JSON text. */
   zones: CardFieldState
+  /** The account credential, staged as JSON text. */
+  account: CardFieldState
 }
 
 /** The registration-side face the Cloudflare card's slot entry injects. */
@@ -75,6 +79,49 @@ function zonesField(): CardFieldSpec {
   }
 }
 
+/**
+ * The `account` field: an id plus a token, or nothing.
+ *
+ * Separate from the zones because it is a different kind of credential, not a
+ * bigger one. Creating a zone needs `Account → Zone: Edit`, which reaches every
+ * domain on the account, while a zone token reaches one — so the narrow tokens
+ * stay narrow and this stays empty for anyone who never creates a zone.
+ *
+ * Empty text clears it. An id with no token is rejected here, because the
+ * alternative is discovering it at the first call as a Cloudflare 403.
+ * @returns the field spec.
+ */
+function accountField(): CardFieldSpec {
+  return {
+    field: 'account',
+    format: value => (typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? JSON.stringify(value, null, 2)
+      : ''),
+    parse: (text) => {
+      const trimmed = text.trim()
+      if (trimmed === '') return { kind: 'clear' }
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(trimmed)
+      } catch {
+        return undefined
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+      const record = parsed as Record<string, unknown>
+      const id = record['id']
+      if (typeof id !== 'string' || id.trim() === '') return undefined
+      const env = record['apiTokenEnv']
+      const token = record['apiToken']
+      const hasEnv = typeof env === 'string' && env.trim() !== ''
+      const hasToken = typeof token === 'string' && token.trim() !== ''
+      if (!hasEnv && !hasToken) return undefined
+      if (env !== undefined && typeof env !== 'string') return undefined
+      if (token !== undefined && typeof token !== 'string') return undefined
+      return { kind: 'set', value: parsed }
+    },
+  }
+}
+
 /** Bridges the `cloudflare` scope onto the card's staged form. */
 export class CloudflareCardController {
   private readonly form: CardForm<CloudflareSettings>
@@ -82,7 +129,7 @@ export class CloudflareCardController {
 
   /** @param scope - the bound settings scope for the `cloudflare` namespace. */
   constructor(scope: SettingsScope<CloudflareSettings>) {
-    this.form = new CardForm(scope, [zonesField()])
+    this.form = new CardForm(scope, [zonesField(), accountField()])
     this.store = this.form.bind(() => this.projection())
   }
 
@@ -90,6 +137,7 @@ export class CloudflareCardController {
     return {
       ...this.form.shell(),
       zones: this.form.field('zones'),
+      account: this.form.field('account'),
     }
   }
 
