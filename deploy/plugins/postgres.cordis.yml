@@ -1,0 +1,19 @@
+# Read-only-by-default SQL, layered over the shipped Web composition.
+#
+# An agent that can deploy an app and read its logs still could not answer "how
+# many rows are in that table" or "why is that job stuck" without a human
+# pasting a statement into a terminal.
+#
+# Referenced by path because this package is fork-local and unpublished. The
+# databases live in the `postgres` user-settings namespace (Settings ->
+# postgres), never here, and a connection string never reaches the model.
+#
+# Read-only is enforced by the server — every query runs inside BEGIN READ ONLY
+# — not by inspecting the statement, because a statement allowlist is defeated
+# by a CTE. Writes need `readOnly: false` set deliberately on that database.
+- insert:
+    - id: postgres
+      name: '../../packages/host/postgres/lib/index.js'
+      config:
+        path: !!js process.env.DSH_POSTGRES_PATH || '/postgres'
+        token: !!js process.env.DSH_POSTGRES_TOKEN || ''

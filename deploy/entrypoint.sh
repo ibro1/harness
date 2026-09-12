@@ -220,6 +220,43 @@ if [[ -n "${DSH_BROWSER_BRIDGE_TOKEN:-}" ]]; then
   fi
 fi
 
+# Session outputs: one directory a skill publishes a finished file into, and the
+# capability `capture` writes its screenshots through. On by default because it
+# is inert until something publishes — set DSH_OUTPUTS=0 to leave it out.
+if [[ "${DSH_OUTPUTS:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/outputs.cordis.yml")
+  echo "[entrypoint] Session outputs enabled (publish_output; files land in <cwd>/.outputs)"
+fi
+
+# Page capture. It needs a browser, and a plugin that advertises a screenshot
+# tool and then fails at the first call is worse than one that says up front
+# what is missing — so the line it prints depends on chromium actually existing.
+if [[ "${DSH_CAPTURE:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/capture.cordis.yml")
+  if command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
+    || command -v google-chrome >/dev/null 2>&1; then
+    echo "[entrypoint] Page capture enabled (capture_page)"
+  else
+    echo "[entrypoint] WARNING: page capture enabled but no chromium on PATH — every capture will fail." >&2
+  fi
+fi
+
+# Cloudflare control: the edge half of the deploy loop. Zones are configured in
+# the settings UI, and with none configured the tools say so. DSH_CLOUDFLARE=0
+# leaves the plugin out.
+if [[ "${DSH_CLOUDFLARE:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/cloudflare.cordis.yml")
+  echo "[entrypoint] Cloudflare control enabled; configure zones under Settings -> cloudflare"
+fi
+
+# Postgres: read-only by default, enforced by the server rather than by reading
+# the statement. Databases are configured in the settings UI; with none
+# configured the tools report that. DSH_POSTGRES=0 leaves the plugin out.
+if [[ "${DSH_POSTGRES:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/postgres.cordis.yml")
+  echo "[entrypoint] Postgres access enabled (read-only unless a database sets readOnly false); configure under Settings -> postgres"
+fi
+
 # Dokploy control is on by default; the servers are configured in the settings
 # UI, and with none configured the tools simply report that. Set DSH_DOKPLOY=0
 # to leave the plugin out entirely.

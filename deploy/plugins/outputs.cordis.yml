@@ -1,0 +1,14 @@
+# Session outputs, layered over the shipped Web composition.
+#
+# One place a skill or a plugin puts a finished file so the person who asked for
+# it can actually get it. The composer's drawer used to list a single hardcoded
+# directory belonging to whichever skill needed one first; the second skill to
+# render anything produced correct files that were invisible, and the answer to
+# "where are the files?" was a path inside a container.
+#
+# Registers `ctx.outputs` and the `publish_output` tool. `dsh-host-capture`
+# consumes the capability when it is mounted.
+- insert:
+    - id: outputs
+      name: '../../packages/host/outputs/lib/index.js'
+      config: {}

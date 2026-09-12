@@ -64,6 +64,18 @@ function declareRoot(slots: SlotRegistry): () => void {
   } as never, () => null)
 }
 
+/**
+ * The cards this package ships, in registration order.
+ *
+ * Named once because two tests assert on it — the exact list, and the count on
+ * teardown. They were separate literals, and adding a card updated one and left
+ * the other red for a reason that read as unrelated.
+ */
+const SHIPPED_CARD_KEYS = [
+  'shell', 'agent-loop', 'dokploy', 'postgres', 'cloudflare',
+  'subagent-model-selection', 'web-search-deepseek',
+] as const
+
 describe('ui-settings-plugins apply', () => {
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
@@ -131,8 +143,7 @@ describe('ui-settings-plugins apply', () => {
 
     await ctx.plugin({ inject: [...inject], apply }).await()
 
-    expect(slots.entries('settings.plugin.item').map(entry => entry.options.key))
-      .toEqual(['shell', 'agent-loop', 'dokploy', 'subagent-model-selection', 'web-search-deepseek'])
+    expect(slots.entries('settings.plugin.item').map(entry => entry.options.key)).toEqual(SHIPPED_CARD_KEYS)
   })
 
   it('dispatches the served namespaces its cards claim, and no others', async () => {
@@ -235,7 +246,7 @@ describe('ui-settings-plugins apply', () => {
     declareRoot(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('settings.plugin.item')).toHaveLength(5)
+    expect(slots.entries('settings.plugin.item')).toHaveLength(SHIPPED_CARD_KEYS.length)
 
     await fiber.dispose()
 

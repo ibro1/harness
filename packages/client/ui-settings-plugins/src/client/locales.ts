@@ -18,6 +18,8 @@ export type PluginsSettingsLocaleKey =
   | 'subagentModelSelectionUnavailableGroup' | 'subagentModelSelectionEmpty'
   | 'subagentModelSelectionRequired' | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
   | 'dokployTitle' | 'dokployDescription' | 'dokployServers' | 'dokployServersHint' | 'dokployInvalid' | 'dokployServersPlaceholder'
+  | 'postgresTitle' | 'postgresDescription' | 'postgresDatabases' | 'postgresDatabasesHint' | 'postgresInvalid' | 'postgresDatabasesPlaceholder'
+  | 'cloudflareTitle' | 'cloudflareDescription' | 'cloudflareZones' | 'cloudflareZonesHint' | 'cloudflareInvalid' | 'cloudflareZonesPlaceholder'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -79,6 +81,18 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   dokployServersHint: 'A JSON array of servers, each with a name, a url, and either apiKeyEnv (the name of an environment variable holding the key — kept out of settings) or apiKey (the key itself, stored here).',
   dokployInvalid: 'Not a valid servers list: a JSON array of objects, each with a string name and url, and either apiKeyEnv or apiKey.',
   dokployServersPlaceholder: '[\n  { "name": "main", "url": "https://server.example.com", "apiKey": "your-dokploy-key" }\n]',
+  cloudflareTitle: 'Cloudflare',
+  cloudflareDescription: 'The Cloudflare zones an agent may purge cache and edit DNS on.',
+  cloudflareZones: 'Zones',
+  cloudflareZonesHint: 'A JSON array of zones, each with a name, a zoneId, and either apiTokenEnv (the name of an environment variable holding the token — kept out of settings) or apiToken (the token itself, stored here).',
+  cloudflareInvalid: 'Not a valid zones list: a JSON array of objects, each with a string name and zoneId, and either apiTokenEnv or apiToken.',
+  cloudflareZonesPlaceholder: '[\n  { "name": "site", "zoneId": "your-cloudflare-zone-id", "apiToken": "your-cloudflare-token" }\n]',
+  postgresTitle: 'Postgres',
+  postgresDescription: 'The Postgres databases an agent may read. Reads are enforced read-only by the server; a database must opt in before an agent can write to it.',
+  postgresDatabases: 'Databases',
+  postgresDatabasesHint: 'A JSON array of databases, each with a name and either dsnEnv (the name of an environment variable holding the connection string — kept out of settings) or dsn (the connection string itself, stored here). Optional per database: readOnly (defaults to true; set it to false to allow writes) and statementTimeoutMs (defaults to 15000).',
+  postgresInvalid: 'Not a valid databases list: a JSON array of objects, each with a string name, either dsnEnv or dsn, an optional boolean readOnly, and an optional positive statementTimeoutMs.',
+  postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
 }
 
 /** Simplified Chinese copy. */
@@ -141,4 +155,16 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   dokployServersHint: '服务器的 JSON 数组，每项包含 name、url，以及 apiKeyEnv（保存密钥的环境变量名，密钥不写入设置）或 apiKey（直接填写密钥，将保存在此处）。',
   dokployInvalid: '不是有效的服务器列表：应为对象的 JSON 数组，每项需包含字符串 name 和 url，以及 apiKeyEnv 或 apiKey 之一。',
   dokployServersPlaceholder: '[\n  { "name": "main", "url": "https://server.example.com", "apiKey": "your-dokploy-key" }\n]',
+  cloudflareTitle: 'Cloudflare',
+  cloudflareDescription: 'Agent 可清除缓存并修改 DNS 的 Cloudflare 站点（zone）。',
+  cloudflareZones: '站点',
+  cloudflareZonesHint: '站点的 JSON 数组，每项包含 name、zoneId，以及 apiTokenEnv（保存令牌的环境变量名，令牌不写入设置）或 apiToken（直接填写令牌，将保存在此处）。',
+  cloudflareInvalid: '不是有效的站点列表：应为对象的 JSON 数组，每项需包含字符串 name 和 zoneId，以及 apiTokenEnv 或 apiToken 之一。',
+  cloudflareZonesPlaceholder: '[\n  { "name": "site", "zoneId": "your-cloudflare-zone-id", "apiToken": "your-cloudflare-token" }\n]',
+  postgresTitle: 'Postgres',
+  postgresDescription: 'Agent 可读取的 Postgres 数据库。读取由服务器强制为只读；数据库需显式开启后 Agent 才能写入。',
+  postgresDatabases: '数据库',
+  postgresDatabasesHint: '数据库的 JSON 数组，每项包含 name，以及 dsnEnv（保存连接串的环境变量名，连接串不写入设置）或 dsn（直接填写连接串，将保存在此处）。每项可选：readOnly（默认为 true；设为 false 才允许写入）和 statementTimeoutMs（默认 15000）。',
+  postgresInvalid: '不是有效的数据库列表：应为对象的 JSON 数组，每项需包含字符串 name，以及 dsnEnv 或 dsn 之一；readOnly 可选且为布尔值，statementTimeoutMs 可选且为正数。',
+  postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
 }

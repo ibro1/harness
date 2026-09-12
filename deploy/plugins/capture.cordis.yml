@@ -1,0 +1,18 @@
+# Page capture and measurement, layered over the shipped Web composition.
+#
+# Screenshots a URL and returns geometry read back from the live DOM beside the
+# image: scrollWidth against the viewport, broken images by currentSrc, a
+# selector's bounding box. `chromium --headless --screenshot` silently drops
+# content — it produced two confident, wrong bug reports in one session about
+# elements that were demonstrably painted — so a PNG alone is not evidence.
+#
+# Needs `chromium` on PATH; the image's apt list carries it along with
+# fonts-dejavu-core and fonts-liberation, without which every capture renders in
+# a substitute face. The URL comes from a model, so the plugin resolves the
+# hostname and refuses private, loopback, link-local and CGNAT addresses: the
+# harness runs its web server and both bridges on loopback, and a capture tool
+# that can reach them is a credential-reading tool.
+- insert:
+    - id: capture
+      name: '../../packages/host/capture/lib/index.js'
+      config: {}

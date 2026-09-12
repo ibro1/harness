@@ -57,23 +57,36 @@ function contentType(name) {
   return CONTENT_TYPES[extname(name).toLowerCase()] ?? 'application/octet-stream'
 }
 
-/** Files under `<cwd>/edit/` — the skill's output directory — newest first. */
+/**
+ * Where a session's finished files land.
+ *
+ * `edit/` was the convention of the first skill that needed one, and for a
+ * while it was the only one. `.outputs/` is what the `outputs` capability
+ * publishes into, and it is where new work should go: a skill that has to know
+ * which directory the drawer happens to read is the problem that capability
+ * exists to end. Both are listed while the older skills move over.
+ */
+const OUTPUT_DIRS = ['.outputs', 'edit']
+
+/** Files under each of `OUTPUT_DIRS`, merged and newest first. */
 async function listOutputs(cwd) {
-  const dir = join(cwd, 'edit')
-  let entries
-  try {
-    entries = await readdir(dir, { withFileTypes: true })
-  } catch {
-    return [] // no edit/ yet — the session has produced nothing
-  }
   const files = []
-  for (const entry of entries) {
-    if (!entry.isFile()) continue
+  for (const rel of OUTPUT_DIRS) {
+    const dir = join(cwd, rel)
+    let entries
     try {
-      const s = await stat(join(dir, entry.name))
-      files.push({ name: entry.name, rel: `edit/${entry.name}`, bytes: s.size, mtime: s.mtimeMs, kind: kindOf(entry.name) })
+      entries = await readdir(dir, { withFileTypes: true })
     } catch {
-      // vanished between readdir and stat; skip it
+      continue // this directory does not exist in this session
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.startsWith('.')) continue
+      try {
+        const s = await stat(join(dir, entry.name))
+        files.push({ name: entry.name, rel: `${rel}/${entry.name}`, bytes: s.size, mtime: s.mtimeMs, kind: kindOf(entry.name) })
+      } catch {
+        // vanished between readdir and stat; skip it
+      }
     }
   }
   files.sort((a, b) => b.mtime - a.mtime)

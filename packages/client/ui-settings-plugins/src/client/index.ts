@@ -28,9 +28,13 @@ import type { PluginsSettingsSectionInjected, PluginsSettingsTabEntry } from './
 import { SubagentModelSelectionCard } from './SubagentModelSelectionCard.tsx'
 import { WebSearchCard } from './WebSearchCard.tsx'
 import { DokployCard } from './DokployCard.tsx'
+import { CloudflareCard } from './CloudflareCard.tsx'
+import { PostgresCard } from './PostgresCard.tsx'
 import { AGENT_LOOP_NS, AgentLoopCardController } from './agent-loop-card-controller.ts'
 import { SHELL_NS, BashCardController } from './bash-card-controller.ts'
 import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
+import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-controller.ts'
+import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
 import { ConfigurablePluginsTabController } from './tab-store.ts'
 import {
   SUBAGENT_MODEL_SELECTION_NS, SubagentModelSelectionCardController,
@@ -76,6 +80,8 @@ export function apply(ctx: ClientContext): void {
     ctx,
   )
   const dokploy = new DokployCardController(ctx.settingsScope.bind({ namespace: DOKPLOY_NS }))
+  const cloudflare = new CloudflareCardController(ctx.settingsScope.bind({ namespace: CLOUDFLARE_NS }))
+  const postgres = new PostgresCardController(ctx.settingsScope.bind({ namespace: POSTGRES_NS }))
 
   // The credential a card reports is not part of any settings section, so its
   // scope publishes nothing when one is written. This is the only signal that
@@ -186,6 +192,18 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => dokploy.inject(),
     }, DokployCard)
+    yield ctx.slots.register({
+      name: 'settings.plugin.item',
+      key: POSTGRES_NS,
+      locale: NS,
+      inject: () => postgres.inject(),
+    }, PostgresCard)
+    yield ctx.slots.register({
+      name: 'settings.plugin.item',
+      key: CLOUDFLARE_NS,
+      locale: NS,
+      inject: () => cloudflare.inject(),
+    }, CloudflareCard)
     yield ctx.slots.register({
       name: 'settings.plugin.item',
       key: SUBAGENT_MODEL_SELECTION_NS,

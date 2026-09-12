@@ -1,0 +1,17 @@
+# Cloudflare control, layered over the shipped Web composition.
+#
+# The other half of the deploy loop. `dokploy` ships the code; this purges what
+# the edge is still serving and moves the DNS that points at it. A deploy can be
+# correct at the origin and stale at the edge for hours, per location, and
+# nothing in the harness could see or fix that.
+#
+# Referenced by path because this package is fork-local and unpublished. Zones
+# live in the `cloudflare` user-settings namespace (Settings -> cloudflare),
+# never here. The command-route token, when set, exposes the tools to the agy
+# and opencode CLIs over MCP; empty leaves that route unmounted.
+- insert:
+    - id: cloudflare
+      name: '../../packages/host/cloudflare/lib/index.js'
+      config:
+        path: !!js process.env.DSH_CLOUDFLARE_PATH || '/cloudflare'
+        token: !!js process.env.DSH_CLOUDFLARE_TOKEN || ''
