@@ -153,6 +153,13 @@ export interface AppCredentialState {
   secretConfigured: boolean
   /** Whether the credentials domain accepts a write for it. */
   secretWritable: boolean
+  /**
+   * The reference the secret is addressed by, for the sentence explaining a
+   * disabled control: naming `LINKEDIN_CLIENT_SECRET` is the actionable half.
+   */
+  secretRefName: string
+  /** True when the inherited environment supplies the secret and outranks this card. */
+  secretFromEnvironment: boolean
 }
 
 /** What the credentials domain last reported, and for which reference. */
@@ -161,8 +168,17 @@ interface SecretState {
   ref: string
   /** Whether any layer supplies a value for it. */
   configured: boolean
-  /** Whether a write can affect it; false disables the control. */
+  /**
+   * Whether a write can affect it; false disables the control.
+   *
+   * The one layer that reports false is the inherited process environment,
+   * which outranks the store this card writes to. A save there would be stored
+   * and then shadowed, so the control is disabled instead — and {@link source}
+   * is what lets the card say why rather than leaving a greyed box.
+   */
   writable: boolean
+  /** Layer currently supplying the value (`env`, `file`, a `.env` path); absent while unconfigured. */
+  source?: string
 }
 
 /** One field's staged edit. */
@@ -254,6 +270,8 @@ class AppCredentialForm {
       secret: { text: this.staged.get(SECRET_FIELD)?.text ?? '', overridden: false },
       secretConfigured: this.secret.configured,
       secretWritable: this.secret.writable,
+      secretRefName: this.ref(),
+      secretFromEnvironment: this.secret.source === 'env',
     }
   }
 
@@ -369,14 +387,18 @@ class AppCredentialForm {
     const response = await this.ctx.remote.credentials.describe([ref])
     if (!response.ok || ref !== this.ref()) return
     const view = response.value[ref]
+    const source = view?.source
     const next: SecretState = {
       ref,
       configured: view?.configured ?? false,
       // An unknown reference stays writable: the control remains usable and the
       // Host is what refuses, rather than the card guessing a refusal.
       writable: view?.writable ?? true,
+      ...source === undefined ? {} : { source },
     }
-    if (next.configured === this.secret.configured && next.writable === this.secret.writable) return
+    if (next.configured === this.secret.configured
+      && next.writable === this.secret.writable
+      && next.source === this.secret.source) return
     this.secret = next
     this.changed()
   }

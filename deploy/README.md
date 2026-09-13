@@ -416,6 +416,30 @@ even once one is set and why leaving it blank keeps the secret you already have.
 What the settings document holds is the *name* the secret is kept under — the
 `…_SECRET` variable above by default.
 
+### Where the card's values are written
+
+Both files live under `/home/node/.dsh`, which `docker-compose.yml` mounts as
+the named volume `dsh-state`. **They survive a redeploy**; they do not survive
+deleting that volume.
+
+| What | File |
+|---|---|
+| Client ids, app ids, redirect URIs, media base | `/home/node/.dsh/settings.yaml` |
+| Secrets written from the card | `/home/node/.dsh/.credentials.yaml` |
+| Account tokens from a sign-in | `/home/node/.dsh/.credentials.yaml` |
+
+**One trap worth knowing.** For a *secret*, the inherited process environment
+outranks that credential store — deliberately, so that launching the harness
+with a variable set is never silently overridden by something stored earlier.
+The consequence here is that **while `LINKEDIN_CLIENT_SECRET` (or either of the
+others) is set in the Dokploy environment, the card cannot change that secret.**
+The card does not pretend otherwise: it disables the box and names the variable
+that is shadowing it. To edit a secret from the card, remove the variable from
+the deployment environment first.
+
+This applies to secrets only. A client id or redirect URI typed into the card
+wins over the environment, because those resolve settings-first.
+
 Each redirect URI must be registered byte-for-byte with the app it belongs to.
 After consent the browser lands on a page that does not exist, which is
 expected: the address bar carries the code, and you paste that back to the

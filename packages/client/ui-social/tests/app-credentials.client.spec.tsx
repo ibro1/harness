@@ -69,6 +69,8 @@ function block(overrides: Partial<AppCredentialState> = {}): AppCredentialState 
     secret: field(''),
     secretConfigured: true,
     secretWritable: true,
+    secretRefName: 'LINKEDIN_CLIENT_SECRET',
+    secretFromEnvironment: false,
     ...overrides,
   }
 }
@@ -172,5 +174,19 @@ describe('AppCredentialsSection', () => {
     show([block({ secretWritable: false })])
     expect(toInput(screen.getByLabelText(en.appSecretLinkedin)).disabled).toBe(true)
     expect(toInput(screen.getByLabelText(en.appIdLinkedin)).disabled).toBe(false)
+  })
+
+  it('says which environment variable is shadowing a secret it cannot edit', () => {
+    // The case a deployment that already set the variable lands in. A disabled
+    // box with no sentence reads as a broken card, and the fix is in the
+    // deployment's environment rather than anywhere on this page.
+    show([block({ secretWritable: false, secretFromEnvironment: true, secretRefName: 'LINKEDIN_CLIENT_SECRET' })])
+    expect(screen.getByText(t('appSecretFromEnv', { name: 'LINKEDIN_CLIENT_SECRET' }))).toBeDefined()
+    expect(screen.queryByText(en.appSecretHint)).toBeNull()
+  })
+
+  it('keeps the ordinary hint when nothing is shadowing the secret', () => {
+    show([block()])
+    expect(screen.getByText(en.appSecretHint)).toBeDefined()
   })
 })

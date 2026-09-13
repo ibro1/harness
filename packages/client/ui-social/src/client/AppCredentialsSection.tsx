@@ -139,7 +139,11 @@ export function AppCredentialsSection(props: AppCredentialsSectionProps) {
                 disabled={disabled || !block.secretWritable}
                 onChange={(event) => { props.onEdit(block.application, 'secret', event.target.value) }}
               />
-              <p className={css.muted}>{t('appSecretHint')}</p>
+              <p className={css.muted}>
+                {block.secretFromEnvironment
+                  ? t('appSecretFromEnv', { name: block.secretRefName })
+                  : t('appSecretHint')}
+              </p>
             </div>
 
             {field('appSecretRefLabel', 'appSecretRefHint', block.secretRefField, block.secretRef)}
