@@ -49,10 +49,14 @@ export const name = 'tool-social'
  * surface is half of what this package is for, and a composition that mounts it
  * without a web server would silently ship a card nobody can reach.
  *
- * `approval`, `credentials`, and `settings` are deliberately absent: each is
- * resolved where it is used with `ctx.get(...)`, so a composition missing one
- * fails that one operation closed with a legible refusal instead of keeping the
- * whole plugin — including the harmless catalog — unmounted.
+ * `approval`, `credentials`, and `settings` are deliberately absent, so a
+ * composition missing one loses that one thing rather than the whole plugin —
+ * including the harmless catalog. `approval` and `credentials` are resolved
+ * where they are used with `ctx.get(...)`, which fails that operation closed
+ * with a legible refusal. `settings` is instead awaited in a scope with
+ * `ctx.inject` in {@link apply}: it is file-backed and not yet resolved when
+ * this plugin applies, so sampling it with `ctx.get` there reads undefined on
+ * every boot and loses the settings card without saying so.
  */
 export const inject = ['tools', 'social', 'webServer']
 
@@ -393,8 +397,21 @@ export function apply(ctx: Context, config: Config = {}): void {
   // namespace. There is nothing to configure from a form — accounts are
   // connected by asking the agent, and `postWithoutApproval` is a composition
   // decision, not a user preference — so the schema is empty and its presence
-  // is the whole contribution. Called directly, NOT through `ctx.effect`:
+  // is the whole contribution.
+  //
+  // Through `ctx.inject` rather than `ctx.get`, which is the difference between
+  // a listed card and no card at all. The settings service is file-backed and
+  // resolves its `Service.init` off disk, so it is reliably absent at the
+  // moment this plugin applies; a `ctx.get('settings')?.` here read undefined
+  // on every boot and registered nothing, silently, forever. Keeping it out of
+  // `inject` is still right — a composition with no settings service should
+  // lose the card, not the tools — and the scoped inject keeps that property
+  // while waiting for the service instead of sampling for it once.
+  //
+  // Called directly inside the scope, NOT through `ctx.effect`:
   // `settings.register` returns a scope rather than a disposer (it files its
   // own effect), and wrapping it makes Cordis reject an invalid effect.
-  ctx.get('settings')?.register('social', z.object({}).description('Social accounts are connected by asking the agent to sign in, and this card shows what they can post to. Nothing here is edited from a form.'), { base: {} })
+  ctx.inject(['settings'], (settingsCtx: Context) => {
+    settingsCtx.settings.register('social', z.object({}).description('Social accounts are connected by asking the agent to sign in, and this card shows what they can post to. Nothing here is edited from a form.'), { base: {} })
+  })
 }

@@ -125,6 +125,15 @@ function mount(options: MountOptions = {}): Mounted {
       }
       return undefined
     },
+    // The plugin awaits the settings service in a scope rather than sampling
+    // for it. This stub holds one, so the scope runs at once; the timing that
+    // makes the difference on a real boot is covered in settings-card.spec.ts.
+    inject(deps: string[], fn: (scope: unknown) => void) {
+      const resolved = Object.fromEntries(deps.map(dep => [dep, ctx.get(dep)]))
+      if (Object.values(resolved).some(value => value === undefined)) return undefined
+      fn({ ...ctx, ...resolved })
+      return undefined
+    },
     tools: { register() { return () => {} } },
     webServer: {
       register(route: RecordedRoute) {
@@ -417,6 +426,9 @@ describe('social routes', () => {
     const ctx = {
       effect(fn: () => () => void) { disposers.push(fn()); return () => {} },
       get: () => undefined,
+      // No settings service here, so the awaited scope never runs; this test
+      // is about the routes leaving with the fiber.
+      inject: () => undefined,
       tools: { register: () => () => {} },
       webServer: {
         register(route: RecordedRoute) {

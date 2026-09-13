@@ -90,6 +90,11 @@ function mount(options: MountOptions = {}): Mounted {
   const ctx = {
     effect(fn: () => unknown) { return fn() },
     get(service: string) { return service === 'approval' ? approval : undefined },
+    // The plugin awaits the settings service in a scope rather than sampling
+    // for it, because it resolves after this plugin applies on a real boot.
+    // This suite composes no settings service, so the scope never runs; the
+    // namespace has its own real-context coverage in settings-card.spec.ts.
+    inject() { return undefined },
     tools: {
       register(tool: RecordedTool) { tools.set(tool.name, tool); return () => {} },
     },
