@@ -62,18 +62,18 @@ const STATUS = {
     },
   ],
   providers: [
-    { name: 'facebook', targets: 1, disconnectable: false, sharedWith: [] },
+    { name: 'facebook', targets: 1, disconnect: 'unavailable', sharedWith: [] },
     {
       name: 'linkedin',
       targets: 1,
-      disconnectable: true,
+      disconnect: 'available',
       credentialKey: 'social-linkedin/member',
       sharedWith: [],
     },
     {
       name: 'youtube',
       targets: 1,
-      disconnectable: true,
+      disconnect: 'available',
       credentialKey: 'social-youtube/oauth',
       sharedWith: [],
     },
@@ -232,7 +232,7 @@ describe('SocialCard', () => {
     stubHost()
     await open()
     expect(screen.getByText(en.disconnectUnavailable)).toBeDefined()
-    // Two providers are disconnectable; facebook is not, so it gets no button.
+    // Two providers can be disconnected; facebook cannot, so it gets no button.
     expect(screen.getAllByRole('button', { name: en.disconnect })).toHaveLength(2)
   })
 
@@ -299,7 +299,7 @@ describe('SocialCard', () => {
           {
             name: 'facebook',
             targets: 1,
-            disconnectable: true,
+            disconnect: 'available',
             credentialKey: 'social-meta/default',
             sharedWith: ['instagram'],
           },
@@ -309,5 +309,34 @@ describe('SocialCard', () => {
     await open()
     fireEvent.click(screen.getByRole('button', { name: en.disconnect }))
     expect(screen.getByText(t('disconnectShared', { providers: 'instagram' }))).toBeDefined()
+  })
+})
+
+describe('SocialCard disconnect states', () => {
+  it('says a provider nobody has connected is not connected, and offers no button', async () => {
+    stubHost({
+      status: {
+        ...STATUS,
+        providers: [{ name: 'linkedin', targets: 1, disconnect: 'not-connected', sharedWith: [] }],
+      },
+    })
+    await open()
+    expect(screen.getByText(en.disconnectNotConnected)).toBeDefined()
+    expect(screen.queryByRole('button', { name: en.disconnect })).toBeNull()
+    // The composition-gap sentence is for a different situation and must not
+    // be borrowed here: a fresh deployment has not misconfigured anything.
+    expect(screen.queryByText(en.disconnectUnavailable)).toBeNull()
+  })
+
+  it('keeps the composition-gap sentence for a credential it cannot address', async () => {
+    stubHost({
+      status: {
+        ...STATUS,
+        providers: [{ name: 'linkedin', targets: 1, disconnect: 'unavailable', sharedWith: [] }],
+      },
+    })
+    await open()
+    expect(screen.getByText(en.disconnectUnavailable)).toBeDefined()
+    expect(screen.queryByText(en.disconnectNotConnected)).toBeNull()
   })
 })

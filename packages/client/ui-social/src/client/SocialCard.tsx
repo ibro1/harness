@@ -31,7 +31,12 @@ interface TargetRow {
 interface ProviderRow {
   name: string
   targets: number
-  disconnectable: boolean
+  /**
+   * What Disconnect would do: `available` removes a stored record,
+   * `not-connected` means there is nothing stored, and `unavailable` means a
+   * credential exists that this route cannot address.
+   */
+  disconnect: 'available' | 'not-connected' | 'unavailable'
   credentialKey?: string
   sharedWith: string[]
 }
@@ -173,18 +178,23 @@ export function SocialCard(props: SocialCardProps) {
             <div key={provider.name} className={css.group}>
               <div className={css.groupHead}>
                 <span className={css.provider}>{provider.name}</span>
-                {provider.disconnectable
-                  ? (
-                    <button
-                      type="button"
-                      className={`${css.action} ${css.danger}`}
-                      disabled={busy !== undefined}
-                      onClick={() => { setConfirming(provider.name) }}
-                    >
-                      {busy === provider.name ? t('disconnecting') : t('disconnect')}
-                    </button>
-                  )
-                  : <span className={css.muted}>{t('disconnectUnavailable')}</span>}
+                {provider.disconnect === 'available' && (
+                  <button
+                    type="button"
+                    className={`${css.action} ${css.danger}`}
+                    disabled={busy !== undefined}
+                    onClick={() => { setConfirming(provider.name) }}
+                  >
+                    {busy === provider.name ? t('disconnecting') : t('disconnect')}
+                  </button>
+                )}
+                {/* The ordinary state of a fresh deployment, kept calm: it is
+                    not a problem and reads as one if it borrows the sentence
+                    written for a composition gap. */}
+                {provider.disconnect === 'not-connected'
+                  && <span className={css.muted}>{t('disconnectNotConnected')}</span>}
+                {provider.disconnect === 'unavailable'
+                  && <span className={css.muted}>{t('disconnectUnavailable')}</span>}
               </div>
 
               {confirming === provider.name && (

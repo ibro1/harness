@@ -77,14 +77,32 @@ export interface SocialTargetView {
   reason?: string
 }
 
+/**
+ * What disconnecting one provider from the card would do.
+ *
+ * Three states rather than a boolean, because "no button" had been answering
+ * two unrelated questions. A provider nobody has signed in to yet and a
+ * provider whose stored grant cannot be addressed are both un-disconnectable
+ * and need opposite things said about them: the first is the ordinary state of
+ * a fresh deployment and wants no alarm, the second is a composition gap that
+ * wants naming.
+ */
+export type SocialDisconnectState =
+  /** A record is stored at the resolved address; disconnecting removes it. */
+  | 'available'
+  /** Nothing is stored and nothing suggests otherwise — the ordinary state before a sign-in. */
+  | 'not-connected'
+  /** A credential exists, or several might, but no single record can be addressed. */
+  | 'unavailable'
+
 /** One provider as the card offers it, including whether Disconnect can work. */
 export interface SocialProviderView {
   /** Registry-unique provider name, the prefix of every target id it lists. */
   name: string
   /** How many targets it currently lists, ready or not. */
   targets: number
-  /** Whether `POST /social/disconnect` would find a credential record to remove. */
-  disconnectable: boolean
+  /** What `POST /social/disconnect` would do for this provider right now. */
+  disconnect: SocialDisconnectState
   /** Address (`<scope>/<id>`) of the record disconnecting would remove; never its value. */
   credentialKey?: string
   /** Other providers backed by that same record, which one disconnect also disconnects. */
@@ -268,7 +286,11 @@ function resolveKey(
 
 /**
  * Resolve each provider's credential address at once, so the status route can
- * say which Disconnect buttons will work and which providers share one record.
+ * name the record a disconnect would remove and which providers share one.
+ *
+ * Resolving an address is not the same as there being something at it: a
+ * composition that declares `credentialKeys` gets an address for a provider
+ * nobody has signed in to yet. The caller checks the record exists.
  * @param names - the provider names currently listing targets.
  * @param declared - validated `credentialKeys` from config.
  * @param stored - every record the credential seam currently holds, or `undefined` with no seam composed.
@@ -305,6 +327,7 @@ async function socialStatus(
   const credentials = ctx.get('credentials')
   const stored = credentials === undefined ? undefined : await credentials.listRecords()
   const keys = resolveAllKeys(names, declared, stored)
+  const held = new Set((stored ?? []).map(entry => entry.key as string))
   return {
     targets: targets.map(targetView),
     providers: names.map((name) => {
@@ -312,7 +335,8 @@ async function socialStatus(
       return {
         name,
         targets: targets.filter(target => target.provider === name).length,
-        disconnectable: key !== undefined,
+        disconnect: disconnectState(key, held, targets.some(
+          target => target.provider === name && target.ready)),
         ...key === undefined ? {} : { credentialKey: key },
         sharedWith: key === undefined
           ? []
@@ -321,6 +345,33 @@ async function socialStatus(
     }),
     postWithoutApproval: [...exempt].sort(),
   }
+}
+
+/**
+ * Decide what disconnecting one provider would do.
+ *
+ * The record actually being held is what decides it, never the address alone —
+ * a declared `credentialKeys` entry resolves for a provider nobody has signed
+ * in to, and offering Disconnect there is a button that removes nothing.
+ *
+ * With no addressable record, a **ready target** is the thing that separates
+ * the two remaining cases: readiness is a provider's own statement that it
+ * holds a working credential, so a ready target with no record this route can
+ * name means the grant is somewhere it cannot address. Nothing ready and
+ * nothing stored is simply an account nobody has connected.
+ *
+ * @param key - the address resolved for this provider, if one was.
+ * @param held - every record address the credential seam currently holds.
+ * @param anyReady - whether this provider lists a target it reports ready.
+ * @returns which of the three states this provider is in.
+ */
+function disconnectState(
+  key: CredentialKey | undefined,
+  held: ReadonlySet<string>,
+  anyReady: boolean,
+): SocialDisconnectState {
+  if (key !== undefined && held.has(key)) return 'available'
+  return anyReady ? 'unavailable' : 'not-connected'
 }
 
 /** What the disconnect operation decided, and the status to answer with. */

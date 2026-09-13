@@ -272,20 +272,52 @@ describe('social routes', () => {
     expect(body.providers.map(row => row.targets)).toEqual([1, 1, 1, 1])
   })
 
-  it('marks a provider disconnectable only when a stored record addresses it', async () => {
+  it('offers a disconnect only when a stored record addresses the provider', async () => {
     const { body } = await status(mount())
     const byName = new Map(body.providers.map(row => [row.name, row]))
     expect(byName.get('linkedin')).toEqual({
       name: 'linkedin',
       targets: 1,
-      disconnectable: true,
+      disconnect: 'available',
       credentialKey: 'social-linkedin/member',
       sharedWith: [],
     })
     // social-meta's one record backs both providers, and neither name derives
     // its scope, so the card must not offer a button that would refuse.
-    expect(byName.get('facebook')?.disconnectable).toBe(false)
-    expect(byName.get('instagram')?.disconnectable).toBe(false)
+    expect(byName.get('facebook')?.disconnect).not.toBe('available')
+    expect(byName.get('instagram')?.disconnect).not.toBe('available')
+  })
+
+  it('does not offer a disconnect for a declared address with nothing stored at it', async () => {
+    // The shipped composition's exact shape: `credentialKeys` names the Meta
+    // record so a disconnect CAN address it, and nobody has signed in yet.
+    // Resolving an address is not the same as there being something at it, and
+    // a button that removes nothing is worse than no button.
+    const { body } = await status(mount({
+      config: { credentialKeys: { facebook: 'social-meta/default', instagram: 'social-meta/default' } },
+      stored: [],
+      targets: [target('facebook:page:1', 'facebook', 'A Page', { ready: false, reason: 'no Meta account is authorized' })],
+    }))
+    const facebook = body.providers.find(row => row.name === 'facebook')
+    expect(facebook?.disconnect).toBe('not-connected')
+    // The address is still reported: it is what the record WOULD be called.
+    expect(facebook?.credentialKey).toBe('social-meta/default')
+  })
+
+  it('separates a provider nobody has connected from one whose grant cannot be addressed', async () => {
+    const unconnected = await status(mount({
+      stored: [],
+      targets: [target('meta:page:1', 'meta', 'A Page', { ready: false, reason: 'sign in first' })],
+    }))
+    expect(unconnected.body.providers.find(row => row.name === 'meta')?.disconnect).toBe('not-connected')
+
+    // Ready is the provider's own statement that it holds a working
+    // credential. One that this route cannot name is a composition gap.
+    const connected = await status(mount({
+      stored: [],
+      targets: [target('meta:page:1', 'meta', 'A Page')],
+    }))
+    expect(connected.body.providers.find(row => row.name === 'meta')?.disconnect).toBe('unavailable')
   })
 
   it('names the other providers a declared shared record also disconnects', async () => {
@@ -403,9 +435,9 @@ describe('social routes', () => {
     expect((JSON.parse(answer.text) as SocialErrorBody).error).toContain('no credential service is composed')
   })
 
-  it('reports no provider disconnectable with no credential service composed', async () => {
+  it('offers no disconnect with no credential service composed', async () => {
     const { body } = await status(mount({ withoutCredentials: true }))
-    expect(body.providers.every(row => !row.disconnectable)).toBe(true)
+    expect(body.providers.every(row => row.disconnect !== 'available')).toBe(true)
   })
 
   it('answers the wrong method with 405 and changes nothing', async () => {

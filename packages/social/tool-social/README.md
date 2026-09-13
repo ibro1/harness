@@ -60,7 +60,7 @@ Two routes, both `kind: 'exact'`, both authenticated: neither passes `authentica
     {
       "name": "linkedin",
       "targets": 1,
-      "disconnectable": true,
+      "disconnect": "available",
       "credentialKey": "social-linkedin/member",
       "sharedWith": []
     }
@@ -72,6 +72,10 @@ Two routes, both `kind: 'exact'`, both authenticated: neither passes `authentica
 `targets` is the seam's own list, ordered by id, ready or not. `reason` is the provider's sentence verbatim whenever it gave one — **including on a `ready: true` target**, which is how a credential that works today and lapses shortly is reported. `state` names that case: `ready` is ready with nothing to say, `warning` is ready with a reason, `blocked` is not ready. A warning whose reason had been dropped would be indistinguishable from being fine, which is the failure this accounting exists to prevent.
 
 `providers` carries one entry per provider currently listing targets. `credentialKey` is a record *address* (`<scope>/<id>`), never a value, and `sharedWith` names the other providers one disconnect would also disconnect.
+
+`disconnect` is three states rather than a boolean, because a card needs to say opposite things about the two ways a disconnect cannot happen. `available` means a record is stored at the resolved address and removing it would remove something. `not-connected` means nothing is stored — the ordinary state before anyone signs in. `unavailable` means the provider reports a ready target, so a working credential exists, but no single record can be addressed to it: a composition gap that wants naming.
+
+**A resolved address is not a stored record.** A composition declaring `credentialKeys` resolves an address for a provider nobody has signed in to, which is why the record's presence decides this and the address alone never does. Where no record is addressable, a *ready* target is what separates the remaining two: readiness is the provider's own statement that it holds a working credential.
 
 `postWithoutApproval` is this plugin's own exemption list. A target that publishes without asking is the one thing on this surface somebody might not expect, so it is reported rather than left discoverable only by reading a cordis.yml.
 
