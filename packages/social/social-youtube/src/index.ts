@@ -43,6 +43,9 @@ export type {
 } from './types.ts'
 // The seam declares `Context.social`; `inject` above makes it present by `apply`.
 import type {} from '@deepseek-ai/dsh-social'
+import { firstConfigured, resolveAppCredential } from '@deepseek-ai/dsh-social'
+// Type-only merge: declares `Context.settings`, awaited in a scope in `apply`.
+import type {} from '@deepseek-ai/dsh-settings'
 
 /** The plugin name, for the Loader, and the scope half of this plugin's credential key. */
 export const name = 'social-youtube'
@@ -138,6 +141,7 @@ class YouTubeProvider implements SocialProvider {
     private readonly ctx: Context,
     private readonly config: Config,
     private readonly key: CredentialKey,
+    private readonly readSettings: () => AppSettings,
   ) {}
 
   /** Drop the cached access token, so the next call mints one from the stored record. */
@@ -313,12 +317,19 @@ class YouTubeProvider implements SocialProvider {
 
   /** Where Google is and who this harness signs in as, resolved per call so a changed secret takes effect at once. */
   private async settings(): Promise<OAuthSettings & ApiSettings> {
-    const clientId = await this.clientCredential(this.config.clientId, this.config.clientIdRef, 'client id')
-    const clientSecret = await this.clientCredential(this.config.clientSecret, this.config.clientSecretRef, 'client secret')
+    const section = this.readSettings()
+    const clientId = await this.clientCredential(
+      section.clientId, this.config.clientId, this.config.clientIdRef, 'client id')
+    // The secret is never a literal in settings: it is addressed by reference
+    // and read through the credential seam, which is what the settings card
+    // writes into without ever reading it back.
+    const clientSecret = await this.clientCredential(
+      undefined, this.config.clientSecret,
+      firstConfigured(section.clientSecretEnv, this.config.clientSecretRef) ?? '', 'client secret')
     return {
       clientId,
       clientSecret,
-      redirectUri: this.config.redirectUri,
+      redirectUri: firstConfigured(section.redirectUri, this.config.redirectUri) ?? '',
       authBaseUrl: this.config.authBaseUrl,
       tokenBaseUrl: this.config.tokenBaseUrl,
       apiBaseUrl: this.config.apiBaseUrl,
@@ -331,15 +342,26 @@ class YouTubeProvider implements SocialProvider {
     }
   }
 
-  /** One half of the OAuth client, taken from config or resolved through the credential seam. */
-  private async clientCredential(inline: string, ref: string, what: string): Promise<string> {
-    if (inline !== '') return inline
-    const resolved = isCredentialRefName(ref) ? await this.ctx.credentials.resolve(credentialRef(ref)) : undefined
-    if (resolved === undefined || resolved.value === '') {
-      throw new Error(`No Google OAuth ${what} is configured: set the ${ref} environment variable, or give this `
-        + 'plugin the value directly in its config.')
-    }
-    return resolved.value
+  /**
+   * One half of the OAuth client: what a person typed into settings, then what
+   * the composition carried, then the environment variable it names.
+   * @param settings - the value the settings section holds, if any.
+   * @param inline - the value composition config carried, if any.
+   * @param ref - the environment variable naming it.
+   * @param what - the credential, as Google's console names it.
+   * @returns the credential's value.
+   * @throws when no layer supplies one, naming every place it could be put.
+   */
+  private async clientCredential(
+    settings: string | undefined, inline: string, ref: string, what: string,
+  ): Promise<string> {
+    return await resolveAppCredential(
+      { settings, config: inline, ref },
+      { platform: 'Google OAuth', what },
+      async name => isCredentialRefName(name)
+        ? (await this.ctx.credentials.resolve(credentialRef(name)))?.value
+        : undefined,
+    )
   }
 }
 
@@ -374,13 +396,68 @@ function unready(reason: string): SocialTarget {
  * @throws when the chunk size is not a multiple of the 262144 bytes Google
  *   requires, which is a misconfiguration nothing later can recover from.
  */
+/**
+ * The settings namespace this plugin serves, so the OAuth client can be entered
+ * in Settings → Plugins → Social instead of only at deploy time.
+ */
+const SETTINGS_NS = 'social-youtube'
+
+/** The Google OAuth client fields a person can edit from the settings card. */
+export interface AppSettings {
+  /** The OAuth client id, which Google shows on the credential's own page. */
+  clientId?: string
+  /** Name of the environment variable or credential record holding the client secret. */
+  clientSecretEnv?: string
+  /** A redirect URI registered on the OAuth client. */
+  redirectUri?: string
+}
+
+/**
+ * Schema for {@link SETTINGS_NS}.
+ *
+ * There is no client-secret field, deliberately: this section names the
+ * *reference* and the card writes the secret through the credentials domain,
+ * which never reads one back.
+ */
+const APP_SETTINGS_SCHEMA: z<AppSettings> = z.object({
+  clientId: z.string().description('The Google Cloud OAuth client id. Not a secret — it appears in every consent URL.'),
+  clientSecretEnv: z.string().description('Name of the environment variable holding the OAuth client secret. The secret itself is written through the credential store, never into this document.'),
+  redirectUri: z.string().description('A redirect URI registered on the OAuth client. The sign-in sends the human here and asks them to paste the address they land on, so a page that does not exist is fine.'),
+})
+
+/**
+ * Serve the settings namespace and return a live read of it.
+ *
+ * Awaited in a scope rather than sampled with `ctx.get`: the settings service
+ * is file-backed and resolves after a plugin composed alongside it applies.
+ * Absent settings is a supported composition, so it stays out of `inject`.
+ *
+ * @param ctx - the plugin context.
+ * @param config - validated composition config, seeding the section's base.
+ * @returns a read of the current section, empty until the service arrives.
+ */
+function installAppSettings(ctx: Context, config: Config): () => AppSettings {
+  let read: () => AppSettings = () => ({})
+  ctx.inject(['settings'], (settingsCtx: Context) => {
+    const scope = settingsCtx.settings.register(SETTINGS_NS, APP_SETTINGS_SCHEMA, {
+      base: {
+        clientId: config.clientId,
+        clientSecretEnv: config.clientSecretRef,
+        redirectUri: config.redirectUri,
+      },
+    })
+    read = () => scope.get()
+  })
+  return () => read()
+}
+
 export function apply(ctx: Context, config: Config): void {
   if (config.chunkBytes % CHUNK_GRANULARITY !== 0) {
     throw new Error(`social-youtube chunkBytes must be a multiple of ${String(CHUNK_GRANULARITY)} bytes; `
       + `${String(config.chunkBytes)} is not.`)
   }
   const key = credentialKey(name, 'oauth')
-  const provider = new YouTubeProvider(ctx, config, key)
+  const provider = new YouTubeProvider(ctx, config, key, installAppSettings(ctx, config))
 
   ctx.effect(() => ctx.authorization.registerFlow({
     key,

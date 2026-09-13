@@ -207,6 +207,21 @@
       "@deepseek-ai/dsh-schedule/client": ["./packages/schedule/schedule/src/client.ts"],
       "@deepseek-ai/dsh-client-ui-directory-picker-browse": ["./packages/client/ui-directory-picker-browse/src"],
       "@deepseek-ai/dsh-client-ui-directory-picker-native": ["./packages/client/ui-directory-picker-native/src"],
+      // Fork-local packages whose npm name carries a client-/host- prefix their
+      // directory does not, so gen-tsconfig-paths cannot derive them. Without
+      // an entry here a runtime import of one resolves through node_modules to
+      // its built lib/, which is how a stale bundle silently shadows the source
+      // a test is meant to be exercising.
+      "@deepseek-ai/dsh-client-ui-composer-tools": ["./packages/client/ui-composer-tools/src"],
+      "@deepseek-ai/dsh-client-ui-mobile": ["./packages/client/ui-mobile/src"],
+      "@deepseek-ai/dsh-client-ui-social": ["./packages/client/ui-social/src"],
+      "@deepseek-ai/dsh-client-ui-whatsapp": ["./packages/client/ui-whatsapp/src"],
+      "@deepseek-ai/dsh-host-browser-bridge": ["./packages/host/browser-bridge/src"],
+      "@deepseek-ai/dsh-host-capture": ["./packages/host/capture/src"],
+      "@deepseek-ai/dsh-host-cloudflare": ["./packages/host/cloudflare/src"],
+      "@deepseek-ai/dsh-host-dokploy": ["./packages/host/dokploy/src"],
+      "@deepseek-ai/dsh-host-outputs": ["./packages/host/outputs/src"],
+      "@deepseek-ai/dsh-host-postgres": ["./packages/host/postgres/src"],
       // sdk/ folders are role-named without their npm-side sdk/jsonrpc prefixes,
       // so their names do not match their directories and the generated aliases
       // below cannot map them; these three stay hand-written.
@@ -352,6 +367,10 @@
       "@deepseek-ai/dsh-skill": ["./packages/skill/skill/src"],
       "@deepseek-ai/dsh-skill-badge": ["./packages/skill/skill-badge/src"],
       "@deepseek-ai/dsh-skill-filesystem": ["./packages/skill/skill-filesystem/src"],
+      "@deepseek-ai/dsh-social": ["./packages/social/social/src"],
+      "@deepseek-ai/dsh-social-linkedin": ["./packages/social/social-linkedin/src"],
+      "@deepseek-ai/dsh-social-meta": ["./packages/social/social-meta/src"],
+      "@deepseek-ai/dsh-social-youtube": ["./packages/social/social-youtube/src"],
       "@deepseek-ai/dsh-spill": ["./packages/spill/spill/src"],
       "@deepseek-ai/dsh-spill-local": ["./packages/spill/spill-local/src"],
       "@deepseek-ai/dsh-spill-policy": ["./packages/spill/spill-policy/src"],
@@ -394,6 +413,7 @@
       "@deepseek-ai/dsh-tool-ralph": ["./packages/workflow/tool-ralph/src"],
       "@deepseek-ai/dsh-tool-session-query": ["./packages/session-query/tool-session-query/src"],
       "@deepseek-ai/dsh-tool-skill": ["./packages/skill/tool-skill/src"],
+      "@deepseek-ai/dsh-tool-social": ["./packages/social/tool-social/src"],
       "@deepseek-ai/dsh-tool-str-replace-editor": ["./packages/fs/tool-str-replace-editor/src"],
       "@deepseek-ai/dsh-tool-subagent": ["./packages/subagent/tool-subagent/src"],
       "@deepseek-ai/dsh-tool-subagent/invariant": ["./packages/subagent/tool-subagent/src/invariant.ts"],

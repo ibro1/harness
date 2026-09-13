@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only merge: the settings.plugin.item slot declaration.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { AppCredentialsSection } from './AppCredentialsSection.tsx'
+import type { SocialCredentialsFace } from './app-credentials-controller.ts'
 import css from './social.module.css'
 
 /** How often the card re-reads the status while it is open, in milliseconds. */
@@ -51,6 +54,7 @@ interface DisconnectResult {
 export type SocialCardProps =
   PropsRuntime<'settings.plugin.item'>
   & PropsLocale<'social'>
+  & InjectFace<SocialCredentialsFace>
 
 /**
  * The social plugin's card: every account, Page and channel the agent can post
@@ -66,7 +70,9 @@ export type SocialCardProps =
  *
  * @param props - locale copy (`t`).
  */
-export function SocialCard({ t }: SocialCardProps) {
+export function SocialCard(props: SocialCardProps) {
+  const { t } = props
+  const credentials = props.useSocialCredentials(snapshot => snapshot)
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<SocialStatus | null>(null)
   const [error, setError] = useState(false)
@@ -121,6 +127,21 @@ export function SocialCard({ t }: SocialCardProps) {
 
   const title = t('title')
 
+  // Shown in every branch, and most needed in the two that carry no targets:
+  // a deployment with nothing connected usually has nothing connected because
+  // these were never set, and a status read that failed is no reason to hide
+  // the one thing on the card a person can act on.
+  const credentialsSection = (
+    <AppCredentialsSection
+      t={t}
+      blocks={credentials}
+      onEdit={props.editCredential}
+      onReset={props.resetCredentialField}
+      onSave={props.saveCredentials}
+      onDiscard={props.discardCredentials}
+    />
+  )
+
   let body: React.ReactNode
   if (status === null) {
     body = error
@@ -128,6 +149,7 @@ export function SocialCard({ t }: SocialCardProps) {
         <div className={css.body}>
           <p className={css.muted}>{t('statusError')}</p>
           <button type="button" className={css.action} onClick={() => { void refresh() }}>{t('retry')}</button>
+          {credentialsSection}
         </div>
       )
       : <div className={css.body}><p className={css.muted}>{t('loading')}</p></div>
@@ -136,6 +158,7 @@ export function SocialCard({ t }: SocialCardProps) {
       <div className={css.body}>
         <p className={css.emptyHead}>{t('emptyTitle')}</p>
         <p className={css.muted}>{t('emptyHow')}</p>
+        {credentialsSection}
       </div>
     )
   } else {
@@ -234,6 +257,8 @@ export function SocialCard({ t }: SocialCardProps) {
             <p className={css.muted}>{t('exemptHint')}</p>
           </div>
         )}
+
+        {credentialsSection}
       </div>
     )
   }

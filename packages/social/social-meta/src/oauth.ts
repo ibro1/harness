@@ -35,8 +35,12 @@ export interface MetaFlowOptions {
   label: string
   /** Whether the Instagram permissions are asked for. */
   instagram: boolean
-  /** A redirect URI registered on the Meta app; the human is redirected here and copies the URL back. */
-  redirectUri: string
+  /**
+   * Read a redirect URI registered on the Meta app; the human is redirected
+   * here and copies the URL back. Read per sign-in, so an edit in settings
+   * reaches the next one rather than waiting for a restart.
+   */
+  redirectUri: () => string
   /** The Meta app id. */
   appId: () => Promise<string>
   /** The Meta app secret. */
@@ -88,7 +92,7 @@ async function exchangeToken(
   appSecret: string,
 ): Promise<{ userToken: string; expiresAt?: number }> {
   const short = await graphRequest(options.endpoint, 'oauth/access_token', {
-    params: { client_id: appId, client_secret: appSecret, redirect_uri: options.redirectUri, code },
+    params: { client_id: appId, client_secret: appSecret, redirect_uri: options.redirectUri(), code },
   })
   const shortToken = tokenField(short, 'access_token')
   if (shortToken === undefined) throw new Error('Meta returned no access_token for the authorization code')
@@ -136,7 +140,8 @@ export function metaAuthorizationFlow(options: MetaFlowOptions): AuthorizationFl
     label: options.label,
     methods: [{ id: 'facebook-login', label: 'Sign in with Facebook' }],
     async run(session: AuthorizationSession): Promise<void> {
-      if (options.redirectUri === '') {
+      const redirectUri = options.redirectUri()
+      if (redirectUri === '') {
         throw new Error('social-meta: redirectUri is not set; it must be one of the Valid OAuth Redirect URIs on the Meta app')
       }
       const [appId, appSecret] = await Promise.all([options.appId(), options.appSecret()])
@@ -145,19 +150,19 @@ export function metaAuthorizationFlow(options: MetaFlowOptions): AuthorizationFl
       const dialog = new URL(`${options.loginBase.replace(/\/+$/u, '')}/${options.endpoint.version}/dialog/oauth`)
       for (const [key, value] of Object.entries({
         client_id: appId,
-        redirect_uri: options.redirectUri,
+        redirect_uri: redirectUri,
         state,
         scope,
         response_type: 'code',
       })) dialog.searchParams.set(key, value)
       session.notify({
-        message: `Open this page, sign in as someone who manages the Pages you want to post to, and approve the permissions. Your browser then lands on ${options.redirectUri}; copy that whole URL.`,
+        message: `Open this page, sign in as someone who manages the Pages you want to post to, and approve the permissions. Your browser then lands on ${redirectUri}; copy that whole URL.`,
         url: dialog.toString(),
       })
       const pasted = await session.prompt({
         kind: 'text',
         message: 'Paste the URL your browser was redirected to (or just the code it carries).',
-        placeholder: `${options.redirectUri}?code=…`,
+        placeholder: `${redirectUri}?code=…`,
       })
       const { userToken, expiresAt } = await exchangeToken(options, extractCode(pasted, state), appId, appSecret)
       const [grantedScopes, pages] = await Promise.all([

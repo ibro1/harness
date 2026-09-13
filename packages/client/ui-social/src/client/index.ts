@@ -21,9 +21,19 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { en, zh, type SocialKey } from './locales.ts'
 import { SocialCard } from './SocialCard.tsx'
+import { SocialCredentialsController } from './app-credentials-controller.ts'
+// Type-only merges: ctx.settingsScope, and the ctx.remote credentials namespace
+// the write-only secret controls are written through.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 
 export type { SocialKey } from './locales.ts'
 export type { SocialCardProps } from './SocialCard.tsx'
+export type { AppCredentialsSectionProps } from './AppCredentialsSection.tsx'
+export type {
+  AppCredentialSpec, AppCredentialState, SocialCredentialsFace,
+} from './app-credentials-controller.ts'
+export { APP_CREDENTIAL_SPECS } from './app-credentials-controller.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -42,8 +52,13 @@ const NS = 'social'
  */
 const SOCIAL_NS = 'social'
 
-/** Services this plugin injects. */
-export const inject = ['slots', 'locale']
+/**
+ * Services this plugin injects. `settingsScope` and the credentials namespace
+ * are required rather than optional: the card's application-credential forms
+ * are half of what it is for, and a card that silently dropped them would look
+ * like a deployment with nothing to configure.
+ */
+export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.credentials']
 
 /**
  * Apply the plugin: register the dictionaries and mount the social card into
@@ -53,9 +68,12 @@ export const inject = ['slots', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-social: dictionaries')
 
+  const credentials = new SocialCredentialsController(ctx)
+
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     key: SOCIAL_NS,
     locale: NS,
+    inject: () => credentials.inject(),
   }, SocialCard))
 }

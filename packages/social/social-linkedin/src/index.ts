@@ -42,6 +42,9 @@ export type {
 } from './types.ts'
 // The seam declares `Context.social`; `inject` above makes it present by `apply`.
 import type {} from '@deepseek-ai/dsh-social'
+import { firstConfigured, resolveAppCredential } from '@deepseek-ai/dsh-social'
+// Type-only merge: declares `Context.settings`, awaited in a scope in `apply`.
+import type {} from '@deepseek-ai/dsh-settings'
 
 /** The plugin name, for the Loader. It is also the credential key's scope. */
 export const name = 'social-linkedin'
@@ -51,6 +54,8 @@ export const inject = ['social', 'credentials', 'authorization']
 
 /** Composition config. */
 export interface Config {
+  /** The LinkedIn application's client id, when the composition gives it outright. */
+  clientId: string
   /** Environment-variable name holding the LinkedIn application's client id. */
   clientIdRef: string
   /** Environment-variable name holding the LinkedIn application's client secret. */
@@ -70,11 +75,20 @@ export interface Config {
 }
 
 /**
- * Composition config. The client id and secret are named, not carried: a
- * secret in settings would be a secret in a configuration UI, so this package
- * stores the reference and resolves it through the credential seam per call.
+ * Composition config.
+ *
+ * The client id may be carried outright — it is public, and LinkedIn prints it
+ * on the app's own page. The **secret** is only ever named: a secret in a
+ * settings document is a secret that rides a response to the browser and sits
+ * in a form, so this package stores the reference and resolves it through the
+ * credential seam per call. That is also what lets the settings card write a
+ * new secret without ever reading the old one back.
+ *
+ * Each value is resolved settings-first; see `resolveAppCredential`.
  */
 export const Config: z<Config> = z.object({
+  clientId: z.string().default('')
+    .description('The LinkedIn application client id. Leave empty to read it from the environment variable named by clientIdRef, or to let the settings card supply it.'),
   clientIdRef: z.string().default('LINKEDIN_CLIENT_ID')
     .description('Name of the environment variable holding the LinkedIn application client id.'),
   clientSecretRef: z.string().default('LINKEDIN_CLIENT_SECRET')
@@ -209,8 +223,72 @@ function resolveTarget(id: string): ResolvedTarget {
  * @param ctx - the plugin context, injecting `social`, `credentials`, and `authorization`.
  * @param config - validated composition config.
  */
+/**
+ * The settings namespace this plugin serves, so the application credentials can
+ * be entered in Settings → Plugins → Social instead of only at deploy time.
+ *
+ * Named after the plugin, which is also how its credential records are scoped.
+ */
+const SETTINGS_NS = 'social-linkedin'
+
+/** The LinkedIn application fields a person can edit from the settings card. */
+export interface AppSettings {
+  /** The application's client id, which LinkedIn prints on the app's own page. */
+  clientId?: string
+  /** Name of the environment variable or credential record holding the client secret. */
+  clientSecretEnv?: string
+  /** The redirect URI registered on the application. */
+  redirectUri?: string
+}
+
+/**
+ * Schema for {@link SETTINGS_NS}.
+ *
+ * There is no client-secret field, deliberately. A secret written into a
+ * settings document rides every read of that document back to the browser and
+ * sits in the form; this section names the *reference* instead, and the card
+ * writes the secret through the credentials domain, which never reads one back.
+ */
+const APP_SETTINGS_SCHEMA: z<AppSettings> = z.object({
+  clientId: z.string().description('The LinkedIn application client id, from the Auth tab of your app. Not a secret — LinkedIn shows it on the app page.'),
+  clientSecretEnv: z.string().description('Name of the environment variable holding the client secret. The secret itself is written through the credential store, never into this document.'),
+  redirectUri: z.string().description('An Authorized redirect URL registered on the LinkedIn application. LinkedIn compares it byte for byte, so it must match the registration exactly.'),
+})
+
+/**
+ * Serve the settings namespace and return a live read of it.
+ *
+ * Awaited in a scope rather than sampled with `ctx.get`: the settings service
+ * is file-backed and resolves after a plugin composed alongside it applies, so
+ * sampling for it at `apply` reads undefined on every boot and serves nothing.
+ * Absent settings is a supported composition — the plugin then runs on the
+ * composition config and the environment alone — so it stays out of `inject`.
+ *
+ * @param ctx - the plugin context.
+ * @param config - validated composition config, seeding the section's base.
+ * @returns a read of the current section, empty until the service arrives.
+ */
+function installAppSettings(ctx: Context, config: Config): () => AppSettings {
+  let read: () => AppSettings = () => ({})
+  ctx.inject(['settings'], (settingsCtx: Context) => {
+    const scope = settingsCtx.settings.register(SETTINGS_NS, APP_SETTINGS_SCHEMA, {
+      // The composition layer shows through the card as the value a cleared
+      // field falls back to, so a deployment that set these in cordis.yml sees
+      // what it set rather than an empty form.
+      base: {
+        clientId: config.clientId,
+        clientSecretEnv: config.clientSecretRef,
+        redirectUri: config.redirectUri,
+      },
+    })
+    read = () => scope.get()
+  })
+  return () => read()
+}
+
 export function apply(ctx: Context, config: Config): void {
   const key: CredentialKey = credentialKey(name, 'member')
+  const readSettings = installAppSettings(ctx, config)
   const api: ApiSettings = {
     apiBaseUrl: config.apiBaseUrl,
     version: config.apiVersion,
@@ -225,22 +303,26 @@ export function apply(ctx: Context, config: Config): void {
    * Resolved per attempt so a client secret added after boot is picked up.
    */
   const oauthSettings = async (): Promise<OAuthSettings> => {
-    if (config.redirectUri === '') {
-      throw new Error('LinkedIn sign-in needs a redirectUri: set it on this plugin to the callback URL registered on your LinkedIn application.')
+    const section = readSettings()
+    const resolve = async (ref: string): Promise<string | undefined> =>
+      (await ctx.credentials.resolve(credentialRef(ref)))?.value
+    const redirectUri = firstConfigured(section.redirectUri, config.redirectUri)
+    if (redirectUri === undefined) {
+      throw new Error('LinkedIn sign-in needs a redirect URI: enter it in Settings → Plugins → Social, or set it on this plugin. It must match one registered on your LinkedIn application byte for byte.')
     }
-    const clientId = await ctx.credentials.resolve(credentialRef(config.clientIdRef))
-    const clientSecret = await ctx.credentials.resolve(credentialRef(config.clientSecretRef))
-    const missing = [
-      ...(clientId === undefined ? [config.clientIdRef] : []),
-      ...(clientSecret === undefined ? [config.clientSecretRef] : []),
-    ]
-    if (clientId === undefined || clientSecret === undefined) {
-      throw new Error(`LinkedIn sign-in needs the application credentials: set ${missing.join(' and ')}.`)
-    }
+    const clientId = await resolveAppCredential(
+      { settings: section.clientId, config: config.clientId, ref: config.clientIdRef },
+      { platform: 'LinkedIn', what: 'client id' }, resolve)
+    // The secret is never a literal in any layer: it is addressed by reference
+    // and read through the credential seam, which is what the settings card
+    // writes into without ever reading it back.
+    const clientSecret = await resolveAppCredential(
+      { ref: firstConfigured(section.clientSecretEnv, config.clientSecretRef) },
+      { platform: 'LinkedIn', what: 'client secret' }, resolve)
     return {
-      clientId: clientId.value,
-      clientSecret: clientSecret.value,
-      redirectUri: config.redirectUri,
+      clientId,
+      clientSecret,
+      redirectUri,
       authBaseUrl: config.authBaseUrl,
       apiBaseUrl: config.apiBaseUrl,
       timeoutMs: config.timeoutMs,

@@ -25,14 +25,14 @@ social-youtube:
   privacyStatus: private
 ```
 
-`clientId` and `clientSecret` can also be given inline, and win over the environment variables when they are. Everything else has a default: `categoryId` (`22`, People & Blogs), `madeForKids` (`false`), `notifySubscribers` (`false`, where YouTube's own default is true), `chunkBytes` (8 MiB, and a multiple of 262144 or the plugin refuses to load), `uploadRetries`, `timeoutMs`, `chunkTimeoutMs`, and the four Google origins, which exist so a test or a proxy can stand in.
+`clientId` can also be given inline or typed into the `social-youtube` settings section this plugin serves; the order is settings, then inline config, then the environment variable named by `clientIdRef`, so a value entered in Settings → Plugins → Social wins without a redeploy. `clientSecret` accepts an inline value for a composition that wants one, but the settings section deliberately offers no field for it — it names the variable instead, through `clientSecretEnv`, and the card writes the secret to the credential store rather than into the settings document. Everything else has a default: `categoryId` (`22`, People & Blogs), `madeForKids` (`false`), `notifySubscribers` (`false`, where YouTube's own default is true), `chunkBytes` (8 MiB, and a multiple of 262144 or the plugin refuses to load), `uploadRetries`, `timeoutMs`, `chunkTimeoutMs`, and the four Google origins, which exist so a test or a proxy can stand in.
 
 ### Setting up the Google client
 
 1. Enable **YouTube Data API v3** on a Google Cloud project.
 2. Create an OAuth client of type **Web application**, and add exactly the `redirectUri` this plugin is configured with to its authorized redirect URIs — Google matches it byte for byte, scheme, case, and trailing slash included. The default `http://localhost` is a page that will not load, which is fine: the sign-in asks the human to copy the address they land on.
 3. Add the scopes `https://www.googleapis.com/auth/youtube.upload` and `https://www.googleapis.com/auth/youtube.readonly` to the consent screen, and add the humans who will sign in as test users while the client is unverified.
-4. Put the client id and secret in the environment variables named by `clientIdRef` and `clientSecretRef`.
+4. Enter the client id and secret in Settings → Plugins → Social, or put them in the environment variables named by `clientIdRef` and `clientSecretRef`. The card writes the secret to the credential store under the name `clientSecretEnv` gives, which is that same variable by default.
 
 ### Signing in
 

@@ -53,8 +53,12 @@ export interface MetaProviderOptions {
   key: CredentialKey
   /** Whether the Instagram provider is offered at all. */
   instagram: boolean
-  /** Base URL local media is served under, for Instagram; empty when there is none. */
-  publicMediaBaseUrl: string
+  /**
+   * Read the base URL local media is served under, for Instagram; empty when
+   * there is none. Read per operation, so an edit in settings reaches the next
+   * listing and the next post rather than waiting for a restart.
+   */
+  publicMediaBaseUrl: () => string
   /** Milliseconds between Instagram container status checks. */
   pollIntervalMs: number
   /** Milliseconds to wait for an Instagram container in total. */
@@ -147,7 +151,7 @@ export function createMetaProviders(options: MetaProviderOptions): SocialProvide
       if (!scopes.includes(INSTAGRAM_PUBLISH_PERMISSION)) igReasons.push(appReviewReason(INSTAGRAM_PUBLISH_PERMISSION))
       const igReady = igReasons.length === 0
       if (igReady && lifetime.notice !== undefined) igReasons.push(lifetime.notice)
-      if (igReady && options.publicMediaBaseUrl === '') {
+      if (igReady && options.publicMediaBaseUrl() === '') {
         igReasons.push('Instagram fetches media from a public URL, so only media given as an https URL can be posted; set publicMediaBaseUrl to post local files')
       }
       entries.push({
@@ -176,7 +180,7 @@ export function createMetaProviders(options: MetaProviderOptions): SocialProvide
     if (media === undefined) {
       throw new Error(`${entry.target.id} needs an image or a video: Instagram has no text-only post`)
     }
-    const mediaUrl = publicMediaUrl(media, options.publicMediaBaseUrl)
+    const mediaUrl = publicMediaUrl(media, options.publicMediaBaseUrl())
     if (mediaUrl === undefined) {
       throw new Error(`Instagram fetches media from a public URL and ${media.path} is a local file; set publicMediaBaseUrl to the base URL that directory is served under, or pass an https URL`)
     }

@@ -41,6 +41,8 @@ Two rules the registry enforces rather than trusts, because a target that silent
 - A provider's `name` carries no `:`, and **every target id it lists starts with `<name>:`** and has something after it. An id that does not, an id whose `provider` field disagrees, and a duplicate id are dropped from the addressable namespace and reported as one unready diagnostic target.
 - `ready` is a live fact about the credential, not a cached one. A provider decides it from what it has stored — an expiry it can read, a scope it can check — and never by making a call that fails.
 
+A provider that signs in with an application of the operator's own serves a settings namespace named after itself — `social-linkedin`, `social-meta`, `social-youtube` — holding the public half of that application: a client id, a redirect URI, and the *name* the secret is kept under. Each value is resolved settings-first, then composition config, then the environment, so a value typed into the card takes effect without a redeploy and an empty field falls back to the deployment's. `resolveAppCredential` in [`social/`](social/README.md) fixes that order once rather than three times.
+
 The third rule is a matter of honesty rather than mechanism. Platforms do things the request did not ask for: YouTube makes a video private when the project is unverified, an image goes out with no alt text, a caption is truncated. A provider reports those in `SocialPostResult.notes`, and the consumer prints them. A tool that says "published" about a post nobody can see is worse than one that says nothing.
 
 -----
@@ -49,7 +51,7 @@ The third rule is a matter of honesty rather than mechanism. Platforms do things
 ## Related documentation
 
 - [Capability seams](../../docs/capability-seams.md) — the Service Definition / Provider / Consumer split this group follows.
-- [`credentials/`](../credentials/README.md) — where every provider's tokens live. None of them stores a credential of its own, and none puts one in settings.
+- [`credentials/`](../credentials/README.md) — where every provider's tokens live. None of them stores a credential of its own, and no secret is ever written into a settings document: a provider's settings section names the variable its application secret is kept under, and the card writes the secret through this seam without reading it back.
 - [`interaction/`](../interaction/README.md) — the approval seam `social_post` publishes through.
 
 -----

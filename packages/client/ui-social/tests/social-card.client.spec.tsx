@@ -17,6 +17,8 @@ import { en } from '../src/client/locales.ts'
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  blocks = []
+  credentialCalls = []
 })
 
 /** The shipped English copy, with the same `{name}` substitution the runtime does. */
@@ -107,9 +109,34 @@ function stubHost(options: {
   return sent
 }
 
+/**
+ * The application-credential blocks the card renders beneath the targets.
+ *
+ * Empty by default so the existing expectations describe the target list alone;
+ * the blocks have their own suite. An empty list renders nothing, which is also
+ * what a deployment composing no provider settings gets.
+ */
+let blocks: unknown[] = []
+
+/** Every credential edit the card asked for, so a test can prove what it sent. */
+let credentialCalls: Array<[string, string, string]> = []
+
+/** The injected face the section's slot entry supplies, as a stub. */
+function credentialsFace(): Record<string, unknown> {
+  return {
+    useSocialCredentials: (select: (snapshot: unknown) => unknown) => select(blocks),
+    editCredential: (application: string, field: string, text: string) => {
+      credentialCalls.push([application, field, text])
+    },
+    resetCredentialField: () => {},
+    saveCredentials: () => {},
+    discardCredentials: () => {},
+  }
+}
+
 /** Render the card and expand it, letting the first status read settle. */
 async function open(): Promise<void> {
-  render(<SocialCard {...({ t } as unknown as SocialCardProps)} />)
+  render(<SocialCard {...({ t, ...credentialsFace() } as unknown as SocialCardProps)} />)
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
   })
@@ -133,7 +160,7 @@ function at<T>(items: readonly T[], index: number): T {
 describe('SocialCard', () => {
   it('shows only the header until it is expanded', () => {
     stubHost()
-    render(<SocialCard {...({ t } as unknown as SocialCardProps)} />)
+    render(<SocialCard {...({ t, ...credentialsFace() } as unknown as SocialCardProps)} />)
     expect(screen.getByText(en.title)).toBeDefined()
     expect(screen.queryByText(en.targetsHeading)).toBeNull()
   })

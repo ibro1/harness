@@ -286,3 +286,132 @@
   flex-direction: column;
   gap: 4px;
 }
+
+/* The application-credential forms. Set apart from the target list above it:
+   one half of this card reports state that changes on its own, and the other
+   half is a form a person fills in. */
+.appSection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dsh-border, rgb(0 0 0 / 10%));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.appBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.appBlock + .appBlock {
+  border-top: 1px dashed var(--dsh-border, rgb(0 0 0 / 10%));
+}
+
+.appTitle {
+  font-weight: 600;
+}
+
+.appActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary,
+.secondary {
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--dsh-border, rgb(0 0 0 / 15%));
+}
+
+.primary {
+  background: var(--dsh-accent, #2563eb);
+  border-color: transparent;
+  color: #fff;
+}
+
+.secondary {
+  background: transparent;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.appField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.appFieldHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.appLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.appBadges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.appBadge,
+.appBadgeMuted {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.appBadge {
+  background: var(--dsh-accent-soft, rgb(37 99 235 / 12%));
+}
+
+.appBadgeMuted {
+  background: transparent;
+  border: 1px solid var(--dsh-border, rgb(0 0 0 / 15%));
+  opacity: 0.7;
+}
+
+.appReset {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  color: inherit;
+}
+
+.appReset:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.appInput {
+  border-radius: 6px;
+  border: 1px solid var(--dsh-border, rgb(0 0 0 / 15%));
+  padding: 6px 8px;
+  font: inherit;
+  background: var(--dsh-surface, transparent);
+  color: inherit;
+  min-width: 0;
+}
+
+.appInput:disabled {
+  opacity: 0.6;
+}

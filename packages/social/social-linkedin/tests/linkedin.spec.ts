@@ -113,7 +113,7 @@ interface Mounted {
 }
 
 /** Mount the plugin against stub seams, with a stored record when one is given. */
-function mount(overrides: Partial<Config>, stored?: CredentialRecord): Mounted {
+function mount(overrides: Partial<Config>, stored?: CredentialRecord, settingsSection?: Record<string, string>): Mounted {
   const providers = new Map<string, SocialProvider>()
   const flows = new Map<string, AuthorizationFlow>()
   const records = new Map<string, CredentialRecord>()
@@ -122,6 +122,15 @@ function mount(overrides: Partial<Config>, stored?: CredentialRecord): Mounted {
   if (stored !== undefined) records.set(KEY, stored)
 
   const ctx = {
+    // The plugin awaits the settings service in a scope rather than sampling
+    // for it, because it resolves after the plugin applies on a real boot. A
+    // spec that supplies a section gets one; otherwise the scope never runs,
+    // which is the shape a deployment with no settings service is in.
+    inject(deps: string[], run: (scope: unknown) => void) {
+      if (settingsSection === undefined || !deps.includes('settings')) return undefined
+      run({ settings: { register: () => ({ get: () => settingsSection }) } })
+      return undefined
+    },
     effect(run: () => unknown) {
       const disposer = run()
       if (typeof disposer === 'function') disposers.push(disposer as () => void)
@@ -158,6 +167,7 @@ function mount(overrides: Partial<Config>, stored?: CredentialRecord): Mounted {
   }
 
   const config: Config = {
+    clientId: '',
     clientIdRef: 'LINKEDIN_CLIENT_ID',
     clientSecretRef: 'LINKEDIN_CLIENT_SECRET',
     redirectUri: 'https://harness.example/oauth/linkedin',
@@ -519,5 +529,91 @@ describe('social-linkedin posting', () => {
 
     await expect(mounted.providers.get('linkedin')!.post({ target: 'twitter:me', text: 'Wrong network.' }))
       .rejects.toThrow('is not a LinkedIn target')
+  })
+})
+
+describe('the application credentials', () => {
+  it('signs in with the client id and redirect URI typed into settings, over the environment', async () => {
+    const { base, calls } = await stubLinkedIn((call) => {
+      if (call.path === '/oauth/v2/accessToken') {
+        return { body: { access_token: 'fresh-token', expires_in: 5_184_000, scope: 'openid profile w_member_social' } }
+      }
+      if (call.path === '/v2/userinfo') return { body: { sub: 'mem-9', name: 'Ada Lovelace' } }
+      return { status: 404, body: {} }
+    })
+    const mounted = mount({ apiBaseUrl: base, authBaseUrl: base }, undefined, {
+      clientId: 'typed-into-the-card',
+      redirectUri: 'https://harness.example/typed',
+    })
+    const notices: AuthorizationNotice[] = []
+
+    await mounted.flows.get(KEY)!.run({
+      method: 'oauth',
+      signal: new AbortController().signal,
+      notify: (notice) => { notices.push(notice) },
+      prompt: () => {
+        const state = new URL(notices[0]?.url ?? '').searchParams.get('state') ?? ''
+        return Promise.resolve(`https://harness.example/typed?code=the-code&state=${state}`)
+      },
+    })
+
+    // The consent URL the human is sent to carries what the card holds, not
+    // what the environment does — the whole point of the field being editable.
+    const sent = new URL(notices[0]?.url ?? '')
+    expect(sent.searchParams.get('client_id')).toBe('typed-into-the-card')
+    expect(sent.searchParams.get('redirect_uri')).toBe('https://harness.example/typed')
+    const exchange = calls.find(call => call.path === '/oauth/v2/accessToken')?.body.toString('utf8')
+    expect(exchange).toContain('client_id=typed-into-the-card')
+    expect(exchange).toContain(`redirect_uri=${encodeURIComponent('https://harness.example/typed')}`)
+    // The secret is never a settings field, so it still comes from the
+    // reference the section names, resolved through the credential seam.
+    expect(exchange).toContain('client_secret=secret-1')
+  })
+
+  it('falls back to the environment when the card holds nothing', async () => {
+    const { base, calls } = await stubLinkedIn((call) => {
+      if (call.path === '/oauth/v2/accessToken') {
+        return { body: { access_token: 'fresh-token', expires_in: 5_184_000, scope: 'openid profile w_member_social' } }
+      }
+      if (call.path === '/v2/userinfo') return { body: { sub: 'mem-9', name: 'Ada Lovelace' } }
+      return { status: 404, body: {} }
+    })
+    const mounted = mount({ apiBaseUrl: base, authBaseUrl: base }, undefined, { clientId: '' })
+    const notices: AuthorizationNotice[] = []
+
+    await mounted.flows.get(KEY)!.run({
+      method: 'oauth',
+      signal: new AbortController().signal,
+      notify: (notice) => { notices.push(notice) },
+      prompt: () => {
+        const state = new URL(notices[0]?.url ?? '').searchParams.get('state') ?? ''
+        return Promise.resolve(`https://harness.example/oauth/linkedin?code=the-code&state=${state}`)
+      },
+    })
+
+    expect(calls.find(call => call.path === '/oauth/v2/accessToken')?.body.toString('utf8'))
+      .toContain('client_id=client-1')
+  })
+
+  it('says where the client id can be put when no layer supplies one', async () => {
+    const mounted = mount({ clientIdRef: 'NOT_SET' })
+
+    await expect(mounted.flows.get(KEY)!.run({
+      method: 'oauth',
+      signal: new AbortController().signal,
+      notify: () => {},
+      prompt: () => Promise.resolve(''),
+    })).rejects.toThrow('No LinkedIn client id is configured: enter it in Settings → Plugins → Social, set the NOT_SET environment variable, or give this plugin the value directly in its config.')
+  })
+
+  it('refuses to start a sign-in with no redirect URI anywhere, naming the card first', async () => {
+    const mounted = mount({ redirectUri: '' })
+
+    await expect(mounted.flows.get(KEY)!.run({
+      method: 'oauth',
+      signal: new AbortController().signal,
+      notify: () => {},
+      prompt: () => Promise.resolve(''),
+    })).rejects.toThrow('LinkedIn sign-in needs a redirect URI: enter it in Settings → Plugins → Social')
   })
 })

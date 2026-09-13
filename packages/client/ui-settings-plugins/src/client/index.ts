@@ -51,6 +51,12 @@ export type { FieldProps } from './fields.tsx'
 export type {
   CardActions, CardFieldSpec, CardFieldState, CardSecretSpec, CardShell,
 } from './card-form.ts'
+
+// No value export of the form model or its controls, deliberately. A card in
+// another plugin cannot import one: the shell shares a fixed module table with
+// the client bundles, this package is not in it, and the bundle-purity gate
+// refuses the cross-plugin value import rather than letting it fail in a
+// browser. A foreign card owns its own staging — see `ui-social`.
 export type { AgentLoopCardFace, AgentLoopCardState } from './agent-loop-card-controller.ts'
 export type { BashCardFace, BashCardState } from './bash-card-controller.ts'
 export type { WebSearchCardFace, WebSearchCardState } from './web-search-card-controller.ts'

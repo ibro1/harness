@@ -35,6 +35,18 @@ export type {
   SocialTarget,
 } from './types.ts'
 
+export {
+  chooseAppCredential,
+  firstConfigured,
+  missingAppCredential,
+  resolveAppCredential,
+} from './app-credentials.ts'
+export type {
+  AppCredentialLayers,
+  AppCredentialSource,
+  AppCredentialSubject,
+} from './app-credentials.ts'
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     social: SocialRegistry

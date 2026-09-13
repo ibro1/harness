@@ -104,7 +104,7 @@ interface Mounted {
 }
 
 /** Mount the plugin on a stubbed context and hand back what it registered. */
-function mount(origin: string, record: unknown, overrides: Partial<Config> = {}): Mounted {
+function mount(origin: string, record: unknown, overrides: Partial<Config> = {}, settingsSection?: Record<string, string>): Mounted {
   const config: Config = {
     clientId: 'client-id',
     clientSecret: 'client-secret',
@@ -129,6 +129,16 @@ function mount(origin: string, record: unknown, overrides: Partial<Config> = {})
   const flows: Mounted['flows'] = []
   const disposers: (() => void)[] = []
   const ctx = {
+    // The plugin awaits the settings service in a scope rather than sampling
+    // for it, because it resolves after the plugin applies on a real boot. A
+    // spec that supplies a section gets one; otherwise the scope never runs,
+    // which is the shape a deployment with no settings service is in.
+    inject(deps: string[], run: (scope: unknown) => void) {
+      if (settingsSection === undefined || !deps.includes('settings')) return undefined
+      run({ settings: { register: () => ({ get: () => settingsSection }) } })
+      return undefined
+    },
+
     effect(fn: () => () => void) {
       disposers.push(fn())
       return () => {}
@@ -322,5 +332,44 @@ describe('social-youtube upload', () => {
     expect(notes).toContain('unverified API project')
     expect(notes).toContain('still processing it')
     expect(result.id).toBe('VID9')
+  })
+})
+
+describe('the application credentials', () => {
+  it('sends the human to the consent page built from what settings holds, over the config', async () => {
+    const mounted = mount('https://youtube.invalid', undefined, {
+      clientId: 'from-config', redirectUri: 'https://harness.example/config',
+    }, {
+      clientId: 'typed-into-the-card', redirectUri: 'https://harness.example/typed',
+    })
+    const flow = mounted.flows[0]
+    if (flow === undefined) throw new Error('no authorization flow was registered')
+    const notices: Array<{ message: string; url?: string }> = []
+
+    // The paste is refused, which is fine: the consent URL is built and shown
+    // before anything is asked for, and that URL is what this test is about.
+    await expect(flow.run({
+      method: 'google',
+      signal: new AbortController().signal,
+      notify: (notice: { message: string; url?: string }) => { notices.push(notice) },
+      prompt: () => Promise.resolve(''),
+    } as never)).rejects.toThrow()
+
+    const consent = new URL(notices[0]?.url ?? '')
+    expect(consent.searchParams.get('client_id')).toBe('typed-into-the-card')
+    expect(consent.searchParams.get('redirect_uri')).toBe('https://harness.example/typed')
+  })
+
+  it('says where the client id can be put when no layer supplies one', async () => {
+    const mounted = mount('https://youtube.invalid', undefined, { clientId: '', clientIdRef: '' })
+    const flow = mounted.flows[0]
+    if (flow === undefined) throw new Error('no authorization flow was registered')
+
+    await expect(flow.run({
+      method: 'google',
+      signal: new AbortController().signal,
+      notify: () => {},
+      prompt: () => Promise.resolve(''),
+    } as never)).rejects.toThrow('No Google OAuth client id is configured: enter it in Settings → Plugins → Social, or give this plugin the value directly in its config.')
   })
 })

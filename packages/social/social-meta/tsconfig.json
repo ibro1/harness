@@ -22,6 +22,9 @@
     },
     {
       "path": "../social"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

@@ -371,11 +371,33 @@ Environment tab says — every variable has to be passed through in
 [entrypoint] Social posting enabled (social_targets, social_post); connect accounts by asking the agent to sign in
 ```
 
-### What to set
+### Two different things get called credentials
+
+| | What it is | Where it goes |
+|---|---|---|
+| **Application** credentials — a client id, an app id, a secret, a redirect URI | Identifies *your registered app* to the platform. Set once. | Settings → Plugins → Social, or the environment below |
+| **Account** credential — the access token | Identifies *you*, and is what a post is published as | Obtained by the sign-in flow, kept in the credential store. **Never typed anywhere.** |
+
+Only the first kind is configuration. The rest of this section is about it.
+
+### Setting the application credentials
+
+The card is the shorter road: open Settings → Plugins → Social, fill in the
+application block for each platform, and press Save. Nothing needs a redeploy,
+and a mistyped value is corrected in place.
+
+`DSH_SOCIAL=1` is still an environment variable and still required — it decides
+whether the plugin is mounted at all, which has to be settled before there is a
+card to open.
+
+The environment remains available for everything else, and is the better choice
+when a deployment is built from a script rather than clicked. A value typed into
+the card wins over the same value in the environment; an empty field falls back
+to it.
 
 | Variable | Value |
 |---|---|
-| `DSH_SOCIAL` | `1` |
+| `DSH_SOCIAL` | `1` — required, and only settable here |
 | `SOCIAL_LINKEDIN_REDIRECT_URI` | e.g. `https://<host>/social/callback/linkedin` |
 | `SOCIAL_META_REDIRECT_URI` | e.g. `https://<host>/social/callback/meta` |
 | `SOCIAL_YOUTUBE_REDIRECT_URI` | e.g. `https://<host>/social/callback/youtube` |
@@ -386,7 +408,13 @@ Environment tab says — every variable has to be passed through in
 
 **No user token is ever set here.** Access and refresh tokens are obtained by
 the sign-in flow and kept in the credential store, never in settings and never
-in this file. The variables above are app identities, resolved by name.
+in this file.
+
+**A secret is never stored in settings either.** The card writes a secret to the
+credential store and does not read it back, which is why its box stays blank
+even once one is set and why leaving it blank keeps the secret you already have.
+What the settings document holds is the *name* the secret is kept under — the
+`…_SECRET` variable above by default.
 
 Each redirect URI must be registered byte-for-byte with the app it belongs to.
 After consent the browser lands on a page that does not exist, which is

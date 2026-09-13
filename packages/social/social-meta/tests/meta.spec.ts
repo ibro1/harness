@@ -121,6 +121,7 @@ function grantRecord(overrides: Record<string, unknown> = {}): CredentialRecord 
 function config(base: string, overrides: Partial<Config> = {}): Config {
   return {
     account: 'default',
+    appId: '',
     appIdRef: 'META_APP_ID',
     appSecretRef: 'META_APP_SECRET',
     redirectUri: 'https://example.test/meta',
@@ -147,12 +148,23 @@ interface Mounted {
 }
 
 /** Mount the plugin against stub seams. */
-function mount(options: { config: Config; record?: CredentialRecord }): Mounted {
+function mount(options: { config: Config; record?: CredentialRecord; settings?: Record<string, string> }): Mounted {
   const providers: SocialProvider[] = []
   const flows: AuthorizationFlow[] = []
   const disposers: Array<() => void> = []
   let stored = options.record
+  const settingsSection = options.settings
   const ctx = {
+    // The plugin awaits the settings service in a scope rather than sampling
+    // for it, because it resolves after the plugin applies on a real boot. A
+    // spec that supplies a section gets one; otherwise the scope never runs,
+    // which is the shape a deployment with no settings service is in.
+    inject(deps: string[], run: (scope: unknown) => void) {
+      if (settingsSection === undefined || !deps.includes('settings')) return undefined
+      run({ settings: { register: () => ({ get: () => settingsSection }) } })
+      return undefined
+    },
+
     credentials: {
       resolve: (ref: string) => Promise.resolve({ value: `secret-for-${ref}`, source: 'env' }),
       readRecord: () => Promise.resolve(stored),
@@ -431,5 +443,52 @@ describe('social-meta instagram publishing', () => {
     const mounted = mount({ config: config(base), record: grantRecord() })
     await expect(named(mounted, 'instagram').post({ target: 'instagram:17841', text: 'just words' }))
       .rejects.toThrow('Instagram has no text-only post')
+  })
+})
+
+describe('the application credentials', () => {
+  it('signs in with the app id and redirect URI typed into settings, over the environment', async () => {
+    const base = await stubGraph(graphHandler({
+      routes: {
+        'GET oauth/access_token': request => request.query.get('grant_type') === 'fb_exchange_token'
+          ? { body: { access_token: 'long-token', token_type: 'bearer', expires_in: 5_184_000 } }
+          : { body: { access_token: 'short-token' } },
+      },
+    }))
+    const mounted = mount({
+      config: config(base),
+      settings: { appId: 'typed-into-the-card', redirectUri: 'https://harness.example/typed' },
+    })
+    const flow = mounted.flows[0]
+    if (flow === undefined) throw new Error('no authorization flow was registered')
+    const notices: Array<{ message: string; url?: string }> = []
+
+    await flow.run({
+      method: 'facebook-login',
+      signal: new AbortController().signal,
+      notify: (notice) => { notices.push(notice) },
+      prompt: () => Promise.resolve('the-code'),
+    })
+
+    const dialog = new URL(notices[0]?.url ?? '')
+    expect(dialog.searchParams.get('client_id')).toBe('typed-into-the-card')
+    expect(dialog.searchParams.get('redirect_uri')).toBe('https://harness.example/typed')
+  })
+
+  it('says where the app id can be put when no layer supplies one', async () => {
+    // `appIdRef: ''` rather than an unset variable name: this suite's credential
+    // stub answers every reference, so naming one that "does not exist" would
+    // still resolve. Naming none is the same refusal by a shorter road.
+    const base = await stubGraph(graphHandler({ routes: {} }))
+    const mounted = mount({ config: config(base, { appIdRef: '' }) })
+    const flow = mounted.flows[0]
+    if (flow === undefined) throw new Error('no authorization flow was registered')
+
+    await expect(flow.run({
+      method: 'facebook-login',
+      signal: new AbortController().signal,
+      notify: () => {},
+      prompt: () => Promise.resolve('the-code'),
+    })).rejects.toThrow('No Meta app id is configured: enter it in Settings → Plugins → Social, or give this plugin the value directly in its config.')
   })
 })

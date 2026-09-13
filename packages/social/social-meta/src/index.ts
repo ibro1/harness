@@ -35,6 +35,9 @@ export type { MetaNetwork, MetaProviderOptions } from './provider.ts'
 export { metaAuthorizationFlow } from './oauth.ts'
 // The seam declares `Context.social`; `inject` above makes it present by `apply`.
 import type {} from '@deepseek-ai/dsh-social'
+import { firstConfigured, resolveAppCredential } from '@deepseek-ai/dsh-social'
+// Type-only merge: declares `Context.settings`, awaited in a scope in `apply`.
+import type {} from '@deepseek-ai/dsh-settings'
 
 /** The plugin name, for the Loader. It is also the scope of this plugin's credential records. */
 export const name = 'social-meta'
@@ -46,6 +49,8 @@ export const inject = ['social', 'credentials', 'authorization']
 export interface Config {
   /** Which Meta account this mount holds, as the id half of its credential record key. */
   account: string
+  /** The Meta app id, when the composition gives it outright. */
+  appId: string
   /** Environment-variable name holding the Meta app id. */
   appIdRef: string
   /** Environment-variable name holding the Meta app secret. */
@@ -74,9 +79,21 @@ export interface Config {
   tokenExpiryWarningDays: number
 }
 
-/** Composition config. */
+/**
+ * Composition config.
+ *
+ * The app id may be carried outright — Meta prints it on the app dashboard and
+ * it travels in every authorize URL. The **secret** is only ever named: a
+ * secret written into a settings document rides every read of it back to the
+ * browser, so this package stores the reference and resolves it through the
+ * credential seam per call, which is also what lets the settings card write a
+ * new secret without reading the old one.
+ *
+ * Each value is resolved settings-first; see `resolveAppCredential`.
+ */
 export const Config: z<Config> = z.object({
   account: z.string().default('default').description('Which Meta account this mount holds. Mount the plugin again with another id to hold a second account; lowercase letters, digits and hyphens.'),
+  appId: z.string().default('').description('The Meta app id. Leave empty to read it from the environment variable named by appIdRef, or to let the settings card supply it.'),
   appIdRef: z.string().default('META_APP_ID').description('Name of the environment variable or credential holding the Meta app id.'),
   appSecretRef: z.string().default('META_APP_SECRET').description('Name of the environment variable or credential holding the Meta app secret.'),
   redirectUri: z.string().default('').description('One of the Valid OAuth Redirect URIs configured on the Meta app. Sign-in is impossible without it.'),
@@ -99,6 +116,65 @@ export const Config: z<Config> = z.object({
  * @throws when `account` cannot address a credential record, which is a
  * composition error and so is refused at load rather than at the first post.
  */
+/**
+ * The settings namespace this plugin serves, so the application credentials can
+ * be entered in Settings → Plugins → Social instead of only at deploy time.
+ */
+const SETTINGS_NS = 'social-meta'
+
+/** The Meta application fields a person can edit from the settings card. */
+export interface AppSettings {
+  /** The app id, which Meta prints on the app dashboard. */
+  appId?: string
+  /** Name of the environment variable or credential record holding the app secret. */
+  appSecretEnv?: string
+  /** One of the Valid OAuth Redirect URIs configured on the app. */
+  redirectUri?: string
+  /** Base URL local media is served under, which Instagram needs to fetch a local file. */
+  publicMediaBaseUrl?: string
+}
+
+/**
+ * Schema for {@link SETTINGS_NS}.
+ *
+ * There is no app-secret field, deliberately: this section names the
+ * *reference* and the card writes the secret through the credentials domain,
+ * which never reads one back.
+ */
+const APP_SETTINGS_SCHEMA: z<AppSettings> = z.object({
+  appId: z.string().description('The Meta app id, from the app dashboard. Not a secret — it travels in every authorize URL.'),
+  appSecretEnv: z.string().description('Name of the environment variable holding the app secret. The secret itself is written through the credential store, never into this document.'),
+  redirectUri: z.string().description('One of the Valid OAuth Redirect URIs configured on the Meta app. Sign-in is impossible without it.'),
+  publicMediaBaseUrl: z.string().description('Base URL that local media files are served under. Instagram fetches media from a public URL and cannot take an upload, so posting a local file to Instagram needs this.'),
+})
+
+/**
+ * Serve the settings namespace and return a live read of it.
+ *
+ * Awaited in a scope rather than sampled with `ctx.get`: the settings service
+ * is file-backed and resolves after a plugin composed alongside it applies.
+ * Absent settings is a supported composition, so it stays out of `inject`.
+ *
+ * @param ctx - the plugin context.
+ * @param config - validated composition config, seeding the section's base.
+ * @returns a read of the current section, empty until the service arrives.
+ */
+function installAppSettings(ctx: Context, config: Config): () => AppSettings {
+  let read: () => AppSettings = () => ({})
+  ctx.inject(['settings'], (settingsCtx: Context) => {
+    const scope = settingsCtx.settings.register(SETTINGS_NS, APP_SETTINGS_SCHEMA, {
+      base: {
+        appId: config.appId,
+        appSecretEnv: config.appSecretRef,
+        redirectUri: config.redirectUri,
+        publicMediaBaseUrl: config.publicMediaBaseUrl,
+      },
+    })
+    read = () => scope.get()
+  })
+  return () => read()
+}
+
 export function apply(ctx: Context, config: Config): void {
   if (!isCredentialKeySegment(config.account)) {
     throw new Error(`social-meta: account "${config.account}" must be lowercase letters, digits and hyphens`)
@@ -112,20 +188,25 @@ export function apply(ctx: Context, config: Config): void {
   }
   // Resolved per operation, never captured: the credential seam's rule is that
   // an edited secret reaches the next operation without a restart.
-  const resolveSecret = async (ref: string, what: string): Promise<string> => {
-    const resolved = await ctx.credentials.resolve(credentialRef(ref))
-    if (resolved === undefined) throw new Error(`social-meta: the Meta app ${what} is not configured; set ${ref}`)
-    return resolved.value
-  }
-  const appId = (): Promise<string> => resolveSecret(config.appIdRef, 'id')
-  const appSecret = (): Promise<string> => resolveSecret(config.appSecretRef, 'secret')
+  const readSettings = installAppSettings(ctx, config)
+  const resolve = async (ref: string): Promise<string | undefined> =>
+    (await ctx.credentials.resolve(credentialRef(ref)))?.value
+  const appId = (): Promise<string> => resolveAppCredential(
+    { settings: readSettings().appId, config: config.appId, ref: config.appIdRef },
+    { platform: 'Meta', what: 'app id' }, resolve)
+  // The secret is never a literal in any layer: it is addressed by reference
+  // and read through the credential seam, which is what the settings card
+  // writes into without ever reading it back.
+  const appSecret = (): Promise<string> => resolveAppCredential(
+    { ref: firstConfigured(readSettings().appSecretEnv, config.appSecretRef) },
+    { platform: 'Meta', what: 'app secret' }, resolve)
 
   const providers = createMetaProviders({
     endpoint,
     credentials: ctx.credentials,
     key,
     instagram: config.instagram,
-    publicMediaBaseUrl: config.publicMediaBaseUrl,
+    publicMediaBaseUrl: () => firstConfigured(readSettings().publicMediaBaseUrl, config.publicMediaBaseUrl) ?? '',
     pollIntervalMs: config.containerPollIntervalMs,
     pollTimeoutMs: config.containerTimeoutMs,
     expiryWarningDays: config.tokenExpiryWarningDays,
@@ -138,7 +219,7 @@ export function apply(ctx: Context, config: Config): void {
     key,
     label: `Meta (${config.account})`,
     instagram: config.instagram,
-    redirectUri: config.redirectUri,
+    redirectUri: () => firstConfigured(readSettings().redirectUri, config.redirectUri) ?? '',
     appId,
     appSecret,
   })
