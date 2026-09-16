@@ -33,6 +33,27 @@ class BrowserNetworkProbe extends EventTarget {
   }
 }
 
+/**
+ * The page-lifecycle half of a browser: a document that can be hidden and shown.
+ *
+ * Separate from {@link BrowserNetworkProbe} because the two events live on
+ * different objects — `visibilitychange` on the document, `pageshow` on the
+ * window — and the watcher needs both present before it attaches anything.
+ */
+class PageLifecycleProbe extends EventTarget {
+  visibilityState: 'visible' | 'hidden' = 'visible'
+
+  hide(): void {
+    this.visibilityState = 'hidden'
+    this.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  show(): void {
+    this.visibilityState = 'visible'
+    this.dispatchEvent(new Event('visibilitychange'))
+  }
+}
+
 class GenerationProbe {
   private readonly active = new Set<() => void>()
 
@@ -222,6 +243,119 @@ describe('connection client apply', () => {
     } finally {
       loop.stop()
     }
+  })
+
+  describe('returning to a tab that fell asleep', () => {
+    /**
+     * Start a connection whose every attempt fails, with a backoff long enough
+     * that nothing can retry on its own within the test.
+     * @returns the probes, a live attempt counter, and the loop to stop.
+     */
+    async function stalled(): Promise<{
+      browser: BrowserNetworkProbe
+      page: PageLifecycleProbe
+      calls: () => number
+      loop: { stop: () => void }
+    }> {
+      const browser = new BrowserNetworkProbe()
+      const page = new PageLifecycleProbe()
+      vi.stubGlobal('window', browser)
+      vi.stubGlobal('document', page)
+      ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+      const handle = await mount()
+      let attempts = 0
+      handle.registerGenerationSource(() => {
+        attempts++
+        return Promise.reject(new Error('socket is gone'))
+      })
+      const loop = handle.start({}, {
+        // Far longer than anything this test advances: a retry that happens
+        // must have been provoked, not merely waited for.
+        backoffBaseMs: 100_000,
+        backoffFactor: 1,
+        backoffMaxMs: 100_000,
+        generationReadyTimeoutMs: 500,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      return { browser, page, calls: () => attempts, loop }
+    }
+
+    it('reconnects at once when the tab is looked at again', async () => {
+      vi.useFakeTimers()
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const { page, calls, loop } = await stalled()
+      try {
+        expect(calls()).toBe(1)
+
+        page.hide()
+        await vi.advanceTimersByTimeAsync(5_000)
+        // Hiding must not provoke an attempt, and the backoff is nowhere near.
+        expect(calls()).toBe(1)
+
+        page.show()
+        await vi.advanceTimersByTimeAsync(0)
+
+        // No timer advance would have produced this: the operator coming back
+        // is what did. Without it they face a disconnected badge with nothing
+        // scheduled to clear it, because a hidden tab's timers are frozen.
+        expect(calls()).toBe(2)
+      } finally {
+        loop.stop()
+      }
+    })
+
+    it('also wakes on pageshow, which is all a back/forward restore fires', async () => {
+      vi.useFakeTimers()
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const { browser, calls, loop } = await stalled()
+      try {
+        expect(calls()).toBe(1)
+        browser.dispatchEvent(new Event('pageshow'))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(calls()).toBe(2)
+      } finally {
+        loop.stop()
+      }
+    })
+
+    it('leaves a healthy connection alone, so switching tabs costs no generation', async () => {
+      vi.useFakeTimers()
+      const browser = new BrowserNetworkProbe()
+      const page = new PageLifecycleProbe()
+      vi.stubGlobal('window', browser)
+      vi.stubGlobal('document', page)
+      ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+      const handle = await mount()
+      let attempts = 0
+      handle.registerGenerationSource((signal, ready) => new Promise<void>((resolve) => {
+        attempts++
+        ready({ home: '/h' })
+        signal.addEventListener('abort', () => { resolve() }, { once: true })
+      }))
+      const loop = handle.start({}, {
+        backoffBaseMs: 100,
+        backoffFactor: 2,
+        backoffMaxMs: 1_000,
+        generationReadyTimeoutMs: 500,
+      })
+      try {
+        await vi.advanceTimersByTimeAsync(0)
+        expect(handle.state.getSnapshot()).toBe('connected')
+        expect(attempts).toBe(1)
+
+        page.hide()
+        page.show()
+        browser.dispatchEvent(new Event('pageshow'))
+        await vi.advanceTimersByTimeAsync(0)
+
+        // A tab switched away from and back within a second has a perfectly
+        // good socket; replacing it would spend a generation for nothing.
+        expect(attempts).toBe(1)
+        expect(handle.state.getSnapshot()).toBe('connected')
+      } finally {
+        loop.stop()
+      }
+    })
   })
 
   it('feeds browser offline and online events into the owned retry loop', async () => {

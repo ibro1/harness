@@ -153,13 +153,69 @@ interface ConnectionOwner {
   readonly token: object
   readonly source: ConnectionGenerationSource
   readonly controller: ConnectionController
-  readonly stopNetworkWatch: () => void
+  /** Detaches every browser listener this owner attached: network and page lifecycle. */
+  readonly stopBrowserWatch: () => void
 }
 
 interface BrowserNetworkTarget {
   readonly navigator?: { readonly onLine?: boolean }
   addEventListener(type: 'online' | 'offline', listener: () => void): void
   removeEventListener(type: 'online' | 'offline', listener: () => void): void
+}
+
+/**
+ * The page-lifecycle events that mean "this tab is being looked at again".
+ *
+ * `visibilitychange` fires on the document; `pageshow` fires on the window and
+ * is the only signal a back/forward-cache restore gives — that page resumes
+ * fully frozen, with a dead socket and no visibility transition at all.
+ */
+interface BrowserLifecycleTarget {
+  addEventListener(type: string, listener: () => void): void
+  removeEventListener(type: string, listener: () => void): void
+}
+
+/**
+ * Reconnect when the operator comes back to a tab that fell asleep.
+ *
+ * `online`/`offline` cannot cover this: the network never went down, the tab
+ * did. A hidden tab has its timers clamped and, after a few minutes
+ * backgrounded, frozen outright — so the retry loop is not slow, it is stopped,
+ * and the socket it would have replaced died of idleness meanwhile. The
+ * operator returns to a `disconnected` badge with nothing scheduled to clear
+ * it. Sends still reach the Host over HTTP, which is why the reply to a message
+ * sent in that state is already waiting once the page is reloaded by hand.
+ *
+ * Reconnecting only while disconnected is the point: a tab switched away from
+ * and back within a second has a perfectly good socket, and replacing it would
+ * cost a generation for nothing.
+ *
+ * @param controller - the connection controller to wake.
+ * @param isConnected - whether the connection is currently live.
+ * @returns the disposer detaching both listeners.
+ */
+function watchPageVisibility(
+  controller: ConnectionController,
+  isConnected: () => boolean,
+): () => void {
+  const globals = globalThis as {
+    readonly window?: BrowserLifecycleTarget
+    readonly document?: BrowserLifecycleTarget & { readonly visibilityState?: string }
+  }
+  const win = globals.window
+  const doc = globals.document
+  if (win === undefined || doc === undefined) return () => {}
+  const wake = (): void => {
+    // `hidden` also arrives on the way OUT of the tab; only the return matters.
+    if (doc.visibilityState === 'hidden' || isConnected()) return
+    controller.reconnect()
+  }
+  doc.addEventListener('visibilitychange', wake)
+  win.addEventListener('pageshow', wake)
+  return () => {
+    doc.removeEventListener('visibilitychange', wake)
+    win.removeEventListener('pageshow', wake)
+  }
 }
 
 function watchBrowserNetwork(controller: ConnectionController): () => void {
@@ -219,7 +275,7 @@ export function apply(ctx: Context): void {
   const releaseOwner = (current: ConnectionOwner): void => {
     if (owner !== current) return
     owner = undefined
-    current.stopNetworkWatch()
+    current.stopBrowserWatch()
     current.controller.stop()
     publishGeneration(undefined)
     publishState(undefined)
@@ -279,7 +335,14 @@ export function apply(ctx: Context): void {
           sinks.onStateChange?.(state)
         },
       }, config ?? {})
-      const current = { token, source, controller, stopNetworkWatch: watchBrowserNetwork(controller) }
+      const stopNetworkWatch = watchBrowserNetwork(controller)
+      const stopVisibilityWatch = watchPageVisibility(controller, () => state === 'connected')
+      const current = {
+        token,
+        source,
+        controller,
+        stopBrowserWatch: () => { stopVisibilityWatch(); stopNetworkWatch() },
+      }
       owner = current
       controller.start()
       return {
