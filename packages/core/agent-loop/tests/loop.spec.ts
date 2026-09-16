@@ -51,6 +51,19 @@ function userTexts(agent: Agent): string[] {
     .flatMap(b => b.type === 'text' ? [b.text] : [])
 }
 
+/**
+ * The harness-owned openers every assembled prompt carries: the identity
+ * line and the turn-completion contract. Spelled out rather than imported
+ * because this is model-visible text, and a test that computed it could not
+ * catch a reword.
+ */
+const OPENERS = 'You are an AI agent powered by DeepSeek Harness.\n\n'
+  + 'Finish what you start within the turn that starts it. A turn ends when you stop writing, and '
+  + 'anything you described but did not do stops with it.\n\n'
+  + 'Deferring is only real when something will tell you the work finished. Without that, run the '
+  + 'operation now and report what happened, however long it takes. Never say you will report back on '
+  + 'work that is not running.'
+
 describe('agent loop', () => {
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
     'rejects invalid AgentOptions.maxTokens %s before publication',
@@ -303,7 +316,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     const request = adapter.requests[0]
-    expect(request!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.')
+    expect(request!.system).toBe(`${OPENERS}\n\nYou are a test agent on mock.\n\nUse the noop tool wisely.`)
     expect(request!.tools?.map(t => t.name)).toEqual(['noop'])
   })
 
@@ -320,7 +333,7 @@ describe('agent loop', () => {
     send(agent, 'hi')
     await waitForIdle(ctx, agent)
 
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nWorking in /work/space.')
+    expect(adapter.requests[0]!.system).toBe(`${OPENERS}\n\nWorking in /work/space.`)
   })
 
   it('contains a strict-variable render failure: the turn errors, the loop keeps serving turns', async () => {
@@ -356,7 +369,7 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests).toHaveLength(1)
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nIn /rescued.')
+    expect(adapter.requests[0]!.system).toBe(`${OPENERS}\n\nIn /rescued.`)
     const turnEnds = agent.session.snapshotEvents().filter(e => e.type === 'turn/end')
     expect(turnEnds).toHaveLength(2)
     expect(turnEnds[1]?.type === 'turn/end' && turnEnds[1].data.reason.kind).toBe('completed')
@@ -386,7 +399,7 @@ describe('agent loop', () => {
 
     expect(adapter.requests).toHaveLength(1)
     expect(adapter.requests[0]!.model).toBe('mock')
-    expect(adapter.requests[0]!.system).toBe('You are an AI agent powered by DeepSeek Harness.\n\nYou run on mock.')
+    expect(adapter.requests[0]!.system).toBe(`${OPENERS}\n\nYou run on mock.`)
   })
 
   it('omits the system field when system-prompt/assemble short-circuits with an empty assembly', async () => {

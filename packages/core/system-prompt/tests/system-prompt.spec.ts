@@ -11,10 +11,19 @@ import type { PromptContextOrderName, PromptSectionOrderName } from '@deepseek-a
  * registry MECHANICS strip them with {@link contributed} to stay focused on
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
-const BUILT_IN = ['harness:identity', 'deployment:persona']
+const BUILT_IN = ['harness:identity', 'harness:turn-contract', 'deployment:persona']
 const IDENTITY = 'You are an AI agent powered by DeepSeek Harness.'
+// Pinned verbatim: this is model-visible text, and a silent reword is exactly
+// the kind of drift a behavioural rule cannot afford.
+const TURN_CONTRACT = 'Finish what you start within the turn that starts it. A turn ends when you stop writing, and '
+  + 'anything you described but did not do stops with it.\n\n'
+  + 'Deferring is only real when something will tell you the work finished. Without that, run the '
+  + 'operation now and report what happened, however long it takes. Never say you will report back on '
+  + 'work that is not running.'
+/** Every harness-owned opener, as rendered ahead of any deployment persona. */
+const OPENERS = `${IDENTITY}\n\n${TURN_CONTRACT}`
 const SECTION_ORDER_NAMES = [
-  'HARNESS_IDENTITY', 'HARNESS_SOURCE', 'WEB_SURFACE', 'DEPLOYMENT_PERSONA',
+  'HARNESS_IDENTITY', 'HARNESS_TURN_CONTRACT', 'HARNESS_SOURCE', 'WEB_SURFACE', 'DEPLOYMENT_PERSONA',
   'PLAN_POLICY', 'TEAM_POLICY', 'PTC_ONLY', 'FILE_REFERENCE', 'TOOL_BASH',
   'TOOL_PWSH', 'TOOL_READ', 'TOOL_WRITE', 'TOOL_EDIT', 'TOOL_GLOB',
   'TOOL_GREP', 'TOOL_JOBS', 'TOOL_PTY', 'TOOL_WEB_SEARCH', 'TOOL_WEB_FETCH',
@@ -56,9 +65,10 @@ describe('SystemPrompt', () => {
       const assembly = await ctx.systemPrompt.assemble()
       expect(assembly.sections.map(s => s.name)).toEqual([
         'harness:identity',
+        'harness:turn-contract',
         'deployment:persona',
       ])
-      expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are DeepSeek Harness.`)
+      expect(renderPrompt(assembly)).toBe(`${OPENERS}\n\nYou are DeepSeek Harness.`)
       // The names are reserved by the plugin — one owner per section.
       expect(() => ctx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: 'imposter' }))
         .toThrow('prompt section "deployment:persona" is already registered')
@@ -67,7 +77,7 @@ describe('SystemPrompt', () => {
     it('renders no persona section for a persona-less deployment (empty default)', async () => {
       const ctx = new Context()
       await ctx.plugin(SystemPrompt)
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(IDENTITY)
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(OPENERS)
     })
 
     it('can omit the harness identity for a deployment that owns the complete persona', async () => {
@@ -78,8 +88,38 @@ describe('SystemPrompt', () => {
       })
 
       const assembly = await ctx.systemPrompt.assemble()
-      expect(assembly.sections.map(section => section.name)).toEqual(['deployment:persona'])
-      expect(renderPrompt(assembly)).toBe('You are a helpful software engineer assistant.')
+      // The turn contract stands on its own switch: dropping the identity line
+      // is a branding choice and must not quietly drop a behavioural rule.
+      expect(assembly.sections.map(section => section.name))
+        .toEqual(['harness:turn-contract', 'deployment:persona'])
+      expect(renderPrompt(assembly))
+        .toBe(`${TURN_CONTRACT}\n\nYou are a helpful software engineer assistant.`)
+    })
+
+    it('states that work is finished in the turn that starts it, and that a promise is not deferral', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+
+      const rendered = renderPrompt(await ctx.systemPrompt.assemble())
+
+      // The defect this exists for: an agent said it was fetching a repository
+      // and would report back, then stopped with nothing running. The operator
+      // waited a day for a message that could never arrive.
+      expect(rendered).toContain('Finish what you start within the turn that starts it.')
+      expect(rendered).toContain('Never say you will report back on work that is not running.')
+      // It must not claim background work is impossible: ctx.jobs genuinely
+      // reports back, and a rule that contradicts a real tool teaches the model
+      // to ignore one of them.
+      expect(rendered).toContain('Deferring is only real when something will tell you the work finished.')
+    })
+
+    it('can omit the turn contract for a loop that really does resume an unfinished turn', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt, { includeTurnContract: false })
+
+      const assembly = await ctx.systemPrompt.assemble()
+      expect(assembly.sections.map(section => section.name)).toEqual(['harness:identity', 'deployment:persona'])
+      expect(renderPrompt(assembly)).toBe(IDENTITY)
     })
 
     it('can suppress runtime context without evaluating providers or accepting waterfall additions', async () => {
@@ -106,7 +146,7 @@ describe('SystemPrompt', () => {
       // skips the schema, so the ctor's `?? ''` narrowing is what fires.
       const ctx = new Context()
       const service = new SystemPrompt(ctx, {})
-      expect(renderPrompt(await service.assemble())).toBe(IDENTITY)
+      expect(renderPrompt(await service.assemble())).toBe(OPENERS)
     })
   })
 
@@ -121,15 +161,15 @@ describe('SystemPrompt', () => {
     ctx.systemPrompt.tools(() => ({ schemas: [{ name: 'echo', description: 'echo back', parameters: {} }] }))
 
     const assembly = await ctx.systemPrompt.assemble()
-    expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', 'deployment:persona', 'rules', 'cwd'])
-    expect(assembly.sections.map(s => s.text)).toEqual([IDENTITY, 'You are DeepSeek Harness.', 'Be precise.', 'cwd: /tmp'])
+    expect(assembly.sections.map(s => s.name)).toEqual([...BUILT_IN, 'rules', 'cwd'])
+    expect(assembly.sections.map(s => s.text)).toEqual([IDENTITY, TURN_CONTRACT, 'You are DeepSeek Harness.', 'Be precise.', 'cwd: /tmp'])
     expect(assembly.contexts).toEqual([
       { name: 'earlier', text: 'context 1' },
       { name: 'later', text: 'context 2' },
     ])
     expect(assembly.tools).toEqual([{ name: 'echo', description: 'echo back', parameters: {} }])
     expect(assembly.variables).toEqual({})
-    expect(renderPrompt(assembly)).toBe(`${IDENTITY}\n\nYou are DeepSeek Harness.\n\nBe precise.\n\ncwd: /tmp`)
+    expect(renderPrompt(assembly)).toBe(`${OPENERS}\n\nYou are DeepSeek Harness.\n\nBe precise.\n\ncwd: /tmp`)
     expect(renderContextSnapshot(assembly)).toBe('Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\ncontext 1\n\ncontext 2')
   })
 
@@ -307,8 +347,8 @@ describe('SystemPrompt', () => {
 
     const passed: AssembleContext = {}
     const assembly = await ctx.systemPrompt.assemble(passed)
-    expect(seen).toEqual([['harness:identity', 'deployment:persona', 'base', 'from-a']])
-    expect(assembly.sections.map(s => s.name)).toEqual(['harness:identity', 'deployment:persona', 'base', 'from-a'])
+    expect(seen).toEqual([[...BUILT_IN, 'base', 'from-a']])
+    expect(assembly.sections.map(s => s.name)).toEqual([...BUILT_IN, 'base', 'from-a'])
     expect(contexts[0]).toBe(passed) // the caller's context reaches listeners
   })
 
@@ -368,7 +408,7 @@ describe('SystemPrompt', () => {
     firstParameters.properties['leak'] = { type: 'string' }
 
     const second = await ctx.systemPrompt.assemble()
-    expect(second.sections.map(section => section.name)).toEqual(['harness:identity', 'deployment:persona', 'base'])
+    expect(second.sections.map(section => section.name)).toEqual([...BUILT_IN, 'base'])
     expect(second.sections[0]!.text).toBe(IDENTITY)
     expect(second.contexts).toEqual([])
     expect(second.tools).toEqual([{ name: 't', description: 'tool', parameters: { type: 'object', properties: {} } }])
@@ -524,7 +564,7 @@ describe('SystemPrompt', () => {
       ctx.systemPrompt.variable('model', () => 'deepseek-v4')
       ctx.systemPrompt.variable('cwd', () => '/work')
 
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${IDENTITY}\n\nYou run on deepseek-v4 in /work.`)
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${OPENERS}\n\nYou run on deepseek-v4 in /work.`)
     })
 
     it('lets a waterfall listener add or override variables before render', async () => {
@@ -535,7 +575,7 @@ describe('SystemPrompt', () => {
         assembly.variables['extra'] = 'from-waterfall'
         return next()
       })
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${IDENTITY}\n\nfrom-waterfall`)
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${OPENERS}\n\nfrom-waterfall`)
     })
 
     it('throws on a reference to an unregistered variable, listing what exists', async () => {
@@ -608,7 +648,7 @@ describe('SystemPrompt', () => {
       await ctx.plugin(SystemPrompt)
       ctx.systemPrompt.section({ name: 's', order: 0, text: '{{constructor}}' })
       ctx.systemPrompt.variable('constructor', () => 'own-value')
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${IDENTITY}\n\nown-value`)
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${OPENERS}\n\nown-value`)
     })
 
     it('never re-scans substituted values (a value containing {{sneaky}} stays literal)', () => {

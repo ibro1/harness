@@ -120,6 +120,7 @@ export interface PromptAssembly {
 
 const SECTION_ORDERS = {
   HARNESS_IDENTITY: -1000,
+  HARNESS_TURN_CONTRACT: -950,
   HARNESS_SOURCE: -900,
   WEB_SURFACE: -800,
   DEPLOYMENT_PERSONA: 0,
@@ -237,6 +238,12 @@ function compareToolNames(a: ToolSchema, b: ToolSchema): number {
 export interface Config {
   /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
+  /**
+   * Include the turn-completion contract: that work is finished within the turn
+   * that starts it unless something will genuinely report back (default true).
+   * A deployment whose loop really can resume an unfinished turn may turn it off.
+   */
+  includeTurnContract?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
   includeRuntimeContext?: boolean
   /**
@@ -389,6 +396,7 @@ class PromptLayer implements ScopeLayer {
 export class SystemPrompt extends Service {
   static Config: z<Config> = z.object({
     includeHarnessIdentity: z.boolean().default(true),
+    includeTurnContract: z.boolean().default(true),
     includeRuntimeContext: z.boolean().default(true),
     persona: z.string().default(''),
     // Preserve omission because an explicit empty order lacks the rest marker.
@@ -410,6 +418,31 @@ export class SystemPrompt extends Service {
         name: 'harness:identity',
         order: this.getSectionOrder('HARNESS_IDENTITY'),
         text: 'You are an AI agent powered by DeepSeek Harness.',
+      })
+    }
+    // What a turn owes the person reading it.
+    //
+    // Written because a deployed agent answered "I am fetching the repository
+    // now, I'll update you as soon as it finishes" and then stopped, with
+    // nothing running and no notice possible; the operator waited a day before
+    // asking again, and the answer — a 404 on a private repository — had been
+    // available in the second it would have taken to run the clone.
+    //
+    // Deliberately does not claim there is no background execution, because
+    // there is: `ctx.jobs` really does notify a model when a job settles. The
+    // distinction that matters is between deferring TO something and merely
+    // saying you will. A tool that can report back documents itself in its own
+    // section; this one only fixes what a promise costs when nothing is behind
+    // it.
+    if (config.includeTurnContract ?? true) {
+      this.section({
+        name: 'harness:turn-contract',
+        order: this.getSectionOrder('HARNESS_TURN_CONTRACT'),
+        text: 'Finish what you start within the turn that starts it. A turn ends when you stop writing, and '
+          + 'anything you described but did not do stops with it.\n\n'
+          + 'Deferring is only real when something will tell you the work finished. Without that, run the '
+          + 'operation now and report what happened, however long it takes. Never say you will report back on '
+          + 'work that is not running.',
       })
     }
     this.section({
