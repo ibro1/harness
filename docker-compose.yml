@@ -100,6 +100,17 @@ services:
       # WhatsApp sessions. Unset leaves those routes unregistered.
       WA_EXTERNAL_TOKEN: ${WA_EXTERNAL_TOKEN:-}
       WA_DEFAULT_SESSION: ${WA_DEFAULT_SESSION:-}
+      # Opens /whatsapp/announce: one service posting one kind of message to a
+      # fixed list of chats on the operator's own account, with no approval
+      # step. Both are required - a token with no list, or a list with no
+      # token, leaves the route unregistered - because the list is the security
+      # boundary, not the token.
+      WA_ANNOUNCE_TOKEN: ${WA_ANNOUNCE_TOKEN:-}
+      # `Label=jid,Label=jid`. Only these chats can be posted to.
+      WA_ANNOUNCE_CHATS: ${WA_ANNOUNCE_CHATS:-}
+      # Per-chat cooldown in seconds; 600 by default. A broadcast that flaps
+      # must not announce itself into a group of real people once a minute.
+      WA_ANNOUNCE_COOLDOWN_SECONDS: ${WA_ANNOUNCE_COOLDOWN_SECONDS:-}
       DSH_LLM_GATEWAY_TIMEOUT_MS: ${DSH_LLM_GATEWAY_TIMEOUT_MS:-}
       DEERFLOW_BROWSER_MCP_URL: ${DEERFLOW_BROWSER_MCP_URL:-}
       # 0 withholds the DeerFlow tools from the agy/opencode CLIs (and, for agy,

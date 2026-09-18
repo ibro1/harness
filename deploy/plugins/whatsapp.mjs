@@ -14,7 +14,7 @@
 // Disabled (routes 503) when WA_SVC_TOKEN is unset, so a deploy without the
 // sidecar fails safe.
 
-import { randomUUID } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
 
 export const name = 'whatsapp'
@@ -35,6 +35,35 @@ const EXTERNAL_TOKEN = (process.env.WA_EXTERNAL_TOKEN ?? '').trim()
 // The session the card and the agent drive. External callers may never name it,
 // so a tenant cannot act as, or read, the operator's own WhatsApp.
 const DEFAULT_SESSION = (process.env.WA_DEFAULT_SESSION ?? 'default').trim() || 'default'
+// The token for the announce route: one service, posting one kind of message to
+// a fixed list of chats on the operator's own account. Separate from the other
+// three because it is the only credential in this file that can reach the
+// operator's WhatsApp without a human pressing Approve, and what makes that
+// safe is the allowlist rather than the token.
+const ANNOUNCE_TOKEN = (process.env.WA_ANNOUNCE_TOKEN ?? '').trim()
+// `Label=jid,Label=jid`. The whole security boundary of the announce route: a
+// leaked token can post to these chats and nowhere else, so the list is
+// deliberately configuration rather than something the caller sends.
+const ANNOUNCE_CHATS = parseChats(process.env.WA_ANNOUNCE_CHATS ?? '')
+// One announcement per chat per this many seconds. A broadcast that flaps -
+// the phone losing signal and reconnecting - would otherwise announce itself
+// into a group of real people once a minute.
+const ANNOUNCE_EVERY_MS = Math.max(0, Number(process.env.WA_ANNOUNCE_COOLDOWN_SECONDS ?? 600)) * 1000
+/** chat jid -> when it was last announced to, for the cooldown above. */
+const announcedAt = new Map()
+
+/** @param {string} raw - `Label=jid,Label=jid`. @returns {Map<string,string>} label to jid. */
+function parseChats(raw) {
+  const chats = new Map()
+  for (const entry of raw.split(',')) {
+    const at = entry.indexOf('=')
+    if (at < 1) continue
+    const label = entry.slice(0, at).trim()
+    const jid = entry.slice(at + 1).trim()
+    if (label !== '' && jid !== '') chats.set(label, jid)
+  }
+  return chats
+}
 
 /** Pending sends awaiting operator approval: id → {id,to,name,text,createdAt}.
  *  In-memory on purpose: a draft the operator never approves evaporates on
@@ -99,6 +128,20 @@ async function sendNow(to, text) {
   const { status: s2, body: out } = await svc('/send', { method: 'POST', body: { to: resolved.jid, text } })
   if (s2 === 200) return { sent: true, to: resolved.name || to, text }
   return { error: out.error ?? `send failed (HTTP ${s2})` }
+}
+
+/**
+ * Whether the request carries this exact bearer token.
+ *
+ * Compared in constant time: this token sends messages to real people on the
+ * operator's own account, and a plain comparison on a secret leaks its length
+ * and its prefix to anything patient enough to measure.
+ */
+function bearerIs(req, token) {
+  const given = Buffer.from(String(req.headers['authorization'] ?? ''))
+  const expected = Buffer.from(`Bearer ${token}`)
+  if (given.length !== expected.length) return false
+  return timingSafeEqual(given, expected)
 }
 
 /** Read a small JSON request body. */
@@ -288,6 +331,77 @@ export function apply(ctx) {
       }), `whatsapp: ${routePath}`)
     }
     announce(`external API enabled on /whatsapp/api/* (session required, "${DEFAULT_SESSION}" refused)`)
+  }
+
+  // ---- Announce route (one service, one allowlist, the operator's account) ----
+  //
+  // The one place in this file where something outside the harness reaches the
+  // operator's own WhatsApp with no human in the loop. Three things make that a
+  // considered decision rather than a hole:
+  //
+  //   - the allowlist lives in configuration, not in the request. The caller
+  //     names a chat from WA_ANNOUNCE_CHATS; anything else is refused. A leaked
+  //     token posts to those chats or nowhere.
+  //   - text only, capped, with no attachments and no reads. It cannot be used
+  //     to learn anything about the account.
+  //   - a per-chat cooldown, because the caller is a machine reacting to an
+  //     event and events repeat. A broadcast that flaps must not announce
+  //     itself into a group of real people every time it reconnects.
+  //
+  // GET lists the allowlist, so a caller's own UI can offer the chats by name
+  // without ever being told a jid.
+  if (ANNOUNCE_TOKEN !== '' && ANNOUNCE_CHATS.size > 0) {
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'exact',
+      path: '/whatsapp/announce',
+      authenticate: false,
+      handler: async (req, res) => {
+        if (SVC_TOKEN === '') { json(res, 503, { error: 'WhatsApp not configured' }); return }
+        if (!bearerIs(req, ANNOUNCE_TOKEN)) { json(res, 401, { error: 'unauthorized' }); return }
+
+        if (req.method === 'GET') {
+          json(res, 200, { chats: [...ANNOUNCE_CHATS.keys()], cooldownSeconds: ANNOUNCE_EVERY_MS / 1000 })
+          return
+        }
+        if (req.method !== 'POST') { json(res, 405, { error: 'GET or POST' }); return }
+
+        const body = await readJson(req)
+        if (!body || typeof body.text !== 'string' || body.text.trim() === '') {
+          json(res, 400, { error: 'need { chats: [label], text }' })
+          return
+        }
+        const text = body.text.slice(0, 1000)
+        const wanted = Array.isArray(body.chats) && body.chats.length > 0
+          ? body.chats.map(String)
+          : [...ANNOUNCE_CHATS.keys()]
+
+        const now = Date.now()
+        const results = []
+        for (const label of wanted) {
+          const jid = ANNOUNCE_CHATS.get(label)
+          if (jid === undefined) { results.push({ chat: label, error: 'not on the announce list' }); continue }
+          if (now - (announcedAt.get(jid) ?? 0) < ANNOUNCE_EVERY_MS) {
+            results.push({ chat: label, skipped: 'announced recently' })
+            continue
+          }
+          try {
+            // No session header, so the sidecar uses its default - which is the
+            // operator's own account, and is the entire point of this route.
+            const { status, body: out } = await svc('/send', { method: 'POST', body: { to: jid, text } })
+            if (status === 200) {
+              announcedAt.set(jid, now)
+              results.push({ chat: label, sent: true })
+            } else {
+              results.push({ chat: label, error: out.error ?? `HTTP ${status}` })
+            }
+          } catch (error) {
+            results.push({ chat: label, error: `sidecar unreachable: ${String(error)}` })
+          }
+        }
+        json(res, 200, { results })
+      },
+    }), 'whatsapp: announce route')
+    announce(`announce route enabled for ${[...ANNOUNCE_CHATS.keys()].join(', ')}`)
   }
 
   // ---- Agent command route (loopback + Bearer token; the MCP calls this) ----
