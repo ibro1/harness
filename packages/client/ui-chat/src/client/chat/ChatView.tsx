@@ -6,8 +6,9 @@ import type {
   ConversationTimelineSnapshot, RenderMessageImages,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
-import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatViewSlotProps } from '../contract/slots.ts'
+import type { InboxState } from '@deepseek-ai/dsh-agent/types'
+import { Button, IconChevronDownOutline14, MarkdownDelegateProvider, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
@@ -22,6 +23,11 @@ const SCROLL_SAMPLE_INTERVAL_MS = 500
 /** Active column host when present; otherwise the view-local scroller. */
 function scrollerOf(from: HTMLElement): HTMLElement {
   return (from.closest('[data-conversation-scroll]')) ?? from
+}
+
+/** Browser shrink clamps and recorded writes do not transfer scroll ownership. */
+function readerMovedScroll(top: number, floor: number, observedTop: number): boolean {
+  return Math.abs(top - Math.min(observedTop, floor)) > 0.5
 }
 
 interface PagingAnchor {
@@ -124,11 +130,6 @@ function openFailureMessage(error: unknown, fallback: string): string {
   return message === '' ? fallback : message
 }
 
-/** ProducedFiles opens the session workspace as `.`. */
-function isFolderOpenPath(path: string): boolean {
-  return path === '.'
-}
-
 /**
  * Prompt-RPC identities already rendered by durable material: user/steering
  * node sources plus queue occurrences. A submission echo whose identity
@@ -139,7 +140,7 @@ function isFolderOpenPath(path: string): boolean {
 function observedRpcIds(
   order: readonly string[],
   nodes: ChatSnapshot['nodes'],
-  queue: readonly { readonly rpcId?: string }[],
+  inbox: InboxState | undefined,
 ): ReadonlySet<string> {
   const observed = new Set<string>()
   for (const key of order) {
@@ -150,8 +151,8 @@ function observedRpcIds(
       | undefined
     if (source?.kind === 'user' && typeof source.rpcId === 'string') observed.add(source.rpcId)
   }
-  for (const item of queue) {
-    if (item.rpcId !== undefined) observed.add(item.rpcId)
+  for (const { source } of [...inbox?.['next-turn'] ?? [], ...inbox?.['next-step'] ?? []]) {
+    if (source.kind === 'user' && 'rpcId' in source) observed.add(source.rpcId)
   }
   return observed
 }
@@ -216,7 +217,7 @@ const ChatNodeList = memo(function ChatNodeList({ order, ...seatProps }: ChatNod
  */
 export function ChatView({
   useSession, useChat, useChatNode, useChatNodeProcess, useSessions, useStore, actions, renderSlot,
-  sessionId, openFile, loadOlder, loadThrough, loadImage, openView, chatScroll, forkAt, fileMentions,
+  sessionId, openFile, openSkill, openExternalLink, loadOlder, loadThrough, loadImage, openView, chatScroll, forkAt, fileMentions,
   useTranscriptView, useProjection, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
@@ -233,7 +234,7 @@ export function ChatView({
     [turnNavigationItems, turnOutline],
   )
   const timeline = useChat(s => s.timeline)
-  const inbox = useSession(s => s.queue)
+  const inbox = useProjection('inbox') as unknown as InboxState | undefined
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const running = useSession(s => s.running)
@@ -241,7 +242,6 @@ export function ChatView({
   const openError = useSession(s => s.openError)
   const hasMore = useSession(s => s.hasMore)
   const loadingOlder = useSession(s => s.loadingOlder)
-  const selectedCallId = useStore(s => s.selection?.callId)
   const compactTranscript = useTranscriptView(mode => mode === 'compact')
   const inspectCall = useCallback((callId: string) => {
     openView('trajectory', callId)
@@ -252,10 +252,10 @@ export function ChatView({
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
 
-  const requestOpenFile = useCallback((path: string) => {
+  const requestOpenFile = useCallback((path: string, options?: OpenFileOptions) => {
     const id = ++fileOpenRequest.current
     setFileOpenBusy(true)
-    void openFile(path).then(
+    void (options === undefined ? openFile(path) : openFile(path, options)).then(
       () => {
         if (id !== fileOpenRequest.current) return
         setFileOpenError(null)
@@ -267,7 +267,7 @@ export function ChatView({
           path,
           message: openFailureMessage(
             error,
-            t(isFolderOpenPath(path) ? 'fileOpen.folderUnknown' : 'fileOpen.unknown'),
+            t('fileOpen.unknown'),
           ),
         })
         setFileOpenBusy(false)
@@ -282,7 +282,7 @@ export function ChatView({
   }, [])
 
   const pendingSteering = useMemo(
-    () => inbox.filter(item => item.placement === 'steering'),
+    () => inbox?.['next-step'].filter(message => message.source.kind === 'user') ?? [],
     [inbox],
   )
   const pendingSubmissions = useSession(s => s.pendingSubmissions)
@@ -555,7 +555,7 @@ export function ChatView({
     // programmatic deliveries land on the ledger itself, so both preserve
     // the current ownership state.
     const floor = Math.max(0, el.scrollHeight - el.clientHeight)
-    const movedByReader = Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+    const movedByReader = readerMovedScroll(el.scrollTop, floor, observedTopRef.current)
     const isAtBottom = movedByReader
       ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
       : atBottomRef.current
@@ -579,8 +579,9 @@ export function ChatView({
     scheduleActiveTurn()
   }
 
-  // Raw scroll events only schedule work. Geometry is sampled at most once
-  // per interval, with scrollend providing the final sample for a short burst.
+  // Non-reader pinned deliveries must settle before layout growth invalidates
+  // their floor. Reader movement stays pending even inside the follow threshold,
+  // so growth cannot erase small gestures before they accumulate off the floor.
   useEffect(() => {
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: effect runs after the list node commits. */
@@ -597,6 +598,13 @@ export function ChatView({
     }
     const onScroll = (): void => {
       scrollSamplePendingRef.current = true
+      if (atBottomRef.current) {
+        const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+        if (!readerMovedScroll(el.scrollTop, floor, observedTopRef.current)) {
+          sample()
+          return
+        }
+      }
       sampleTimer ??= window.setTimeout(sample, SCROLL_SAMPLE_INTERVAL_MS)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -774,25 +782,27 @@ export function ChatView({
               </button>
             </div>
           )}
-          <ChatNodeList
-            order={order}
-            useChatNode={useChatNode}
-            useChatNodeProcess={useChatNodeProcess}
-            historyIncomplete={hasMore}
-            compactTranscript={compactTranscript}
-            useStore={useStore}
-            actions={actions}
-            selectedCallId={selectedCallId}
-            cwd={cwd}
-            openFile={requestOpenFile}
-            inspectCall={inspectCall}
-            forkAt={forkAt}
-            loadImage={loadImage}
-            renderMessageImages={renderMessageImages}
-            fileMentions={fileMentions}
-            renderSlot={renderSlot}
-            t={t}
-          />
+          <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={requestOpenFile}>
+            <ChatNodeList
+              order={order}
+              useChatNode={useChatNode}
+              useChatNodeProcess={useChatNodeProcess}
+              historyIncomplete={hasMore}
+              compactTranscript={compactTranscript}
+              useStore={useStore}
+              actions={actions}
+              cwd={cwd}
+              openFile={requestOpenFile}
+              openSkill={openSkill}
+              inspectCall={inspectCall}
+              forkAt={forkAt}
+              loadImage={loadImage}
+              renderMessageImages={renderMessageImages}
+              fileMentions={fileMentions}
+              renderSlot={renderSlot}
+              t={t}
+            />
+          </MarkdownDelegateProvider>
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
@@ -835,7 +845,6 @@ export function ChatView({
       </div>
       {fileOpenError !== null && (
         <FileOpenErrorDialog
-          path={fileOpenError.path}
           message={fileOpenError.message}
           busy={fileOpenBusy}
           onClose={closeFileOpenError}
@@ -849,9 +858,8 @@ export function ChatView({
 
 /** In-page Host open-path refusal: the wire reason plus a retry of the same path. */
 function FileOpenErrorDialog({
-  path, message, busy, onClose, onRetry, t,
+  message, busy, onClose, onRetry, t,
 }: {
-  path: string
   message: string
   busy: boolean
   onClose: () => void
@@ -863,7 +871,7 @@ function FileOpenErrorDialog({
       open
       onClose={onClose}
       closeLabel={t('close')}
-      title={t(isFolderOpenPath(path) ? 'fileOpen.folderTitle' : 'fileOpen.title')}
+      title={t('fileOpen.title')}
       description={message}
       footer={(
         <>

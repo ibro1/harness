@@ -9,6 +9,7 @@
   height: 28px;
   border: none;
   border-radius: 999px;
+  corner-shape: round;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
@@ -104,6 +105,7 @@
   height: 20px;
   border: none;
   border-radius: 999px;
+  corner-shape: round;
   background: transparent;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
   cursor: pointer;
@@ -118,6 +120,11 @@
 .outContent {
   max-height: min(70vh, 640px);
   overflow-y: auto;
+  /* The panel sits on layer 2, so the thumb rebinds to the l2 pair here: the
+     custom properties inherit down to whatever draws the bar (see ui-theme
+     styles/scrollbar.css for the rebinding contract). */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .outBar {
@@ -223,6 +230,7 @@
   width: 40px;
   height: 40px;
   border-radius: 999px;
+  corner-shape: round;
   color: #fff;
   background: var(--dsw-alias-interactive-bg-primary, #6d4aff);
   text-decoration: none;

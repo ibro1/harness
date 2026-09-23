@@ -1,7 +1,7 @@
 /**
- * Browser half: the social plugin card. Registers one card into the
- * Settings → Plugins section (`settings.plugin.item`, keyed by the `social`
- * settings namespace the host plugin serves) that shows every target the agent
+ * Browser half: the social plugin page. Registers one page into the Plugins
+ * page (`plugins.item`, while the Host serves the `social` settings
+ * namespace) that shows every target the agent
  * can post to, how each credential stands, which targets publish without
  * asking, and a Disconnect per provider.
  *
@@ -16,7 +16,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only merges: the settings.plugin.item SlotMap entry, ctx.locale, and the
 // SlotRegistry face.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { en, zh, type SocialKey } from './locales.ts'
@@ -45,11 +45,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Locale dictionary namespace owned by this plugin. */
 const NS = 'social'
 
-/**
- * The settings namespace the host plugin serves and this card is keyed to. The
- * plugin-config tab dispatches a card only when its key is in the served set,
- * so the two must agree.
- */
+/** The settings namespace the host plugin serves, which gates this page. */
 const SOCIAL_NS = 'social'
 
 /**
@@ -66,14 +62,40 @@ export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.cre
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
+  const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-social: dictionaries')
 
   const credentials = new SocialCredentialsController(ctx)
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: SOCIAL_NS,
+  const register = () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item',
+    id: 'social',
+    order: 80,
+    label: () => t('title'),
     locale: NS,
     inject: () => credentials.inject(),
   }, SocialCard))
+
+  // The page registers only while the Host serves this plugin's settings
+  // namespace, so a deployment that does not compose it shows no dead entry.
+  // The shared SettingsScope mirror updates after document commits and reconnects.
+  const describeFace = ctx.settingsScope.describe()
+  ctx.effect(() => {
+    let off: (() => void) | undefined
+    const sync = (): void => {
+      const served = describeFace.getSnapshot().view?.namespaces.some(view => view.ns === SOCIAL_NS) ?? false
+      if (served && off === undefined) off = register()
+      else if (!served && off !== undefined) {
+        off()
+        off = undefined
+      }
+    }
+    const unsubscribe = describeFace.subscribe(sync)
+    void describeFace.ensure()
+    sync()
+    return () => {
+      unsubscribe()
+      off?.()
+    }
+  }, 'ui-social: configuration page')
 }

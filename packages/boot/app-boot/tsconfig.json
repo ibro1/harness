@@ -21,9 +21,6 @@
       "path": "../../../vendor/group"
     },
     {
-      "path": "../../../vendor/hmr"
-    },
-    {
       "path": "../../core/system-prompt"
     },
     {
@@ -34,6 +31,9 @@
     },
     {
       "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../util/package-manifest"
     }
   ]
 }

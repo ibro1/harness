@@ -1,14 +1,14 @@
 /** The Dokploy plugin's card: the servers the agent may query and deploy through. */
 
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { ValueField } from './fields.tsx'
-import { PluginCard } from './PluginCard.tsx'
+import { PluginConfigForm } from './PluginConfigForm.tsx'
 import type { DokployCardFace } from './dokploy-card-controller.ts'
-import type {} from './slot-contract.ts'
 
 /** Props the renderer binds for the Dokploy card. */
 export type DokployCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<'settings.plugins'>
   & InjectFace<DokployCardFace>
 
@@ -21,12 +21,11 @@ export type DokployCardProps =
 export function DokployCard(props: DokployCardProps) {
   const { t } = props
   const state = props.useDokployCard(snapshot => snapshot)
+  if (props.view === 'summary') return t('dokployDescription')
   const disabled = !state.writable
   return (
-    <PluginCard
+    <PluginConfigForm
       t={t}
-      titleKey="dokployTitle"
-      descriptionKey="dokployDescription"
       state={state}
       onSave={props.save}
       onDiscard={props.discard}
@@ -45,6 +44,6 @@ export function DokployCard(props: DokployCardProps) {
         onEdit={(text) => { props.edit('servers', text) }}
         onReset={() => { props.resetField('servers') }}
       />
-    </PluginCard>
+    </PluginConfigForm>
   )
 }

@@ -5,9 +5,23 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-social-linkedin
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [The 60-day credential](#the-60-day-credential)
+- [Posting](#posting)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 Posts to LinkedIn through `ctx.social`. The provider is named `linkedin` and emits one target per place it can post to:
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 | Target id | What it is | When it appears |
 |---|---|---|
@@ -22,13 +36,13 @@ The application's own credentials come from whichever layer supplies them, check
 
 All posting goes through the versioned REST API: every call carries `LinkedIn-Version` (the `apiVersion` config field, `202608` by default) and `X-Restli-Protocol-Version: 2.0.0`. Media bytes are the exception — they go to pre-signed upload URLs that take the bytes and nothing else.
 
-### The 60-day credential
+## The 60-day credential
 
 LinkedIn's self-serve tier issues an access token that lasts about 60 days and grants **no refresh token**. The credential therefore expires and a human has to sign in again; nothing in this package can renew it unattended.
 
 So the expiry is a first-class stored fact. The grant record holds `expiresAt` as absolute epoch milliseconds — `expires_in` seconds cannot answer "how long is left" once the process that received it is gone — alongside `obtainedAt`, the granted `scopes`, and the member id and name. `targets()` decides readiness from that stored number and never from an API call, and reports `ready: false` **before** the token lapses: inside the `reauthWarningDays` window (7 days by default) the reason names the expiry date and the days remaining, while the token still works. Posting is refused only once the token is genuinely past its expiry, and that refusal too is decided locally, so a post never fails by discovering the expiry at LinkedIn.
 
-### Posting
+## Posting
 
 - **Text** — `POST /rest/posts` with the `commentary`, `PUBLIC` visibility, and `MAIN_FEED` distribution. The created post's URN comes back on the `x-restli-id` response header and becomes the result's `id`, with `url` pointing at `https://www.linkedin.com/feed/update/<urn>/`.
 - **Image** — three steps in a fixed order: `POST /rest/images?action=initializeUpload` with `{initializeUploadRequest:{owner}}` answers `{value:{uploadUrl, image}}`; the raw bytes are `PUT` to that `uploadUrl`; the returned `urn:li:image:…` is attached as `content.media.id`.
@@ -55,3 +69,13 @@ No invalidation; no LinkedIn state enters a request prefix.
 - **`apiVersion` has to be raised by hand.** LinkedIn supports each `YYYYMM` version for about a year and then answers 426. The version is a config field so a deployment can move it without a release, but nothing here notices the sunset approaching.
 - **Sign-in is a paste, not a redirect.** The authorization seam's vocabulary is notices and prompts, so the human copies the redirect URL out of their browser rather than being caught by a local callback route. The flow accepts the whole URL or the bare code, and checks the `state` parameter when the pasted URL carries one — a bare pasted code cannot be checked against it.
 - **Nothing revokes.** Signing out is `ctx.credentials.deleteRecord('social-linkedin/member')`, which forgets the token locally; LinkedIn's self-serve tier offers no revocation this package can call.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

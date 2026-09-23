@@ -1,14 +1,14 @@
 /** The Postgres plugin's card: the databases the agent may read, and which of them it may write. */
 
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { ValueField } from './fields.tsx'
-import { PluginCard } from './PluginCard.tsx'
+import { PluginConfigForm } from './PluginConfigForm.tsx'
 import type { PostgresCardFace } from './postgres-card-controller.ts'
-import type {} from './slot-contract.ts'
 
 /** Props the renderer binds for the Postgres card. */
 export type PostgresCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<'settings.plugins'>
   & InjectFace<PostgresCardFace>
 
@@ -22,12 +22,11 @@ export type PostgresCardProps =
 export function PostgresCard(props: PostgresCardProps) {
   const { t } = props
   const state = props.usePostgresCard(snapshot => snapshot)
+  if (props.view === 'summary') return t('postgresDescription')
   const disabled = !state.writable
   return (
-    <PluginCard
+    <PluginConfigForm
       t={t}
-      titleKey="postgresTitle"
-      descriptionKey="postgresDescription"
       state={state}
       onSave={props.save}
       onDiscard={props.discard}
@@ -46,6 +45,6 @@ export function PostgresCard(props: PostgresCardProps) {
         onEdit={(text) => { props.edit('databases', text) }}
         onReset={() => { props.resetField('databases') }}
       />
-    </PluginCard>
+    </PluginConfigForm>
   )
 }

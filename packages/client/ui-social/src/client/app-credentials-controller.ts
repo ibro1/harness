@@ -426,6 +426,9 @@ export class SocialCredentialsController {
    * @param ctx - the card plugin's context, carrying `settingsScope` and `remote.credentials`.
    */
   constructor(ctx: ClientContext) {
+    // The store exists before the first form, because a form's constructor
+    // starts its secret read and that read publishes through `changed`.
+    this.store = createSnapshotStore<readonly AppCredentialState[]>([])
     const publish = (): void => { this.store.set(this.forms.map(form => form.state())) }
     for (const spec of APP_CREDENTIAL_SPECS) {
       this.forms.push(new AppCredentialForm(
@@ -435,7 +438,7 @@ export class SocialCredentialsController {
         () => { publish() },
       ))
     }
-    this.store = createSnapshotStore<readonly AppCredentialState[]>(this.forms.map(form => form.state()))
+    publish()
   }
 
   /**

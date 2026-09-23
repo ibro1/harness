@@ -5,9 +5,23 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-client-ui-social
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 The browser half of the social capability's human surface: one card in Settings → Plugins that answers two questions without a conversation — **what can this thing post to, and is any of it about to stop working** — and carries the forms for the platform applications it posts through.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 Two different things get called credentials here, and the card keeps them apart. The **account** credential is the token a post is published as; there is no field for it, and that is the design. Each provider obtains it through the authorization seam and stores it through the credential seam, so an account is connected by asking the agent to sign in, never by pasting a token into a form. The **application** credentials — a LinkedIn client id, a Meta app id, a Google OAuth client — identify the operator's own app and are ordinary configuration; before these forms they could only be set in the deployment's environment, which made correcting a pasted value a redeploy.
 
@@ -67,3 +81,13 @@ None. This package contributes no tool, no prompt text, and no session event, an
 - **The result line is not a log.** What a disconnect removed is shown until the next action and then gone; there is no durable record of it in the session. A durable "the operator disconnected this account" fact needs a session event of its own.
 - **Failures arrive as host prose.** A refusal from `POST /social/disconnect` is rendered as the host wrote it, in English, because it names the records that are stored or the providers that are registered. Only the frame around it is localized.
 - **No `./invariant` companion.** This package holds no owned relation that a second observation could diverge from: the card renders exactly what one HTTP read returned.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

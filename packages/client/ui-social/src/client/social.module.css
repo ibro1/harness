@@ -231,6 +231,7 @@
   letter-spacing: .04em;
   padding: 3px 8px;
   border-radius: 999px;
+  corner-shape: round;
 }
 
 .badge.ready {
@@ -372,6 +373,7 @@
 .appBadge,
 .appBadgeMuted {
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px 8px;
   font-size: 11px;
 }

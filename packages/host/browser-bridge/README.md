@@ -85,3 +85,13 @@ Refs are stable across consecutive snapshots of the same page, so a model that r
 - **The snapshot cannot see event listeners.** An isolated content script cannot read `addEventListener` handlers, so a clickable element with no role, no `tabindex`, and no pointer cursor is invisible to it. Closed shadow roots, cross-origin iframes, and canvas-rendered UIs expose nothing.
 - **Change detection after a click is heuristic** — a fixed settle window over URL, title, and mutation count. A slow navigation can be reported as no change.
 - **No REAL-composition coverage of the extension.** The bridge's tests boot a real composition and drive it with a WebSocket client standing in for the extension; the extension's own page semantics are unrun code until exercised in a browser.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

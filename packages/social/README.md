@@ -9,10 +9,15 @@ kind: "package-group"
 
 The social group lets an agent publish to accounts the operator owns. A registry merges the targets every mounted provider offers — a LinkedIn member, a Facebook Page, an Instagram business account, a YouTube channel — and routes a post to whichever provider owns the target's id. One consumer publishes the model-facing tools, so what a model sees does not change with the platform. Mount the packages you need: the registry, at least one provider, and the consumer for model access.
 
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
 This is the first capability in the harness that speaks publicly under a person's name. Every other tool reads data or acts on infrastructure the operator controls, where a mistake can be undone. A post cannot be recalled, so `social_post` asks for approval before it publishes and shows the text verbatim in the request.
 
 ## Table of Contents
 
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
 - [Packages](#packages)
 - [What a provider owes the registry](#what-a-provider-owes-the-registry)
 - [Related documentation](#related-documentation)

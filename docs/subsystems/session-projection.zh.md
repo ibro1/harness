@@ -67,7 +67,7 @@ interface ProjectionDefinition<
 }
 ```
 
-全量值事件规则是承重结构：携带状态的日志事件携带的是变更后的完整状态，绝不是裸增量——这让每次状态转移始终足够廉价，也让每个被供给的值自描述（对消费方即 last-wins）。
+每个对外投影值都是完整读模型。源事件可以携带完整值，也可以携带领域拥有的操作；单元的确定性 `apply` 负责回放，checkpoint 加前向 tail replay 会重建出同一状态。
 
 ## 快照与变更流
 
@@ -136,6 +136,25 @@ The persisted projection cache service. Opens the `session_projcache` domain at 
  *   `undefined` when no usable row exists for this lifecycle.
  */
 cachedSnapshot( meta: SessionHeader, inheritedEventCount: SessionLogOffset, keys?: readonly Extract<keyof SessionProjectionMap, string>[], ): ProjectionSnapshot | undefined
+
+/**
+ * Read only a predecessor checkpoint's title as a zero-I/O listing hint.
+ *
+ * The authoritative Session header supplies the lifecycle identity. A cache
+ * checkpoint can lag that log but cannot lead it because writes flush the
+ * log first, so a matching predecessor title is a genuine (possibly stale)
+ * fact from this Session. The registry still requires the current title
+ * projection's row version and schema. No other predecessor projection is
+ * exposed: format normalization can change their current meaning, and the
+ * strict {@link cachedSnapshot} / hydration paths continue to reject them.
+ * @param meta - authoritative listed Session header.
+ * @param inheritedEventCount - exact inherited cut completing the lifecycle identity.
+ * @returns a title-only checkpoint view with `asOfSeq: -1`, or `undefined`
+ *   when the record is current, newer, unrelated, missing, or incompatible
+ *   with the title unit. The sentinel avoids reusing a sequence that a
+ *   cardinality-changing Session migration may have remapped.
+ */
+cachedPredecessorTitle( meta: SessionHeader, inheritedEventCount: SessionLogOffset, ): ProjectionSnapshot | undefined
 
 /**
  * Hydrate projection cells for an already-prepared Session without another

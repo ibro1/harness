@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only merge: the settings.plugin.item slot declaration.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
-import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+// Type-only merge: the plugins.item slot declaration.
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { renderSVG } from 'uqr'
 import css from './whatsapp.module.css'
 
@@ -27,18 +26,28 @@ interface PendingItem {
 
 /** `t` from the locale; the section supplies no owner props. */
 export type WhatsAppCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<'whatsapp'>
 
 /**
  * The WhatsApp plugin's card: link an account by scanning a QR, see the linked
  * state, disconnect, and approve or discard the messages the agent has queued
  * to send. All state comes from the host /whatsapp/* routes (same-origin, so
- * the browser session gates them); the card polls while open.
+ * the browser session gates them); the page polls while it is mounted.
  * @param props - locale copy (`t`).
  */
-export function WhatsAppCard({ t }: WhatsAppCardProps) {
-  const [open, setOpen] = useState(false)
+export function WhatsAppCard(props: WhatsAppCardProps) {
+  // The summary is one line and must not mount the page's polling loop, so the
+  // two views are separate components rather than one with an early return.
+  return props.view === 'summary' ? props.t('description') : <WhatsAppCardPage {...props} />
+}
+
+/**
+ * The page view: the QR or the linked account, and the queued messages.
+ * @param props - locale copy (`t`).
+ * @returns the page body.
+ */
+function WhatsAppCardPage({ t }: WhatsAppCardProps) {
   const [status, setStatus] = useState<WaStatus | null>(null)
   const [pending, setPending] = useState<PendingItem[]>([])
   const [error, setError] = useState(false)
@@ -61,11 +70,10 @@ export function WhatsAppCard({ t }: WhatsAppCardProps) {
     }
   }, [])
 
-  // Poll while the card is open — every 2s while a QR is showing (it rotates),
-  // every 4s otherwise. A self-rescheduling timer reads the latest QR state
-  // through a ref so the cadence follows it without re-subscribing.
+  // Poll while the page is mounted — every 2s while a QR is showing (it
+  // rotates), every 4s otherwise. A self-rescheduling timer reads the latest QR
+  // state through a ref so the cadence follows it without re-subscribing.
   useEffect(() => {
-    if (!open) return
     let alive = true
     let timer: ReturnType<typeof setTimeout> | undefined
     const loop = () => {
@@ -76,7 +84,7 @@ export function WhatsAppCard({ t }: WhatsAppCardProps) {
     }
     loop()
     return () => { alive = false; clearTimeout(timer) }
-  }, [open, refresh])
+  }, [refresh])
 
   const post = useCallback(async (path: string, body?: unknown) => {
     setBusy(true)
@@ -97,7 +105,6 @@ export function WhatsAppCard({ t }: WhatsAppCardProps) {
     return `data:image/svg+xml;utf8,${encodeURIComponent(renderSVG(status.qr, { border: 2 }))}`
   }, [status?.qr])
 
-  const title = t('title')
 
   let body: React.ReactNode
   if (status === null) {
@@ -183,22 +190,5 @@ export function WhatsAppCard({ t }: WhatsAppCardProps) {
     )
   }
 
-  return (
-    <li className={open ? `${css.card} ${css.cardOpen}` : css.card}>
-      <button
-        type="button"
-        className={css.header}
-        aria-expanded={open}
-        aria-label={`${t(open ? 'collapse' : 'expand')}: ${title}`}
-        onClick={() => { setOpen(!open) }}
-      >
-        <span className={css.headText}>
-          <span className={css.name}>{title}</span>
-          <span className={css.description}>{t('description')}</span>
-        </span>
-        <IconChevronDownOutline14 className={open ? `${css.chevron} ${css.chevronOpen}` : css.chevron} />
-      </button>
-      {open ? body : null}
-    </li>
-  )
+  return body
 }

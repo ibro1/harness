@@ -5,9 +5,23 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-social-meta
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Targets](#targets)
+- [Publishing](#publishing)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
-Publishes to Facebook Pages and to the Instagram professional accounts linked to them, as two providers on the social seam: `facebook` and `instagram`. Both networks are the same Meta Graph API behind one Meta app, so they share one sign-in, one credential record, and one Page discovery; only the registration is doubled. They are registered separately because they answer differently — a Page takes a text-only post and an Instagram account does not, each is gated by its own App Review permission, and only Instagram carries the public-URL constraint — so a reader of the target list sees two honest rows rather than one averaged one.
+Publishes to Facebook Pages and to the Instagram professional accounts linked to them, as two providers on the social seam: `facebook` and `instagram`. Both are the same Meta Graph API behind one Meta app, so they share one sign-in, one credential record, and one Page discovery; only the registration is doubled. They stay separate because they answer differently — a Page takes a text-only post and an Instagram account does not, each needs its own App Review permission, and only Instagram carries the public-URL constraint — so the target list shows two honest rows, not one averaged one.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 The authorization flow obtains a long-lived user token, and every Page access token and Instagram account id is derived from that token on each operation rather than stored — a Page added, renamed, or unlinked since sign-in is seen without asking anyone to sign in again.
 
@@ -15,7 +29,7 @@ Mount it once per Meta account. Each mount holds one credential record, `social-
 
 Configure the app from the `social-meta` settings section this plugin serves, from composition config, or from the environment — checked in that order, so a value typed into Settings → Plugins → Social wins over one set at deploy time and an empty field falls back to it. The app id is `appId` in any of those layers or the variable named by `appIdRef` (`META_APP_ID` by default). The **app secret** is never a value in any layer: `appSecretRef` names the environment variable or credential record holding it (`META_APP_SECRET` by default) and it is resolved through the credential seam on every operation, so it is never written into a settings document and never read back to a browser. `redirectUri` must be one of the Valid OAuth Redirect URIs configured on the Meta app. Signing in opens the Facebook login dialog, the human approves, their browser lands on that redirect URI, and they paste the URL back into the flow's prompt; the code in it is exchanged for a short-lived user token and then for the long-lived one.
 
-### Targets
+## Targets
 
 | provider | id | label | accepts |
 | --- | --- | --- | --- |
@@ -28,7 +42,7 @@ The `instagram` provider is registered only while the `instagram` config field i
 
 Both providers read the permissions actually granted on the token (`/me/permissions`) and the Pages (`/me/accounts`) on every `targets()` call. A target that cannot publish reports `ready: false` and a `reason` naming the missing permission and that it needs Meta App Review. `post()` resolves its target through the same computation and refuses an unready one with that same sentence, so nothing is half-uploaded before the refusal.
 
-### Publishing
+## Publishing
 
 Facebook text goes to the Page's `feed` edge; an image goes to `photos`, uploaded as multipart when the path is a local file and fetched by Meta when it is an `https` URL; a video goes through the resumable Uploads API (`/{app-id}/uploads`, then the upload session, then `fbuploader_video_file_chunk` on the Page's `videos` edge on the video host).
 
@@ -47,3 +61,13 @@ This package contributes no tool, prompt text, or session event: the model reach
 - **A video upload is one transfer.** The Uploads API can resume from a byte offset after an interruption; this package sends the whole file once and fails the post if that fails. Resuming is worth adding when something reports upload progress to a human who could act on it.
 - **Instagram results carry no URL.** The publish response returns the media id only, and the permalink needs a further call this package does not make; `SocialPostResult.url` is therefore absent for Instagram and present for Facebook.
 - **No real-composition test.** The suite drives the provider against a stub HTTP Graph API through hand-built seams. Booting a test-only `cordis.yml` through the Loader waits on the social seam itself, which is being written alongside this package.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

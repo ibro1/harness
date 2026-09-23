@@ -5,9 +5,22 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-social-youtube
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Use this package](#use-this-package)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 Posts to YouTube through the social seam, where a post is a video upload. One target exists per channel the authorized Google account owns, named `youtube:channel:<channel id>`, and it accepts video only — `{ text: false, image: false, video: true }` — so the seam refuses a text-only or image post before this package is reached.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 The sign-in is Google's OAuth 2.0 web-server flow asked for offline access, so Google issues a **refresh token**. That token is the whole stored credential, written through the credential seam as the `grant` record `social-youtube/oauth`; access tokens are minted from it as they are needed and held in memory only, which is why this credential renews itself and the human signs in once.
 
@@ -75,3 +88,13 @@ No invalidation of its own. Target text enters a request only when the seam's to
 - **One video per post, and nothing else about it.** Tags, localizations, `publishAt` scheduling, thumbnails, captions, and playlists are not set; a second video attachment is refused rather than uploaded separately. `alt` text is accepted by the seam and dropped here, as YouTube has no field for it.
 - **Only the channels `channels.list?mine=true` returns.** A content-owner (`onBehalfOfContentOwner`) or brand-account channel the signed-in user administers but does not own is not listed, so it cannot be posted to.
 - **Signing out is local.** Deleting the `social-youtube/oauth` record forgets the refresh token without telling Google; revoking the grant is done at `myaccount.google.com/permissions`. The authorization seam has no place to declare a server-side revoke.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

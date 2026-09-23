@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only merge: the settings.plugin.item slot declaration.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+// Type-only merge: the plugins.item slot declaration.
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { AppCredentialsSection } from './AppCredentialsSection.tsx'
 import type { SocialCredentialsFace } from './app-credentials-controller.ts'
 import css from './social.module.css'
@@ -57,7 +56,7 @@ interface DisconnectResult {
 
 /** `t` from the locale; the section supplies no owner props. */
 export type SocialCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<'social'>
   & InjectFace<SocialCredentialsFace>
 
@@ -76,9 +75,20 @@ export type SocialCardProps =
  * @param props - locale copy (`t`).
  */
 export function SocialCard(props: SocialCardProps) {
+  // The summary is one line and must not mount the page's polling effect, so
+  // the two views are separate components rather than one with an early return.
+  return props.view === 'summary' ? props.t('description') : <SocialCardPage {...props} />
+}
+
+/**
+ * The page view: every target, how each credential stands, and the application
+ * credential forms.
+ * @param props - locale copy, the credential face, and the page's owner props.
+ * @returns the page body.
+ */
+function SocialCardPage(props: SocialCardProps) {
   const { t } = props
   const credentials = props.useSocialCredentials(snapshot => snapshot)
-  const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<SocialStatus | null>(null)
   const [error, setError] = useState(false)
   const [confirming, setConfirming] = useState<string | undefined>(undefined)
@@ -95,14 +105,13 @@ export function SocialCard(props: SocialCardProps) {
     }
   }, [])
 
-  // Poll while the card is open. Expiry is the fact worth re-reading, and it
-  // moves in days, so this is slow on purpose.
+  // Poll while the page is mounted. Expiry is the fact worth re-reading, and
+  // it moves in days, so this is slow on purpose.
   useEffect(() => {
-    if (!open) return
     void refresh()
     const timer = setInterval(() => { void refresh() }, POLL_MS)
     return () => { clearInterval(timer) }
-  }, [open, refresh])
+  }, [refresh])
 
   const disconnect = useCallback(async (provider: string) => {
     setConfirming(undefined)
@@ -129,8 +138,6 @@ export function SocialCard(props: SocialCardProps) {
       setBusy(undefined)
     }
   }, [refresh, t])
-
-  const title = t('title')
 
   // Shown in every branch, and most needed in the two that carry no targets:
   // a deployment with nothing connected usually has nothing connected because
@@ -273,22 +280,5 @@ export function SocialCard(props: SocialCardProps) {
     )
   }
 
-  return (
-    <li className={open ? `${css.card} ${css.cardOpen}` : css.card}>
-      <button
-        type="button"
-        className={css.header}
-        aria-expanded={open}
-        aria-label={`${t(open ? 'collapse' : 'expand')}: ${title}`}
-        onClick={() => { setOpen(!open) }}
-      >
-        <span className={css.headText}>
-          <span className={css.name}>{title}</span>
-          <span className={css.description}>{t('description')}</span>
-        </span>
-        <IconChevronDownOutline14 className={open ? `${css.chevron} ${css.chevronOpen}` : css.chevron} />
-      </button>
-      {open ? body : null}
-    </li>
-  )
+  return body
 }

@@ -134,11 +134,10 @@ function credentialsFace(): Record<string, unknown> {
   }
 }
 
-/** Render the card and expand it, letting the first status read settle. */
+/** Render the page view, letting the first status read settle. */
 async function open(): Promise<void> {
-  render(<SocialCard {...({ t, ...credentialsFace() } as unknown as SocialCardProps)} />)
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
+    render(<SocialCard {...({ t, view: 'page', ...credentialsFace() } as unknown as SocialCardProps)} />)
   })
 }
 
@@ -158,14 +157,15 @@ function at<T>(items: readonly T[], index: number): T {
 }
 
 describe('SocialCard', () => {
-  it('shows only the header until it is expanded', () => {
-    stubHost()
-    render(<SocialCard {...({ t, ...credentialsFace() } as unknown as SocialCardProps)} />)
-    expect(screen.getByText(en.title)).toBeDefined()
+  it('answers the summary view with one line and reads no status for it', () => {
+    const sent = stubHost()
+    render(<SocialCard {...({ t, view: 'summary', ...credentialsFace() } as unknown as SocialCardProps)} />)
+    expect(screen.getByText(en.description)).toBeDefined()
     expect(screen.queryByText(en.targetsHeading)).toBeNull()
+    expect(sent).toEqual([])
   })
 
-  it('reads the status when opened and lists every target', async () => {
+  it('reads the status on the page and lists every target', async () => {
     const sent = stubHost()
     await open()
     expect(at(sent, 0).path).toBe('/social/status')

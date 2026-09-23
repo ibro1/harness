@@ -156,7 +156,10 @@ describe('browser-bridge', () => {
     // A set-but-empty DSH_BROWSER_BRIDGE_PATH reached the config as '' and the
     // route registered on it, reporting success while every real upgrade to
     // /browser-bridge found no route and was destroyed without a response.
-    await expect(loadComposition(19_741, 30_000, '')).rejects.toThrow('path must start with "/"')
+    // The Loader contains an entry's apply failure rather than rejecting the
+    // composition, so the refusal reads as a row that provides no service.
+    const ctx = await loadComposition(19_741, 30_000, '')
+    expect(ctx.get('browserBridge')).toBeUndefined()
   })
 
   it('runs a registered tool against the connected browser', async () => {

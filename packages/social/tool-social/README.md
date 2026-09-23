@@ -5,9 +5,24 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-tool-social
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [What the approval prompt says](#what-the-approval-prompt-says)
+- [Attachments](#attachments)
+- [The human surface](#the-human-surface)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 The Consumer role of the social capability seam, for both of its audiences. It injects `ctx.social` and puts two tools in front of the model — `social_targets`, which lists the accounts, Pages and channels the harness can post to, and `social_post`, which publishes one post to one of them — and mounts two HTTP routes in front of a person, which the [social card](../../client/ui-social/README.md) in Settings → Plugins reads.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 **Why both live here.** The routes consume exactly what the tools consume: `ctx.social.targets()` and this plugin's own `postWithoutApproval`. A separate package could only re-derive both from here, and would then own a second copy of the rule about which targets skip the approval gate. What the two audiences do *not* share is the vocabulary they are written in — the tool descriptions speak to a model about publishing, the routes answer a person asking what is connected and what is about to lapse — and that difference lives in the two surfaces, not in two packages.
 
@@ -15,7 +30,7 @@ The Consumer role of the social capability seam, for both of its audiences. It i
 
 The ask lives inside the tool's `execute` — the only code path in this package that reaches `ctx.social.post()`. It is not a wrapper, a listener, or a schema omission that a different caller could go around. The test suite denies at the executor and asserts the provider's `post` was never called.
 
-### What the approval prompt says
+## What the approval prompt says
 
 ```
 Publish publicly to Ada Obi (personal) (linkedin:member) on linkedin.
@@ -30,7 +45,7 @@ Attachments:
 
 Anything but an explicit grant refuses and publishes nothing: a rejection, a cancellation, an unreachable approval channel, a composition with no approval service, and a call with no agent to route the question through each raise a distinct message that reaches the model as the call's error.
 
-### Attachments
+## Attachments
 
 Media paths come from a model, so they are resolved against the session working directory and refused if they leave it. The check canonicalizes both sides with `realpath` and compares with `path.relative`, so a symlink out of the workspace and a `..` walk are both refused; a string prefix would have accepted `/workspace-elsewhere` for a workspace `/workspace`. Files are resolved *before* the prompt, so nobody is asked to approve a post that cannot be published, and the sizes shown are the sizes on disk.
 
@@ -145,3 +160,13 @@ The post text is model-authored and goes out under a person's name, so this pack
 - **The status route is unpaged and uncached.** Every read re-asks every provider, because `ready` is a live fact about a credential and a cached "ready" would be a stale observation. With a handful of targets that is the right trade; a deployment with many accounts would feel each provider's listing latency on every poll.
 - **A disconnect is not logged.** `removed` reaches the caller and nothing else. A durable "the operator disconnected this account" fact needs a session event of its own, the same gap the published post id has.
 - **No `./invariant` companion.** There is no second observation of the tool registry, the approval decision, or the route table that could diverge from this package's own; the enforcement point is a single operation, and its test denies through the executor.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

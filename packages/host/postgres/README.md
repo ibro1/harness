@@ -5,9 +5,22 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-host-postgres
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Safety model](#safety-model)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 Lets an agent answer questions about a database itself. An agent that can deploy an app, read its logs and edit its code still cannot say how many rows are in a table or why a job is stuck; until now the answer was a SQL statement handed to a human to paste into a terminal. Databases are configured in the `postgres` user-settings namespace — one entry per database, edited in the settings UI the same way models are. Four tools reach the model: `postgres_databases`, `postgres_query`, `postgres_execute`, `postgres_tables`.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 Each entry is `{ name, ... }` plus one of two ways to give its connection string: `dsnEnv` names an environment variable holding the DSN (kept out of settings; in a container, add that variable to the compose `environment:` block so it reaches the process), or `dsn` carries the connection string inline (simpler, but stored in settings and shown in the card). A tool call fails with a message naming what to set when neither resolves. Two further fields carry defaults: `readOnly` defaults to `true`, and `statementTimeoutMs` defaults to `15000`.
 
@@ -35,3 +48,13 @@ Token cost is bounded by the rendered table, not by the result set: a query matc
 - **One pool per configured name, replaced when its DSN changes.** A DSN edited in settings takes effect on the next call, which ends the previous pool. In-flight statements on the replaced pool are not awaited.
 - **No schema introspection beyond table names.** Column types, indexes and constraints are reachable only by querying `information_schema` through `postgres_query`.
 - **No per-statement approval gate.** `postgres_execute` runs directly once an entry allows writes; put the agent behind an approval preset where a destructive statement would matter.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

@@ -179,6 +179,7 @@ export class BrowserBridge extends Service {
    * Send one command to the connected browser and await its reply.
    * @param type - command name the extension dispatches on.
    * @param payload - command arguments, JSON-serializable.
+   * @param profile - label of the browser to address; omitted when exactly one is connected.
    * @returns the extension's result.
    * @throws when no browser is connected, or the reply does not arrive in time.
    */

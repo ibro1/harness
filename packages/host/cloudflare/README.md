@@ -5,9 +5,23 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-host-cloudflare
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Configuration](#configuration)
+- [Model Experience](#model-experience)
+- [The account tools, and why they are separate](#the-account-tools-and-why-they-are-separate)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 Closes the edge half of the deploy loop that [dsh-host-dokploy](../dokploy/README.md) opens. A deploy can be correct at the origin and still serve stale bytes for hours, separately per edge location, because the changed assets were cached — an HTML document updates while its images do not, and the only remaining fix is a person opening the Cloudflare dashboard. Five tools reach the model: `cloudflare_zones`, `cloudflare_purge`, `cloudflare_dns_list`, `cloudflare_dns_set`, `cloudflare_cache_status`.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 Zones are configured in the `cloudflare` user-settings namespace — added and edited in the settings UI the same way models are, one entry per zone. Each entry is `{ name, zoneId, ... }` plus one of two ways to give its API token: `apiTokenEnv` names an environment variable holding the token (kept out of settings; in a container, add that variable to the compose `environment:` block so it reaches the process), or `apiToken` carries the token inline (simpler, but stored in settings and shown in the card). The settings card accepts either form for the same reason the plugin does. A tool call fails with a message naming what to set when neither resolves.
 
@@ -50,3 +64,13 @@ A new zone is usable for DNS as soon as it exists, because `cloudflare_dns_set` 
 - **The SSRF check and the request resolve the hostname separately.** A name that answers differently between the two calls can still reach a private address. The unfollowed `HEAD` bounds what that yields to one response's headers; a deployment that needs more should route outbound traffic through a proxy that enforces the same rule.
 - **No confirmation gate on a purge or a DNS write.** Both act directly; put the agent behind an approval preset when a cold cache or a DNS change would matter.
 - **One record per `cloudflare_dns_set` call**, and a name and type carrying several records is resolved to the first one Cloudflare returns. Round-robin record sets are edited in the dashboard.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

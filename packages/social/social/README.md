@@ -5,17 +5,31 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-social
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [One id, one provider](#one-id-one-provider)
+- [Refuse, never guess](#refuse-never-guess)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 The Service Definition role of the social capability seam. It registers `ctx.social`, keeps the provider roster, merges every provider's targets into one namespace the model can address, and routes a post to the provider that owns the requested target id. Platform providers (LinkedIn, Meta, Google) supply the targets and do the publishing; `@deepseek-ai/dsh-tool-social` is the Consumer that puts the capability in front of a model behind human approval.
 
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
 Nothing in this package names a platform. There is no provider-specific field and no per-platform branch; a provider speaks through a target id, the three `accepts` flags, and the `ready`/`reason` pair, and that is the whole vocabulary. A per-platform condition appearing here means the seam is in the wrong place.
 
-### One id, one provider
+## One id, one provider
 
 A provider name is unique in the registry and contains no `:`. Every target id a provider lists must start with `<name>:` and carry something after it. Two providers therefore cannot claim one id, and a bare id resolves to exactly one registration. The registry enforces the rule on every listing instead of trusting providers to follow it: a target with the wrong prefix, a target whose `provider` field does not match the registration, and a target id listed twice are all dropped from the addressable namespace and reported as one unready diagnostic entry under the provider's bare name.
 
-### Refuse, never guess
+## Refuse, never guess
 
 `post()` resolves every refusal before a provider is called:
 
@@ -39,3 +53,13 @@ No model-visible surface of its own: this package registers no tool, contributes
 - **`accepts` is three booleans.** It says a target takes images; it does not say how many, how large, or in what format. A provider still refuses at publish time for a limit this registry cannot express, and that refusal reaches the model as a platform error rather than a pre-dispatch refusal.
 - **No scope layering.** Unlike `ctx.skills` and `ctx.tools`, the roster is flat and global: a provider registered by an agent preset is visible to every agent. Per-agent accounts need the layered shape those registries use.
 - **No `./invariant` companion.** The registry is the only observer of its own roster; there is no independent observation of the provider set that could diverge from it, so there is nothing for an invariant to check.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

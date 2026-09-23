@@ -5,11 +5,21 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-host-outputs
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Why one convention beats an allowlist](#why-one-convention-beats-an-allowlist)
+- [Publishing semantics](#publishing-semantics)
+- [Configuration](#configuration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
-One place a skill or a plugin puts a finished file so the person who asked for it can get it. The convention is `<cwd>/.outputs`: the outputs directory is inside the session working directory, so it inherits whatever the workspace already guarantees about lifetime and permissions, and a session's deliverables travel with the session rather than with the skill that made them.
-
-The package registers `ctx.outputs`, a service with three methods:
+One place a skill or a plugin puts a finished file so the person who asked for it can get it. The convention is `<cwd>/.outputs`, inside the session working directory, so it inherits the workspace's lifetime and permissions and the deliverables travel with the session rather than with the skill that made them. `ctx.outputs` has three methods:
 
 ```ts
 interface PublishedOutput {
@@ -23,6 +33,9 @@ interface PublishedOutput {
   label?: string
 }
 
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
 interface SessionOutputs {
   /** Where a session's published outputs live: `<cwd>/.outputs`. */
   dir(cwd: string): string
@@ -35,13 +48,13 @@ interface SessionOutputs {
 
 `name` is the name actually used inside the directory, which is not always the source basename. Every method takes the cwd explicitly: the service has no ambient notion of "the current session", so a caller stays responsible for reading an authoritative cwd. The agent tool reads it from the session store (`ctx.sessions.get(agent.session.id)?.header.cwd`) and never from a path the model supplied.
 
-### Why one convention beats an allowlist
+## Why one convention beats an allowlist
 
 The composer's "Session outputs" drawer lists one hardcoded directory, `<cwd>/edit/` — the convention of the first skill that needed somewhere to write. A second skill rendering into its own directory produces files the drawer cannot see: correct output, on disk, invisible, with the drawer still showing a stale file from an earlier session. The two available fixes are to teach the drawer every skill's private directory, or to give every skill one directory that means delivered. An allowlist grows with every skill, is edited in a different package from the skill that needs it, and silently omits any skill whose author did not know the list existed; `.outputs` needs no edit at all, and `edit/` goes back to meaning what it says — a scratch directory one skill edits in — instead of doubling as a delivery channel for skills that never edit anything.
 
 The consumer is [`deploy/plugins/composer-tools.mjs`](../../../deploy/plugins/composer-tools.mjs), which lists `.outputs` alongside `edit/` in the drawer and streams both through its existing download route. That wiring is one line there and is not owned by this package.
 
-### Publishing semantics
+## Publishing semantics
 
 - **Copy, never move and never symlink.** The producer may still be working on the file, and a symlink into a temp directory is a dead link an hour later. The original stays exactly where it was written.
 - **Containment is checked after resolution, not by string prefix.** The cwd and the source are both canonicalised with `realpath`, then compared with `path.relative`, so neither a `../../` segment nor a symlink pointing out of the workspace can publish a file the session does not own. `allowOutsideCwd` turns the check off for a deployment that needs it; it is false by default.
@@ -49,7 +62,7 @@ The consumer is [`deploy/plugins/composer-tools.mjs`](../../../deploy/plugins/co
 - **A refused publish copies nothing.** Both byte caps are checked before the copy begins and the failure names the size and the limit, rather than leaving a truncated file behind.
 - **A label is data.** It is stripped of control characters, bounded, and stored in a `.labels.json` sidecar keyed by file name. It never influences the file name, which comes from the source basename reduced to `[A-Za-z0-9._-]` with no leading dot.
 
-### Configuration
+## Configuration
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -73,3 +86,13 @@ Token cost is one small tool definition per agent and one short text result per 
 - **Nothing unpublishes.** There is no `remove` and no retention policy: the outputs directory grows until the session's workspace goes away, and `maxTotalBytes` is the only backstop. A deployment that keeps workspaces indefinitely will want a sweeper.
 - **The total-bytes cap is per session, computed by listing.** It costs one `readdir` plus a `stat` per published file on every publish, which is fine at drawer scale and wrong for a session that publishes thousands of files.
 - **No command route.** `buildOutputTools()` is exported so one definition can serve both the per-agent registry and an MCP-style command route, but no route is mounted: a route would have to resolve a session id to a cwd itself, and no caller needs that yet.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

@@ -26,7 +26,7 @@
      conversation (which selects what to show), and closes from the panel's own
      close control — so there is no separate floating button, and the scrim is
      purely visual. */
-  [data-shell-frame]:not([data-details-collapsed])::after {
+  [data-shell-frame]:not([data-rightbar-collapsed])::after {
     content: '';
     position: fixed;
     inset: 0;
@@ -36,12 +36,12 @@
   }
 
   /* Collapsed: the details column is hidden on a phone. */
-  [data-shell-frame][data-details-collapsed] [data-shell-details] {
+  [data-shell-frame][data-rightbar-collapsed] [data-rightbar-col] {
     display: none !important;
   }
 
   /* Expanded: the details column overlays the content as a drawer from the right. */
-  [data-shell-frame]:not([data-details-collapsed]) [data-shell-details] {
+  [data-shell-frame]:not([data-rightbar-collapsed]) [data-rightbar-col] {
     position: fixed !important;
     inset: 0 0 0 auto !important;
     width: min(84vw, 360px) !important;
@@ -80,7 +80,11 @@
     align-items: center !important;
     justify-content: center !important;
     border-radius: 50% !important;
-    background: var(--dsw-alias-bg-layer-2) !important;
+    corner-shape: round;
+    /* A floating control, not a surface: the button token tracks the same
+       rung in both palettes and keeps this sheet out of the scroll-surface
+       elevation ledger, which it is not part of. */
+    background: var(--dsw-alias-button-floating-fill) !important;
     box-shadow: var(--dsw-shadow-lv1) !important;
   }
 

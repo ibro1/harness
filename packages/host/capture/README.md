@@ -5,9 +5,24 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-host-capture
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Safety](#safety)
+- [Config](#config)
+- [Model Experience](#model-experience)
+- [What the guard does not cover](#what-the-guard-does-not-cover)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 One tool, `capture_page`, screenshots a web page and measures it. It drives Chromium over the DevTools Protocol, so the same call that produces the PNG also reads the page's geometry out of the live DOM: `scrollWidth` against the viewport width, the title and final URL after redirects, the `currentSrc` of every image that failed to load, the bounding box of an optional CSS selector, and how many elements the document holds.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 What this gives you over `chromium --headless --screenshot` is the numbers. A PNG on its own cannot distinguish an element that failed to render from one the screenshotter failed to capture, and headless Chromium drops content quietly — below-the-fold lazy images most of all. A capture that reports `scrollWidth 1620 vs viewport 1280` states horizontal overflow as a measurement rather than an opinion, and `brokenImages: []` answers "is that image broken?" without anyone squinting at a picture. Prefer this tool whenever a claim about a page has to be checked rather than eyeballed.
 
@@ -58,3 +73,13 @@ It is not a system guard. On its first real test the agent was refused `http://1
 - **A full-page capture is one screenshot**, so a document taller than `maxFullPageHeightPx` is cut rather than tiled.
 - **Only the first match of a selector is measured and clipped**, though `selector.count` reports how many matched.
 - **No cookies, storage, or authentication.** Every capture starts from an empty profile, so a page behind a login renders as its logged-out state.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

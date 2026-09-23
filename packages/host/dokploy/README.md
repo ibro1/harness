@@ -5,9 +5,21 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-host-dokploy
 
+## Table of Contents
+
+- [Summary](#summary)
+- [Understand the implementation](#understand-the-implementation)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+
+-----
+
 ## Summary
 
 Lets an agent see and drive your Dokploy servers. Servers are configured in the `dokploy` user-settings namespace — added and edited in the settings UI the same way models are, one entry per server with a name, a base URL, and the name of an environment variable holding that server's API key. The key itself lives in the environment, never in settings, exactly as a model's `apiKeyEnv` does. Four tools reach the model: `dokploy_servers`, `dokploy_projects`, `dokploy_deploy`, `dokploy_status`.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
 Each server entry is `{ name, url, ... }` plus one of two ways to give its key: `apiKeyEnv` names an environment variable holding the key (kept out of settings; in a container, add that variable to the compose `environment:` block so it reaches the process), or `apiKey` carries the key inline (simpler, but stored in settings and shown in the card). A tool call fails with a clear message naming what to set when neither resolves.
 
@@ -27,3 +39,13 @@ Each tool takes an optional `server`, needed only when more than one is configur
 - **Endpoint names track Dokploy's API** (`project.all`, `application.deploy`, `application.one`). A Dokploy version that renames these surfaces the raw error status; the tool text carries Dokploy's own message so the mismatch is visible.
 - **No confirmation gate on deploy.** The tool triggers a deployment directly; put the agent behind an approval preset if a spend or an outage would matter.
 - **Read-then-act.** There is no single "deploy by name" tool; the model lists projects to find an id, then deploys it, so it acts on something it has seen.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

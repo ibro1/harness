@@ -1,14 +1,14 @@
 /** The Cloudflare plugin's card: the zones the agent may purge and edit DNS on. */
 
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { ValueField } from './fields.tsx'
-import { PluginCard } from './PluginCard.tsx'
+import { PluginConfigForm } from './PluginConfigForm.tsx'
 import type { CloudflareCardFace } from './cloudflare-card-controller.ts'
-import type {} from './slot-contract.ts'
 
 /** Props the renderer binds for the Cloudflare card. */
 export type CloudflareCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<'settings.plugins'>
   & InjectFace<CloudflareCardFace>
 
@@ -23,12 +23,11 @@ export type CloudflareCardProps =
 export function CloudflareCard(props: CloudflareCardProps) {
   const { t } = props
   const state = props.useCloudflareCard(snapshot => snapshot)
+  if (props.view === 'summary') return t('cloudflareDescription')
   const disabled = !state.writable
   return (
-    <PluginCard
+    <PluginConfigForm
       t={t}
-      titleKey="cloudflareTitle"
-      descriptionKey="cloudflareDescription"
       state={state}
       onSave={props.save}
       onDiscard={props.discard}
@@ -61,6 +60,6 @@ export function CloudflareCard(props: CloudflareCardProps) {
         onEdit={(text) => { props.edit('account', text) }}
         onReset={() => { props.resetField('account') }}
       />
-    </PluginCard>
+    </PluginConfigForm>
   )
 }
