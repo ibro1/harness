@@ -22,6 +22,10 @@ FROM node:22-bookworm-slim
 
 # git: the agent's own tooling. ripgrep: the harness search path.
 # tini: correct signal handling for the three processes the entrypoint runs.
+# gcc + libc6-dev: `pnpm run build` compiles native/system from C (flock.c needs
+# node_api.h and sys/file.h). The addon is not optional — session write-ownership
+# locking rejects without it — so the compiler ships rather than the build being
+# skipped.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash \
       ca-certificates \
@@ -30,7 +34,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
       fonts-dejavu-core \
       fonts-liberation \
+      gcc \
       git \
+      libc6-dev \
       less \
       openssh-client \
       procps \
