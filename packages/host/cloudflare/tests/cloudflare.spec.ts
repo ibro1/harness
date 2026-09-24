@@ -114,6 +114,7 @@ describe('cloudflare tools', () => {
     expect([...tools.keys()].sort()).toEqual([
       'cloudflare_account_zones',
       'cloudflare_cache_status',
+      'cloudflare_dns_delete',
       'cloudflare_dns_list',
       'cloudflare_dns_set',
       'cloudflare_purge',
@@ -245,6 +246,111 @@ describe('cloudflare tools', () => {
     })
   })
 
+  it('carries an MX priority through to Cloudflare', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(request => (request.method === 'GET' ? ok([]) : ok({ id: 'm1' })), seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    await tools.get('cloudflare_dns_set')!.execute(
+      { type: 'MX', name: 'example.com', content: 'mail.example.com', priority: 10 }, exec)
+    expect(JSON.parse(seen[1]?.body ?? '{}')).toEqual({
+      type: 'MX', name: 'example.com', content: 'mail.example.com', priority: 10,
+    })
+  })
+
+  it('refuses an MX record with no priority, before any call', async () => {
+    // Cloudflare cannot store it, and the failure shows up as mail that stops
+    // arriving rather than as an error anyone reads.
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok([]), seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    await expect(tools.get('cloudflare_dns_set')!.execute(
+      { type: 'MX', name: 'example.com', content: 'mail.example.com' }, exec))
+      .rejects.toThrow('An MX record needs a priority')
+    expect(seen).toEqual([])
+  })
+
+  it('refuses to edit one of several records sharing a name and type', async () => {
+    // The defect this closes: two MX records on a domain, and setting one
+    // quietly left the other delivering mail to the old host.
+    const base = await stubCloudflare(() => ok([
+      { id: 'm1', type: 'MX', name: 'example.com', content: 'old.mail.example' },
+      { id: 'm2', type: 'MX', name: 'example.com', content: 'older.mail.example' },
+    ]))
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    await expect(tools.get('cloudflare_dns_set')!.execute(
+      { type: 'MX', name: 'example.com', content: 'new.mail.example', priority: 10 }, exec))
+      .rejects.toThrow(/2 MX records exist for example.com on site; pass id to choose one/)
+  })
+
+  it('edits the record named by id when several share a name and type', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare((request) => {
+      if (request.method === 'GET') {
+        return ok([
+          { id: 'm1', type: 'MX', name: 'example.com', content: 'old.mail.example' },
+          { id: 'm2', type: 'MX', name: 'example.com', content: 'older.mail.example' },
+        ])
+      }
+      return ok({ id: 'm2' })
+    }, seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    const out = await tools.get('cloudflare_dns_set')!.execute(
+      { type: 'MX', name: 'example.com', content: 'new.mail.example', priority: 10, id: 'm2' }, exec)
+    expect(out.text).toContain('older.mail.example -> new.mail.example')
+    expect(seen[1]?.path).toBe('/zones/z1/dns_records/m2')
+  })
+
+  it('removes a record by id', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok({ id: 'r9' }), seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    const out = await tools.get('cloudflare_dns_delete')!.execute({ id: 'r9' }, exec)
+    expect(out.text).toContain('Removed record r9 from site.')
+    expect(seen[0]?.method).toBe('DELETE')
+    expect(seen[0]?.path).toBe('/zones/z1/dns_records/r9')
+  })
+
+  it('removes a record named by type and name, and says what it was', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare((request) => {
+      if (request.method === 'GET') {
+        return ok([{ id: 'c1', type: 'CNAME', name: 'autodiscover.example.com', content: 'autodiscover.outlook.com' }])
+      }
+      return ok({ id: 'c1' })
+    }, seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    const out = await tools.get('cloudflare_dns_delete')!.execute(
+      { type: 'CNAME', name: 'autodiscover.example.com' }, exec)
+    expect(out.text).toContain('Removed the CNAME record for autodiscover.example.com (autodiscover.outlook.com) from site.')
+    expect(seen[1]?.method).toBe('DELETE')
+  })
+
+  it('refuses to remove one of several matches, and lists them', async () => {
+    const base = await stubCloudflare(() => ok([
+      { id: 'm1', type: 'MX', name: 'example.com', content: 'a.mail.example' },
+      { id: 'm2', type: 'MX', name: 'example.com', content: 'b.mail.example' },
+    ]))
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    await expect(tools.get('cloudflare_dns_delete')!.execute({ type: 'MX', name: 'example.com' }, exec))
+      .rejects.toThrow(/2 MX records exist for example.com on site; pass id to choose one/)
+  })
+
+  it('refuses a delete that names no record at all', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok([]), seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    await expect(tools.get('cloudflare_dns_delete')!.execute({}, exec))
+      .rejects.toThrow('Name the record to remove: pass id, or pass both type and name.')
+    expect(seen).toEqual([])
+  })
+
+  it('says plainly when there is nothing to remove', async () => {
+    const base = await stubCloudflare(() => ok([]))
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base)
+    await expect(tools.get('cloudflare_dns_delete')!.execute({ type: 'MX', name: 'example.com' }, exec))
+      .rejects.toThrow('No MX record for example.com on site; nothing to remove.')
+  })
+
   it('surfaces the Cloudflare message when a 200 carries success: false', async () => {
     const base = await stubCloudflare(() => ({
       status: 200,
@@ -294,7 +400,7 @@ describe('cloudflare MCP surface', () => {
       { timeoutMs: 5000, path: '/cloudflare', token: '', apiBase: 'https://api.cloudflare.com/client/v4' },
     )
     expect(tools.map(t => t.name)).toEqual([
-      'cloudflare_zones', 'cloudflare_purge', 'cloudflare_dns_list', 'cloudflare_dns_set',
+      'cloudflare_zones', 'cloudflare_purge', 'cloudflare_dns_list', 'cloudflare_dns_set', 'cloudflare_dns_delete',
       'cloudflare_account_zones', 'cloudflare_zone_add', 'cloudflare_zone_status', 'cloudflare_cache_status',
     ])
     const purge = tools.find(t => t.name === 'cloudflare_purge')

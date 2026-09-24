@@ -12,6 +12,7 @@ kind: "package-reference"
 - [Configuration](#configuration)
 - [Model Experience](#model-experience)
 - [The account tools, and why they are separate](#the-account-tools-and-why-they-are-separate)
+- [Editing DNS](#editing-dns)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 
 -----
@@ -55,6 +56,12 @@ Every tool except `cloudflare_cache_status` takes an optional `zone`, needed onl
 The account token needs Zone: Edit across every zone in its account, which reaches every domain that account owns. A per-zone token reaches one zone, which is what makes the zone roster safe to hand a model. Folding the two into one credential would quietly widen every zone token to the account, so account credentials live in their own list and stay empty for anyone who never creates a zone.
 
 Zones carry their own tokens and never consult this list, so DNS and cache purge work across any number of accounts with `accounts` left empty.
+
+## Editing DNS
+
+`cloudflare_dns_set` looks a record up by name and type: it replaces one and creates none. Two things keep that from being quietly destructive on a live zone. An `MX` with no `priority` is refused before any call, because Cloudflare cannot store one and the symptom is mail that stops arriving rather than an error. And when several records share a name and type — the usual shape of a mail migration — it refuses and lists them with their ids instead of editing the first, since editing one of two `MX` records leaves the other delivering mail where it always did.
+
+`cloudflare_dns_delete` removes one record, by id or by an unambiguous type and name, and refuses to guess between several. Removal is the half of a migration that decides where mail actually lands; a record it removed is not recoverable from here.
 
 `cloudflare_zone_add` does not finish the job and says so. Cloudflare assigns nameservers and the zone stays `pending` until those are set at the registrar, which is outside Cloudflare entirely. The tool returns the nameservers and names the manual step; `cloudflare_zone_status` answers whether it has taken effect.
 

@@ -583,30 +583,51 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
 
     defineTool({
       name: 'cloudflare_dns_set',
-      description: 'Point one DNS name at one value. The record is looked up by name and type: an existing one is replaced, and a missing one is created. This changes live DNS for the zone.',
+      description: 'Point one DNS name at one value. The record is looked up by name and type: an existing one is replaced, and a missing one is created. When several records share that name and type — two MX records on a domain, say — it refuses and lists them, so pass id to name the one you mean. This changes live DNS for the zone.',
       parameters: {
         zone: zoneParameter,
-        type: { type: 'string', required: true, description: 'The record type, for example A, AAAA, CNAME, TXT.' },
+        type: { type: 'string', required: true, description: 'The record type, for example A, AAAA, CNAME, TXT, MX.' },
         name: { type: 'string', required: true, description: 'The fully-qualified record name, for example app.example.com.' },
-        content: { type: 'string', required: true, description: 'What the record points at: an IP for A/AAAA, a hostname for CNAME, the text for TXT.' },
+        content: { type: 'string', required: true, description: 'What the record points at: an IP for A/AAAA, a hostname for CNAME or MX, the text for TXT.' },
+        priority: { type: 'integer', description: 'Required by MX, where a lower number is preferred. Ignored by types that do not carry one.' },
         ttl: { type: 'integer', description: 'Time to live in seconds; 1 means automatic. Omit to let Cloudflare choose.' },
         proxied: { type: 'boolean', description: 'Whether Cloudflare proxies this record (the orange cloud). Only valid for record types Cloudflare can proxy.' },
+        id: { type: 'string', description: 'The exact record to replace, as cloudflare_dns_list reports it in brackets. Only needed when several records share the name and type.' },
       },
       output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
       execute: async (args, exec: ToolRunContext) => {
         exec.signal.throwIfAborted()
         const zone = resolveZone(readZones(), args.zone)
         const zonePath = `/zones/${encodeURIComponent(zone.zoneId)}/dns_records`
+        // MX without a priority is not a record Cloudflare can store, and the
+        // failure is a mail outage rather than an error anyone sees.
+        if (args.type.toUpperCase() === 'MX' && args.priority === undefined) {
+          throw new Error('An MX record needs a priority; pass priority (a lower number is preferred, 10 is the usual single-server value).')
+        }
         const query = new URLSearchParams({ type: args.type, name: args.name })
         const existing = rows(await call(zone, `${zonePath}?${query.toString()}`))
         const body = {
           type: args.type,
           name: args.name,
           content: args.content,
+          ...(args.priority === undefined ? {} : { priority: args.priority }),
           ...(args.ttl === undefined ? {} : { ttl: args.ttl }),
           ...(args.proxied === undefined ? {} : { proxied: args.proxied }),
         }
-        const current = existing[0]
+        const named = args.id !== undefined && args.id !== ''
+        const current = named ? existing.find(record => str(record['id']) === args.id) : existing[0]
+        if (named && current === undefined) {
+          throw new Error(`No ${args.type} record for ${args.name} on ${zone.name} has id ${String(args.id)}; list them with cloudflare_dns_list.`)
+        }
+        // Editing the first of several silently leaves the others in place,
+        // which on a set of MX records means mail keeps going where it went.
+        if (!named && existing.length > 1) {
+          const lines = existing.map(record => `  ${str(record['content'])} [${str(record['id'])}]`)
+          throw new Error(
+            `${String(existing.length)} ${args.type} records exist for ${args.name} on ${zone.name}; pass id to choose one, `
+            + `or delete the ones you do not want with cloudflare_dns_delete:\n${lines.join('\n')}`,
+          )
+        }
         const recordId = current === undefined ? '' : str(current['id'])
         if (recordId !== '') {
           const previous = str(current?.['content'])
@@ -617,6 +638,56 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
         return reply(`Created a ${args.type} record for ${args.name} on ${zone.name} pointing at ${args.content}.`)
       },
       presentCall: args => ({ card: 'generic', title: `Set DNS ${args.type} ${args.name}`, kind: 'other', rawInput: args.content }),
+    }),
+
+    defineTool({
+      name: 'cloudflare_dns_delete',
+      description: 'Remove one DNS record from a zone. Name the record by its id from cloudflare_dns_list, or by type and name when exactly one matches. It refuses rather than guessing between several, because the record it removed cannot be recovered from here. This changes live DNS for the zone.',
+      parameters: {
+        zone: zoneParameter,
+        id: { type: 'string', description: 'The exact record to remove, as cloudflare_dns_list reports it in brackets. Preferred.' },
+        type: { type: 'string', description: 'With name, and without id: the record type to remove, for example MX, SRV, CNAME.' },
+        name: { type: 'string', description: 'With type, and without id: the fully-qualified record name to remove.' },
+      },
+      output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
+      execute: async (args, exec: ToolRunContext) => {
+        exec.signal.throwIfAborted()
+        const zone = resolveZone(readZones(), args.zone)
+        const zonePath = `/zones/${encodeURIComponent(zone.zoneId)}/dns_records`
+        const byId = args.id !== undefined && args.id !== ''
+        if (!byId && (args.type === undefined || args.type === '' || args.name === undefined || args.name === '')) {
+          throw new Error('Name the record to remove: pass id, or pass both type and name.')
+        }
+        let recordId = args.id ?? ''
+        let described = `record ${recordId}`
+        if (!byId) {
+          const type = args.type as string
+          const name = args.name as string
+          const query = new URLSearchParams({ type, name })
+          const found = rows(await call(zone, `${zonePath}?${query.toString()}`))
+          if (found.length === 0) {
+            throw new Error(`No ${type} record for ${name} on ${zone.name}; nothing to remove.`)
+          }
+          if (found.length > 1) {
+            const lines = found.map(record => `  ${str(record['content'])} [${str(record['id'])}]`)
+            throw new Error(
+              `${String(found.length)} ${type} records exist for ${name} on ${zone.name}; `
+              + `pass id to choose one:\n${lines.join('\n')}`,
+            )
+          }
+          const only = found[0] as Json
+          recordId = str(only['id'])
+          described = `the ${str(only['type'])} record for ${str(only['name'])} (${str(only['content'])})`
+        }
+        await call(zone, `${zonePath}/${encodeURIComponent(recordId)}`, { method: 'DELETE' })
+        return reply(`Removed ${described} from ${zone.name}.`)
+      },
+      presentCall: args => ({
+        card: 'generic',
+        title: `Delete DNS ${args.type ?? 'record'} ${args.name ?? args.id ?? ''}`.trim(),
+        kind: 'other',
+        rawInput: args.id ?? `${String(args.type)} ${String(args.name)}`,
+      }),
     }),
 
     defineTool({
