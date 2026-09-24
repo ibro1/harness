@@ -35,24 +35,34 @@ function sessions(id: string | undefined) {
   return (select: (list: unknown) => unknown) => select({ byId })
 }
 
-/** Render the scrim over one session list, recording every close. */
-function show(id: string | undefined, close = vi.fn()) {
-  const view = render(<SidebarScrim {...({
-    close, useSessions: sessions(id),
-  } as unknown as SidebarScrimProps)} />)
-  const rerender = (next: string | undefined) => {
-    view.rerender(<SidebarScrim {...({
-      close, useSessions: sessions(next),
-    } as unknown as SidebarScrimProps)} />)
+/** The selected main panel, as the layout store reports it. */
+function panel(id: string | null) {
+  return (select: (info: unknown) => unknown) => select({ activePanelId: id })
+}
+
+/** Where the main view is: a panel, or a session when no panel is selected. */
+interface Where { panel?: string | null; session?: string | undefined }
+
+/** Render the scrim over one destination, recording every close. */
+function show(where: Where, close = vi.fn()) {
+  const props = (at: Where) => ({
+    close,
+    useSessions: sessions(at.session),
+    usePanelInfo: panel(at.panel ?? null),
+  } as unknown as SidebarScrimProps)
+  const view = render(<SidebarScrim {...props(where)} />)
+  return {
+    close,
+    view,
+    rerender: (next: Where) => { view.rerender(<SidebarScrim {...props(next)} />) },
   }
-  return { close, rerender, view }
 }
 
 describe('SidebarScrim', () => {
   it('closes the drawer when it is tapped', () => {
     viewport(true)
     frame(false)
-    const { close, view } = show('session-a')
+    const { close, view } = show({ session: 'session-a' })
     fireEvent.click(view.container.firstChild as Element)
     expect(close).toHaveBeenCalledTimes(1)
   })
@@ -62,17 +72,17 @@ describe('SidebarScrim', () => {
     // open over the conversation it had just opened.
     viewport(true)
     frame(false)
-    const { close, rerender } = show('session-a')
+    const { close, rerender } = show({ session: 'session-a' })
     expect(close).not.toHaveBeenCalled()
-    rerender('session-b')
+    rerender({ session: 'session-b' })
     expect(close).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the drawer alone on a viewport that never opened one', () => {
     viewport(false)
     frame(false)
-    const { close, rerender } = show('session-a')
-    rerender('session-b')
+    const { close, rerender } = show({ session: 'session-a' })
+    rerender({ session: 'session-b' })
     expect(close).not.toHaveBeenCalled()
   })
 
@@ -81,16 +91,42 @@ describe('SidebarScrim', () => {
     // collapsed would open the drawer instead of closing it.
     viewport(true)
     frame(true)
-    const { close, rerender } = show('session-a')
-    rerender('session-b')
+    const { close, rerender } = show({ session: 'session-a' })
+    rerender({ session: 'session-b' })
     expect(close).not.toHaveBeenCalled()
   })
 
   it('stays put when the main view holds no session', () => {
     viewport(true)
     frame(false)
-    const { close, rerender } = show('session-a')
-    rerender(undefined)
+    const { close, rerender } = show({ session: undefined })
+    rerender({ session: 'session-a' })
     expect(close).not.toHaveBeenCalled()
+  })
+
+  it('closes the drawer when a panel is opened from inside it', () => {
+    // The second report: Plugins and Memory System are panels, not sessions,
+    // so watching the session alone left the drawer open over them.
+    viewport(true)
+    frame(false)
+    const { close, rerender } = show({ panel: null, session: 'session-a' })
+    rerender({ panel: 'plugins', session: 'session-a' })
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the drawer moving between two panels', () => {
+    viewport(true)
+    frame(false)
+    const { close, rerender } = show({ panel: 'plugins' })
+    rerender({ panel: 'memory' })
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the drawer returning from a panel to the conversation', () => {
+    viewport(true)
+    frame(false)
+    const { close, rerender } = show({ panel: 'plugins', session: 'session-a' })
+    rerender({ panel: null, session: 'session-a' })
+    expect(close).toHaveBeenCalledTimes(1)
   })
 })

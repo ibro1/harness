@@ -454,8 +454,13 @@
   cursor: pointer;
 }
 
-.panelRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+/* Guarded, because this is the same fill `.panelActive` uses: a touch device
+   keeps :hover on the last row tapped, so an unguarded rule leaves two rows
+   looking selected and the real selection unreadable. */
+@media (hover: hover) {
+  .panelRow:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .panelRow.panelActive {

@@ -16,28 +16,34 @@ const PHONE = '(max-width: 768px)'
  * CSS (mobile.css) shows it only on a phone while the sidebar is expanded, so on
  * desktop and on a collapsed rail it renders nothing interactive.
  *
- * It also closes the drawer when a session is opened from inside it. On a phone
- * the drawer covers the conversation, so picking a session and then being left
- * looking at the list reads as a tap that did nothing. The signal is the
- * session the main view retains, not a tap on a row: a row is one of several
- * ways a session becomes current, and the drawer should follow the outcome
- * rather than one of its causes.
+ * It also closes the drawer on any navigation made from inside it — a session
+ * row, or a panel row such as Plugins or Memory System. On a phone the drawer
+ * covers what it just opened, so a tap that leaves the list on screen reads as
+ * a tap that did nothing. The signals are the selected panel and the session
+ * the main view retains, not a tap on a row: a row is one of several ways each
+ * becomes current, and the drawer should follow the outcome rather than one of
+ * its causes.
  * @param props.close - collapse the sidebar (the layout toggle).
  */
-export function SidebarScrim({ close, useSessions }: SidebarScrimProps) {
-  const openId = useSessions(list =>
+export function SidebarScrim({ close, useSessions, usePanelInfo }: SidebarScrimProps) {
+  const panelId = usePanelInfo(info => info.activePanelId)
+  const sessionId = useSessions(list =>
     Object.values(list.byId).find(session => (session.retainedBy.mainView ?? 0) > 0)?.id)
-  const shown = useRef(openId)
+  const shown = useRef({ panelId, sessionId, mounted: false })
   useEffect(() => {
     const previous = shown.current
-    shown.current = openId
-    // First render is not a navigation, and neither is losing the main view.
-    if (openId === undefined || openId === previous) return
+    shown.current = { panelId, sessionId, mounted: true }
+    // The first render is not a navigation, and neither is the session list
+    // resolving afterwards into a main view that was already the destination.
+    if (!previous.mounted) return
+    const movedPanel = panelId !== previous.panelId
+    const movedSession = sessionId !== previous.sessionId && previous.sessionId !== undefined
+    if (!movedPanel && !movedSession) return
     if (!globalThis.matchMedia(PHONE).matches) return
     // The drawer is the expanded sidebar; a collapsed rail has nothing to close.
     const frame = globalThis.document.querySelector('[data-shell-frame]')
     if (frame === null || frame.hasAttribute('data-sidebar-collapsed')) return
     close()
-  }, [openId, close])
+  }, [panelId, sessionId, close])
   return <div data-mobile-sidebar-scrim aria-hidden="true" onClick={() => { close() }} />
 }
