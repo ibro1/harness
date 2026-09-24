@@ -408,6 +408,12 @@ describe('released event and payload inventory', () => {
       { kind: 'plugin', plugin: 'notice', form: 'notice', summary: 'notice' },
       { kind: 'plugin', plugin: 'relay', form: 'relay' },
       { kind: 'plugin', plugin: 'recall', form: 'recall' },
+      // Released v0 validated no source, so a third-party plugin could attach a
+      // summary to any form and `dsh-mnemon` did. Reading its sessions back is
+      // worth more than enforcing a convention on data already written.
+      { kind: 'plugin', plugin: 'mnemon', form: 'instructions', summary: 'recall reminder' },
+      { kind: 'plugin', plugin: 'mnemon', form: 'recall', summary: 'memory snapshot' },
+      { kind: 'plugin', plugin: 'snapshot', form: 'snapshot', sections: [{ name: 'one', text: 'value' }], summary: 'x' },
       { kind: 'plugin', plugin: 'compact', compactionId: 'compact-1', sourceCommandId: 'command-1' },
       { kind: 'model', provider: 'mock', model: 'mock', replayState: { private: true } },
       { kind: 'tool', callId: 'call-1' },
@@ -687,10 +693,6 @@ describe('released event and payload inventory', () => {
             truncated: false, inputIndex: 1,
           }],
         },
-      }],
-      ['user/message', {
-        ...userMessage,
-        source: { kind: 'plugin', plugin: 'x', form: 'snapshot', sections: [], summary: 'x' },
       }],
       ['user/message', {
         ...userMessage,

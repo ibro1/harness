@@ -650,8 +650,18 @@ function pluginSourceValue(source: JsonRecord, label: string): void {
   } else if (source['sections'] !== undefined) {
     throw new SessionFormatError(`${label} sections require snapshot form`)
   }
-  if (form === 'notice') stringValue(source['summary'], `${label} summary`)
-  else if (source['summary'] !== undefined) throw new SessionFormatError(`${label} summary requires notice form`)
+  // The harness's own plugins carry a summary only on `notice`, where it is the
+  // collapsed-row label. Released v0 validated no source at all, so a
+  // third-party plugin could and did attach one to another form —
+  // `dsh-mnemon` writes `instructions` and `recall` sources with a summary.
+  // Refusing here would make every session that plugin ever touched
+  // unreadable over a field nothing renders, so the value is checked for type
+  // and carried through unchanged; the migration copies user-message sources
+  // verbatim, and no later generation re-checks this pairing.
+  // `notice` still requires one; any other form merely tolerates the key.
+  if (form === 'notice' || source['summary'] !== undefined) {
+    stringValue(source['summary'], `${label} summary`)
+  }
 }
 
 function sessionReferenceSourceValue(source: JsonRecord, label: string, version: number): void {
