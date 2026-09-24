@@ -76,7 +76,7 @@ function ok(result: unknown): { json: unknown } {
 function mount(
   zones: { name: string; zoneId: string; apiTokenEnv?: string; apiToken?: string }[],
   apiBase = 'http://127.0.0.1:1',
-  account?: { id?: string; apiTokenEnv?: string; apiToken?: string },
+  accounts: { name: string; id: string; apiTokenEnv?: string; apiToken?: string }[] = [],
 ): Map<string, RecordedTool> {
   const tools = new Map<string, RecordedTool>()
   const agentCtx = {
@@ -93,7 +93,7 @@ function mount(
   const ctx = {
     settings: {
       register() {
-        return { get: () => ({ zones, account }), watch: () => () => {}, patch: () => Promise.resolve() }
+        return { get: () => ({ zones, accounts }), watch: () => () => {}, patch: () => Promise.resolve() }
       },
     },
     agents: { list: () => [{ ctx: agentCtx }] },
@@ -290,7 +290,7 @@ describe('cloudflare MCP surface', () => {
     const { buildCloudflareTools } = await import('../src/index.ts')
     const tools = buildCloudflareTools(
       () => [{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }],
-      () => undefined,
+      () => [],
       { timeoutMs: 5000, path: '/cloudflare', token: '', apiBase: 'https://api.cloudflare.com/client/v4' },
     )
     expect(tools.map(t => t.name)).toEqual([
@@ -305,7 +305,7 @@ describe('cloudflare MCP surface', () => {
 })
 
 describe('cloudflare account tools', () => {
-  const ACCOUNT = { id: 'acct-1', apiToken: 'account-token' }
+  const ACCOUNT = { name: 'main', id: 'acct-1', apiToken: 'account-token' }
 
   it('refuses every account tool until an account id is configured', async () => {
     const tools = mount([])
@@ -316,7 +316,7 @@ describe('cloudflare account tools', () => {
   })
 
   it('refuses when the account has an id but no usable token', async () => {
-    const tools = mount([], 'http://127.0.0.1:1', { id: 'acct-1', apiTokenEnv: 'CLOUDFLARE_ACCOUNT_UNSET' })
+    const tools = mount([], 'http://127.0.0.1:1', [{ name: 'main', id: 'acct-1', apiTokenEnv: 'CLOUDFLARE_ACCOUNT_UNSET' }])
     await expect(tools.get('cloudflare_account_zones')!.execute({}, exec))
       .rejects.toThrow('CLOUDFLARE_ACCOUNT_UNSET')
   })
@@ -327,7 +327,7 @@ describe('cloudflare account tools', () => {
       { id: 'z1', name: 'one.example', status: 'active' },
       { id: 'z2', name: 'two.example', status: 'pending' },
     ]), seen)
-    const tools = mount([], base, ACCOUNT)
+    const tools = mount([], base, [ACCOUNT])
 
     const { text } = await tools.get('cloudflare_account_zones')!.execute({}, exec)
 
@@ -344,7 +344,7 @@ describe('cloudflare account tools', () => {
       id: 'z9', name: 'new.example', status: 'pending',
       name_servers: ['ada.ns.cloudflare.com', 'bob.ns.cloudflare.com'],
     }), seen)
-    const tools = mount([], base, ACCOUNT)
+    const tools = mount([], base, [ACCOUNT])
 
     const { text } = await tools.get('cloudflare_zone_add')!.execute({ domain: 'New.Example' }, exec)
 
@@ -360,7 +360,7 @@ describe('cloudflare account tools', () => {
   it('strips a scheme and a path rather than sending a URL as a domain', async () => {
     const seen: SeenRequest[] = []
     const base = await stubCloudflare(() => ok({ id: 'z9', status: 'pending' }), seen)
-    const tools = mount([], base, ACCOUNT)
+    const tools = mount([], base, [ACCOUNT])
 
     await tools.get('cloudflare_zone_add')!.execute({ domain: 'https://new.example/app' }, exec)
 
@@ -370,7 +370,7 @@ describe('cloudflare account tools', () => {
   it('refuses something that is not a domain before spending a call', async () => {
     const seen: SeenRequest[] = []
     const base = await stubCloudflare(() => ok({}), seen)
-    const tools = mount([], base, ACCOUNT)
+    const tools = mount([], base, [ACCOUNT])
 
     await expect(tools.get('cloudflare_zone_add')!.execute({ domain: 'not a domain' }, exec))
       .rejects.toThrow('is not a domain name')
@@ -381,7 +381,7 @@ describe('cloudflare account tools', () => {
     const base = await stubCloudflare(() => ok([
       { id: 'z9', name: 'new.example', status: 'pending', name_servers: ['ada.ns.cloudflare.com'] },
     ]))
-    const tools = mount([], base, ACCOUNT)
+    const tools = mount([], base, [ACCOUNT])
 
     const { text } = await tools.get('cloudflare_zone_status')!.execute({ domain: 'new.example' }, exec)
 
@@ -389,9 +389,32 @@ describe('cloudflare account tools', () => {
     expect(text).toContain('ada.ns.cloudflare.com')
   })
 
+  it('refuses to guess between two accounts, and names them', async () => {
+    // Creating a zone on the wrong account is not undoable from here, so the
+    // ambiguity is an error rather than a first-entry default.
+    const tools = mount([], 'http://127.0.0.1:1', [ACCOUNT, { name: 'clients', id: 'acct-2', apiToken: 'other-token' }])
+    await expect(tools.get('cloudflare_account_zones')!.execute({}, exec))
+      .rejects.toThrow('Several Cloudflare accounts are configured (main, clients); pass account to choose one.')
+  })
+
+  it('acts on the named account, with that account\'s own token', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok([]), seen)
+    const tools = mount([], base, [ACCOUNT, { name: 'clients', id: 'acct-2', apiToken: 'other-token' }])
+    await tools.get('cloudflare_account_zones')!.execute({ account: 'clients' }, exec)
+    expect(seen[0]?.path).toContain('account.id=acct-2')
+    expect(seen[0]?.authorization).toBe('Bearer other-token')
+  })
+
+  it('names the configured accounts when asked for one that is not there', async () => {
+    const tools = mount([], 'http://127.0.0.1:1', [ACCOUNT])
+    await expect(tools.get('cloudflare_account_zones')!.execute({ account: 'typo' }, exec))
+      .rejects.toThrow('No Cloudflare account named "typo"; configured: main.')
+  })
+
   it('says plainly when the account has no such zone', async () => {
     const base = await stubCloudflare(() => ok([]))
-    const tools = mount([], base, ACCOUNT)
+    const tools = mount([], base, [ACCOUNT])
 
     await expect(tools.get('cloudflare_zone_status')!.execute({ domain: 'absent.example' }, exec))
       .rejects.toThrow('No zone named absent.example')

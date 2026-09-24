@@ -81,6 +81,20 @@ if [[ ! -f "$HOME/.dsh/.credentials.yaml" ]]; then
   chmod 600 "$HOME/.dsh/.credentials.yaml"
 fi
 
+# Plugin credentials named by environment variable rather than stored in
+# settings — a Cloudflare zone's apiTokenEnv, say. compose enumerates every
+# variable it forwards, and these names are chosen per deployment, so there is
+# nothing for it to enumerate; this file lives on the state volume instead.
+# Only what an operator puts here is exported, so nothing else in the
+# deployment's .env reaches the agent's environment.
+if [[ -f "$HOME/.dsh/plugin-env" ]]; then
+  set -a
+  # shellcheck disable=SC1091 -- operator-owned file on the state volume.
+  . "$HOME/.dsh/plugin-env"
+  set +a
+  echo "[entrypoint] exported plugin credentials from ~/.dsh/plugin-env"
+fi
+
 # Git identity and credentials for agents working in /workspace. Rewritten on
 # every boot from the environment: $HOME is not a volume, and the token must
 # never be the thing that persists.
