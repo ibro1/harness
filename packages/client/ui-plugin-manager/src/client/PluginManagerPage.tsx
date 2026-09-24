@@ -279,7 +279,7 @@ function DetailTop({ crumbLabel, crumbText, onBack, icon, actions }: {
 }): ReactNode {
   return (
     <>
-      <button type="button" className={css.crumb} aria-label={crumbLabel} onClick={onBack}>
+      <button type="button" className={css.crumb} data-page-crumb aria-label={crumbLabel} onClick={onBack}>
         <IconChevronDownOutline14 className={css.crumbIcon} aria-hidden="true" />
         <span>{crumbText}</span>
       </button>

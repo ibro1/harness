@@ -107,6 +107,13 @@
     padding-left: 58px !important;
   }
 
+  /* A page that opens with a back crumb puts it in the same top-left corner.
+     Indent the crumb itself rather than the page, so the rest of the content
+     keeps the full width a phone has little of. */
+  [data-shell-frame][data-sidebar-collapsed] [data-page-crumb] {
+    margin-left: 48px !important;
+  }
+
   /* Expanded: the rail overlays the content as a drawer rather than widening
      its grid column and crushing the session body. */
   [data-shell-frame]:not([data-sidebar-collapsed]) {
