@@ -93,13 +93,18 @@ function summarise(provider, before, after) {
   return `${provider}: ${String(after.length)} models, ${parts.join(' ')}`
 }
 
+// The profile patch may hold `!!js` expressions (a row's `disabled`, say). Only
+// the provider and default rows are read, so any expression is kept opaque.
+const PROFILE_SCHEMA = yaml.DEFAULT_SCHEMA.extend(['scalar', 'sequence', 'mapping']
+  .map((kind) => new yaml.Type('tag:yaml.org,2002:js', { kind, construct: (source) => ({ '!!js': source }) })))
+
 /** The sections to sync, from a pending settings.yaml or else the profile's own rows. */
 function loadCurrent() {
   if (existsSync(SETTINGS_PATH)) return { source: SETTINGS_PATH, document: yaml.load(readFileSync(SETTINGS_PATH, 'utf8')) ?? {}, pending: true }
   if (!existsSync(PROFILE_PATCH)) return undefined
   let rows
   try {
-    rows = yaml.load(readFileSync(PROFILE_PATCH, 'utf8'))
+    rows = yaml.load(readFileSync(PROFILE_PATCH, 'utf8'), { schema: PROFILE_SCHEMA })
   } catch (error) {
     console.error(`sync-models: cannot read ${PROFILE_PATCH} (${error.message.split('\n')[0]}); nothing to sync`)
     process.exit(0)
