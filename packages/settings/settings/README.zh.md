@@ -72,6 +72,7 @@ Settings 启动后、Loader 完成所有条目的加载时，早期版本留在 
 
 - 嵌套 Include 独立拥有配置，不能通过当前 profile 的表单编辑。
 - 字段重置恢复继承值，不能删除下层配置提供的值。取消设置数组索引会移除该元素。
+- **分支桥接 — `get(ns)`：** 0.1.7 之前构建的已发布插件（如 `@a1exsun/dsh-council` 0.1.0）仍调用已退役的 `ctx.settings.get`；分支保留该方法，用于读取单个条目的实时可编辑值，没有该 id 的活动条目时返回 undefined。`register` 未桥接：其设置没有可存放的 schema 条目。
 
 <a id="dev-note"></a>
 ### 开发备注

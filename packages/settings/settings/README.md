@@ -72,6 +72,7 @@ Consumers that change request prefixes determine cache effects.
 
 - Nested Includes own separate configurations and are not editable through the active profile’s form.
 - Field-level resets restore inherited values; they cannot delete a value supplied by a lower configuration layer. Unsetting an array index removes that element.
+- **Fork bridge — `get(ns)`:** published plugins built before 0.1.7 (such as `@a1exsun/dsh-council` 0.1.0) still call the retired `ctx.settings.get`; the fork keeps it as a read of one entry’s live editable values, undefined when no active entry has that id. `register` is not bridged: its settings have no schema entry to live in.
 
 <a id="dev-note"></a>
 ### Dev Note

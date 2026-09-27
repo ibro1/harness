@@ -354,3 +354,9 @@ it('describes an entry whose required field only the profile supplies, and repor
   const failures = (): unknown[] => restored.logger.buffer.filter(message => message.type === 'error').map((message): unknown => message.args[0])
   await vi.waitFor(() => { expect(failures()).toContainEqual(expect.objectContaining({ message: 'refresh failed' })) })
 })
+
+it('reads one entry\'s live values for plugins still calling the retired get', async () => {
+  const { ctx } = await fixture()
+  expect(ctx.settings.get('first')).toEqual(ctx.settings.describe().find(row => row.ns === 'first')!.value)
+  expect(ctx.settings.get('locale')).toBeUndefined()
+})

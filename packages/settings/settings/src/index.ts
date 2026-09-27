@@ -339,6 +339,14 @@ export class SettingsForms extends Service {
     return descriptors
   }
 
+  /** Read one entry's live editable values: the fork's bridge for published plugins that still call the retired `ctx.settings.get`.
+   * @param ns Profile entry id.
+   * @returns The entry's unredacted editable values, or undefined when no active entry has that id.
+   */
+  get(ns: string): unknown {
+    return this.describe().find(row => row.ns === ns)?.value
+  }
+
   /** Merge editable fields into an entry's config.
    * @param ns Profile entry id.
    * @param patch Fields to merge.
