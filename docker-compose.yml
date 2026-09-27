@@ -63,11 +63,17 @@ services:
       DSH_CAPTURE: ${DSH_CAPTURE:-}
       DSH_CLOUDFLARE: ${DSH_CLOUDFLARE:-}
       DSH_POSTGRES: ${DSH_POSTGRES:-}
-      # Set to expose the Cloudflare and Postgres tools over MCP, as with Dokploy.
+      # Command-route tokens for the Cloudflare and Postgres MCP servers. Optional:
+      # the entrypoint generates one per boot when unset.
       DSH_CLOUDFLARE_TOKEN: ${DSH_CLOUDFLARE_TOKEN:-}
       DSH_CLOUDFLARE_PATH: ${DSH_CLOUDFLARE_PATH:-}
       DSH_POSTGRES_TOKEN: ${DSH_POSTGRES_TOKEN:-}
       DSH_POSTGRES_PATH: ${DSH_POSTGRES_PATH:-}
+      # 0 withholds a plugin's tools from the agy/opencode CLIs; its route
+      # token is generated per boot when unset (deploy/entrypoint.sh).
+      DSH_CLOUDFLARE_MCP: ${DSH_CLOUDFLARE_MCP:-}
+      DSH_POSTGRES_MCP: ${DSH_POSTGRES_MCP:-}
+      DSH_SESSION_TOOLS_MCP: ${DSH_SESSION_TOOLS_MCP:-}
       # Social posting. 1 mounts it; it is the one capability that speaks
       # publicly under the operator's name, so it is off unless asked for.
       DSH_SOCIAL: ${DSH_SOCIAL:-}

@@ -12,7 +12,7 @@
 
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { apply, buildCaptureTools, clampRequest } from '../src/index.ts'
@@ -286,7 +286,11 @@ describe('capture_page image delivery', () => {
     const published: string[] = []
     const outputs = {
       dir: (cwd: string) => join(cwd, 'edit'),
-      publish: (_cwd: string, absPath: string, label?: string): Promise<PublishedOutput> => {
+      // The real capability refuses a source outside the session cwd; a stand-in
+      // that accepts anything let a capture staged in the system temp directory
+      // pass here while it was never published in a real deployment.
+      publish: (cwd: string, absPath: string, label?: string): Promise<PublishedOutput> => {
+        if (relative(cwd, absPath).startsWith('..')) return Promise.reject(new Error(`${absPath} is outside ${cwd}`))
         published.push(absPath)
         return Promise.resolve({ name: 'shot.png', rel: 'edit/shot.png', bytes: 8, mtime: 1, ...label === undefined ? {} : { label } })
       },
@@ -312,6 +316,17 @@ describe('capture_page image delivery', () => {
     expect(image.path.startsWith(join(cwd, 'edit'))).toBe(true)
     expect(await readdir(join(cwd, 'edit'))).toEqual([image.name])
     expect(String(value.text)).toContain(image.path)
+  })
+
+  it('delivers into the directory an injected resolver names, with no agent in the call', async () => {
+    // A command route serving a CLI's MCP client has no agent; it resolves the
+    // session cwd from the session id the CLI passes.
+    const cwd = await sessionDir()
+    const value = await captureTool({ driver: stubDriver(), resolveCwd: () => cwd })
+      .execute({ url: 'https://example.test/' }, { signal: new AbortController().signal })
+    const image = value.image as { path: string; name: string }
+    expect(image.path.startsWith(join(cwd, 'edit'))).toBe(true)
+    expect(await readdir(join(cwd, 'edit'))).toEqual([image.name])
   })
 
   it('falls back to disk and says so when publishing fails', async () => {

@@ -26,7 +26,6 @@
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -207,6 +206,12 @@ export interface CaptureDeps {
   hostLookup?: HostLookup
   /** Reads the optional `outputs` capability at call time. */
   readOutputs?: () => OutputsCapability | undefined
+  /**
+   * The session working directory a capture is delivered into. Defaults to the
+   * calling agent's session cwd; a caller with no agent, such as a command
+   * route serving a CLI's MCP client, resolves it from its own session id.
+   */
+  resolveCwd?: (exec: ToolRunContext) => string
 }
 
 /** Clamp one number into range, recording the parameter name when it moved. */
@@ -320,9 +325,12 @@ async function deliverImage(
   notes: string[],
 ): Promise<ImageRecord> {
   if (outputs !== undefined) {
-    const staging = await mkdtemp(join(tmpdir(), 'dsh-capture-out-'))
-    const staged = join(staging, fileName)
+    // Staged inside the session cwd: `outputs` refuses a source outside it, so
+    // a file staged in the system temp directory is never published.
+    let staging: string | undefined
     try {
+      staging = await mkdtemp(join(cwd, '.capture-staging-'))
+      const staged = join(staging, fileName)
       await writeFile(staged, png)
       const published = await outputs.publish(cwd, staged, 'page capture')
       return {
@@ -335,8 +343,8 @@ async function deliverImage(
     } catch (error) {
       notes.push(`Publishing through the outputs capability failed (${error instanceof Error ? error.message : String(error)}); the image was written to disk instead.`)
     } finally {
-      await rm(staging, { recursive: true, force: true }).catch(() => {
-        // A staging directory left in the system temp dir is harmless, and
+      if (staging !== undefined) await rm(staging, { recursive: true, force: true }).catch(() => {
+        // A leftover dot-directory in the session cwd costs nothing, and
         // nothing in this call can act on the failure.
       })
     }
@@ -396,7 +404,7 @@ function summarize(value: Omit<CaptureValue, 'text'>): string {
   // cheaper than the hunt.
   lines.push(value.image.published
     ? `Delivered: it is in the session outputs drawer at ${value.image.rel ?? value.image.name}, a path relative to this session's working directory. The reader can open and download it already — do not copy it anywhere else.`
-    : `Written to ${value.image.path ?? value.image.name}. The session outputs capability is not mounted, so this one did not reach the drawer.`)
+    : `Written to ${value.image.path ?? value.image.name}. It was written directly rather than published through the session outputs capability.`)
   lines.push(`Viewport ${String(value.viewport.width)}x${String(value.viewport.height)} at ${String(value.viewport.deviceScaleFactor)}x`
     + `${value.viewport.mobile ? ', mobile' : ''}${value.viewport.darkMode ? ', dark mode' : ''}`
     + `; document ${String(value.scrollWidth)}x${String(value.scrollHeight)}`)
@@ -435,6 +443,7 @@ export function buildCaptureTools(config: Config, deps: CaptureDeps = {}): ToolD
   })
   const hostLookup = deps.hostLookup ?? systemLookup
   const readOutputs = deps.readOutputs ?? ((): undefined => undefined)
+  const resolveCwd = deps.resolveCwd ?? ((exec: ToolRunContext): string => exec.agent?.session.header.cwd ?? process.cwd())
 
   return [
     defineTool({
@@ -473,7 +482,7 @@ export function buildCaptureTools(config: Config, deps: CaptureDeps = {}): ToolD
         }, exec.signal)
 
         const notes = [...result.notes]
-        const cwd = exec.agent?.session.header.cwd ?? process.cwd()
+        const cwd = resolveCwd(exec)
         const image = await deliverImage(
           result.png,
           captureFileName(screened.url),

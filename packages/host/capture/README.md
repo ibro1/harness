@@ -28,7 +28,9 @@ What this gives you over `chromium --headless --screenshot` is the numbers. A PN
 
 Lazy content is forced to load before the shot: every `img[loading=lazy]` is set to eager with its `src` re-assigned, the document is scrolled in steps and returned to the top, and outstanding image loads are awaited. `captureBeyondViewport` alone does not do this — it paints a taller surface without ever requesting the images below the fold.
 
-The PNG goes to the session's outputs drawer through the `outputs` capability when that plugin is mounted. The capability is read per call and consumed optionally: with no `outputs` service, the file is written to `<session cwd>/<fallbackDir>` (`edit` by default) and the result says where.
+The PNG goes to the session's outputs drawer through the `outputs` capability when that plugin is mounted. It is staged in a dot-directory inside the session cwd and removed after publishing, because `outputs` refuses a source outside the cwd. The capability is read per call and consumed optionally: with no `outputs` service, or when publishing fails, the file is written to `<session cwd>/<fallbackDir>` (`.outputs` by default) and the result says where and why.
+
+The session cwd comes from the calling agent. A caller with no agent — a command route serving a CLI's MCP client — passes `resolveCwd` in the build dependencies to supply it from its own session id.
 
 Chromium is resolved on PATH as `chromium-browser`, then `chromium`, then `google-chrome` and `google-chrome-stable`, matching the `campaign-assets` skill so both surfaces pick the same browser; `browserPath` overrides it. A missing browser fails the call naming every candidate tried, rather than producing a blank file.
 
@@ -52,7 +54,7 @@ Every launch is one browser per call, with `--no-sandbox` (uid 1000 with no user
 | `hardTimeoutMs` | 90000 | The browser is killed after this, whatever it is doing. |
 | `scrollStepMs` | 120 | Pause after each scroll step while forcing lazy content. |
 | `browserPath` | `''` | Explicit browser path; empty searches PATH. |
-| `fallbackDir` | `edit` | Directory under the session cwd used when no `outputs` capability is mounted. |
+| `fallbackDir` | `.outputs` | Directory under the session cwd used when no `outputs` capability is mounted or publishing fails. |
 
 ## Model Experience
 

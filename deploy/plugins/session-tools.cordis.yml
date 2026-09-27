@@ -1,0 +1,10 @@
+# Session tools for the agy and opencode CLIs: publish_output and capture_page
+# over one token-guarded command route, reached through deploy/mcp/
+# session-tools-mcp.mjs. See deploy/plugins/session-tools.mjs.
+- insert:
+    - id: session-tools
+      name: './session-tools.mjs'
+      config:
+        path: !!js process.env.DSH_SESSION_TOOLS_PATH || '/session-tools'
+        token: !!js process.env.DSH_SESSION_TOOLS_TOKEN || ''
+        capture: !!js process.env.DSH_CAPTURE !== '0'

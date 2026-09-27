@@ -552,10 +552,10 @@ runs.
 
 | Plugin | On by default | Turn off with | Model tools reach agy/opencode |
 |---|---|---|---|
-| Session outputs | yes | `DSH_OUTPUTS=0` | no |
-| Page capture | yes | `DSH_CAPTURE=0` | no |
-| Cloudflare | yes | `DSH_CLOUDFLARE=0` | no |
-| Postgres | yes | `DSH_POSTGRES=0` | no |
+| Session outputs | yes | `DSH_OUTPUTS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
+| Page capture | yes | `DSH_CAPTURE=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
+| Cloudflare | yes | `DSH_CLOUDFLARE=0` | yes, unless `DSH_CLOUDFLARE_MCP=0` |
+| Postgres | yes | `DSH_POSTGRES=0` | yes, unless `DSH_POSTGRES_MCP=0` |
 | Dokploy control | yes | `DSH_DOKPLOY=0` | only with `DSH_DOKPLOY_TOKEN` |
 | WhatsApp | when `wa-svc` is in the image | `DSH_WHATSAPP=0` | yes |
 | Composer tools | always | — | not a tool |
@@ -565,11 +565,27 @@ runs.
 **The last column matters more than it looks.** The agy and opencode CLIs run
 their own agent loop and discard the tools the harness offers, so a model
 reached through them sees a plugin's tools only if the entrypoint also
-registers them with that CLI over MCP. Today that is done for the browser,
-DeerFlow, Dokploy and WhatsApp. Outputs, capture, Cloudflare and Postgres
-reach DeepSeek models only; ask a Gemini or opencode model to purge a cache
-and it has no tool to do it with. The same applies to harness plugins
-switched on from the Plugins page, such as Agent Teams.
+registers them with that CLI over MCP. It does for every plugin in the table
+with a tool: each gets a token-guarded command route on the harness and a
+small MCP server in `deploy/mcp/` that forwards to it. The route tokens for
+Cloudflare, Postgres and the session tools are generated at each boot unless
+you set them, so there is nothing to configure. Harness plugins switched on
+from the Plugins page, such as Agent Teams, have no such bridge and reach
+DeepSeek models only.
+
+Headless agy refuses every MCP tool call unless it runs with
+`--dangerously-skip-permissions`, and that switch also lets agy use its own
+file and shell tools inside the container. The bridge passes it whenever at
+least one MCP server is registered, which with these defaults is always.
+Setting every `*_MCP` switch to `0` (and leaving the browser, DeerFlow,
+Dokploy and WhatsApp tokens unset) is what turns it off.
+
+**Session outputs and page capture over MCP** act on one session's
+workspace, which a command route cannot see. The bridges pass each CLI
+request its session id as `DSH_SESSION_ID`, the CLIs pass it on to the MCP
+servers they start, and the route looks the session's working directory up
+from the harness's session store. A call with no live session is refused
+rather than written anywhere else.
 
 **Credentials for these plugins.** Cloudflare, Postgres and Dokploy each take
 a secret either inline in the settings card or as the *name* of an
@@ -636,9 +652,9 @@ database and never sees its connection string. Results are capped at 200 rows.
 `dokploy_servers`, `dokploy_projects`, `dokploy_status` and `dokploy_deploy`
 against servers configured under **Plugins → Dokploy**, one entry per server
 with a URL and an API key inline or by variable name. `dokploy_deploy` starts
-a real deployment with no confirmation. Setting `DSH_DOKPLOY_TOKEN` also
-mounts a token-guarded command route and registers the tools with agy and
-opencode over MCP as `dsh-dokploy`; without it, only DeepSeek models get them.
+a real deployment with no confirmation. Unlike the others, its command route
+and its MCP registration (`dsh-dokploy`) need `DSH_DOKPLOY_TOKEN` set by you;
+without it, only DeepSeek models get the tools.
 
 ### WhatsApp
 

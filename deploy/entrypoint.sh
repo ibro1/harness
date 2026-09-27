@@ -44,6 +44,45 @@ if [[ "${DSH_WHATSAPP:-1}" != "0" ]] && command -v wa-svc >/dev/null 2>&1; then
   export WA_LOG="${WA_LOG:-WARN}"
   mkdir -p "$HOME/.dsh/whatsapp"
 fi
+
+# Command-route tokens for the plugins whose tools reach the agy and opencode
+# CLIs over MCP. Those CLIs run their own agent loop and drop the harness's
+# tools, so without a route and an MCP registration a Gemini or opencode model
+# cannot purge a cache, query a database, publish a file or capture a page.
+# Generated per boot unless set; the routes are reached only by processes in
+# this container, which read the token from the MCP registration. Exported
+# here, before the bridges start, because agy-bridge.mjs admits MCP tool calls
+# only when it sees a registered source's token. DSH_<PLUGIN>_MCP=0 withholds
+# one from the CLIs; direct-provider models keep the native tools regardless.
+random_token() { head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+
+# Register one harness command route with the agy and opencode CLIs as an MCP
+# server, the way the Dokploy and WhatsApp tools are. Arguments: the server
+# name, its wrapper script in deploy/mcp, the variable holding the route's
+# token, the variable its URL travels in, the URL, and a label for the log.
+register_cli_mcp() {
+  local server="$1" script="$APP_DIR/deploy/mcp/$2" token_var="$3" url_var="$4" url="$5" label="$6"
+  if command -v agy >/dev/null 2>&1; then
+    agy mcp add --env "$token_var=${!token_var}" --env "$url_var=$url" "$server" node "$script" >/dev/null 2>&1 \
+      && echo "[entrypoint] Registered the $label tools with agy as the MCP server '$server'" \
+      || echo "[entrypoint] WARNING: could not register the $label MCP server with agy." >&2
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    env "$url_var=$url" node "$APP_DIR/deploy/mcp/register-opencode.mjs" "$script" "$server" "$token_var" "$url_var" >/dev/null 2>&1 \
+      && echo "[entrypoint] Registered the $label tools with opencode as the MCP server '$server'" \
+      || echo "[entrypoint] WARNING: could not register the $label MCP server with opencode." >&2
+  fi
+}
+
+if [[ "${DSH_CLOUDFLARE:-1}" != "0" && "${DSH_CLOUDFLARE_MCP:-1}" != "0" ]]; then
+  export DSH_CLOUDFLARE_TOKEN="${DSH_CLOUDFLARE_TOKEN:-$(random_token)}"
+fi
+if [[ "${DSH_POSTGRES:-1}" != "0" && "${DSH_POSTGRES_MCP:-1}" != "0" ]]; then
+  export DSH_POSTGRES_TOKEN="${DSH_POSTGRES_TOKEN:-$(random_token)}"
+fi
+if [[ ( "${DSH_OUTPUTS:-1}" != "0" || "${DSH_CAPTURE:-1}" != "0" ) && "${DSH_SESSION_TOOLS_MCP:-1}" != "0" ]]; then
+  export DSH_SESSION_TOOLS_TOKEN="${DSH_SESSION_TOOLS_TOKEN:-$(random_token)}"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -272,12 +311,25 @@ if [[ "${DSH_CAPTURE:-1}" != "0" ]]; then
   fi
 fi
 
+# Session tools for the CLIs: publish_output and capture_page over one route.
+# They act on a session's workspace, so the route resolves it from the session
+# id the bridge hands each CLI request (see deploy/plugins/session-tools.mjs).
+if [[ -n "${DSH_SESSION_TOOLS_TOKEN:-}" && "${DSH_SESSION_TOOLS_MCP:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/session-tools.cordis.yml")
+  register_cli_mcp dsh-session-tools session-tools-mcp.mjs DSH_SESSION_TOOLS_TOKEN DSH_SESSION_TOOLS_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT${DSH_SESSION_TOOLS_PATH:-/session-tools}/command" "session outputs and page capture"
+fi
+
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in
 # the settings UI, and with none configured the tools say so. DSH_CLOUDFLARE=0
 # leaves the plugin out.
 if [[ "${DSH_CLOUDFLARE:-1}" != "0" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/cloudflare.cordis.yml")
   echo "[entrypoint] Cloudflare control enabled; configure zones under Settings -> cloudflare"
+  if [[ -n "${DSH_CLOUDFLARE_TOKEN:-}" && "${DSH_CLOUDFLARE_MCP:-1}" != "0" ]]; then
+    register_cli_mcp dsh-cloudflare cloudflare-mcp.mjs DSH_CLOUDFLARE_TOKEN DSH_CLOUDFLARE_COMMAND_URL \
+      "http://127.0.0.1:$INTERNAL_PORT${DSH_CLOUDFLARE_PATH:-/cloudflare}/command" Cloudflare
+  fi
 fi
 
 # Postgres: read-only by default, enforced by the server rather than by reading
@@ -286,6 +338,10 @@ fi
 if [[ "${DSH_POSTGRES:-1}" != "0" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/postgres.cordis.yml")
   echo "[entrypoint] Postgres access enabled (read-only unless a database sets readOnly false); configure under Settings -> postgres"
+  if [[ -n "${DSH_POSTGRES_TOKEN:-}" && "${DSH_POSTGRES_MCP:-1}" != "0" ]]; then
+    register_cli_mcp dsh-postgres postgres-mcp.mjs DSH_POSTGRES_TOKEN DSH_POSTGRES_COMMAND_URL \
+      "http://127.0.0.1:$INTERNAL_PORT${DSH_POSTGRES_PATH:-/postgres}/command" Postgres
+  fi
 fi
 
 # Dokploy control is on by default; the servers are configured in the settings

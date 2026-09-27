@@ -12,13 +12,22 @@ import { homedir } from 'node:os'
 // them — inside this container, which holds the deploy key and the checkout.
 //
 // Tied to the tools that need it deliberately: turn those off and the grant
-// goes with them, rather than outliving the reason it was made. The DeerFlow
-// remote browser is a second such source — its tools reach agy only over MCP,
-// so they are auto-denied without this switch, exactly like the browser
-// bridge's.
-const SKIP_PERMISSIONS =
-  ((process.env.DSH_BROWSER_BRIDGE_TOKEN ?? '') !== '' && (process.env.DSH_BROWSER_MCP || '1') !== '0')
-  || ((process.env.DEERFLOW_BROWSER_MCP_TOKEN ?? '') !== '' && (process.env.DEERFLOW_BROWSER_MCP || '1') !== '0')
+// goes with them, rather than outliving the reason it was made. Every MCP
+// server the entrypoint registers with agy is such a source — its tools reach
+// agy only over MCP, so they are auto-denied without this switch. Each entry
+// is the variable holding that server's token and the switch that withholds
+// it from the CLIs; the entrypoint registers a server under the same pair.
+const MCP_SOURCES = [
+  ['DSH_BROWSER_BRIDGE_TOKEN', 'DSH_BROWSER_MCP'],
+  ['DEERFLOW_BROWSER_MCP_TOKEN', 'DEERFLOW_BROWSER_MCP'],
+  ['DSH_DOKPLOY_TOKEN', undefined],
+  ['WA_AGENT_TOKEN', undefined],
+  ['DSH_CLOUDFLARE_TOKEN', 'DSH_CLOUDFLARE_MCP'],
+  ['DSH_POSTGRES_TOKEN', 'DSH_POSTGRES_MCP'],
+  ['DSH_SESSION_TOOLS_TOKEN', 'DSH_SESSION_TOOLS_MCP'],
+]
+const SKIP_PERMISSIONS = MCP_SOURCES.some(([token, off]) =>
+  (process.env[token] ?? '') !== '' && (off === undefined || (process.env[off] || '1') !== '0'))
 
 /** @returns {string[]} the argument list every agy invocation shares. */
 function agyArgs(model) {
