@@ -172,9 +172,12 @@ section 5 is still outstanding, not that the password gate failed.
 
 Sign in, open Settings, and confirm the `agy` and `opencode` providers list
 their models — that round-trips through the bridges to the binaries. On a
-fresh volume the entrypoint seeds `~/.dsh/settings.yaml` from
+volume that has never booted, the entrypoint seeds `~/.dsh/settings.yaml` from
 `deploy/settings.seed.yaml`, so the providers are registered before you ever
-open the UI; edit them in the UI afterwards and the volume keeps your changes.
+open the UI. The harness imports that file into the profile
+(`~/.dsh/profiles/web/cordis.patch.yml`) once and renames it to
+`settings.yaml.imported`; the entrypoint never seeds again once either of those
+exists, so edits made in the UI stand.
 
 ## GitHub webhook ingress
 
@@ -424,7 +427,7 @@ deleting that volume.
 
 | What | File |
 |---|---|
-| Client ids, app ids, redirect URIs, media base | `/home/node/.dsh/settings.yaml` |
+| Client ids, app ids, redirect URIs, media base | `/home/node/.dsh/profiles/web/cordis.patch.yml` |
 | Secrets written from the card | `/home/node/.dsh/.credentials.yaml` |
 | Account tokens from a sign-in | `/home/node/.dsh/.credentials.yaml` |
 
@@ -722,12 +725,14 @@ poll for it, rather than hold one request open for a long generation.
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads
-`agy models` and `opencode models`, rewrites those providers' lists in
-`~/.dsh/settings.yaml`, and writes `~/.dsh/.model-catalogue.json` for the
+`agy models` and `opencode models`, compares them with those providers' lists
+in the profile (`~/.dsh/profiles/web/cordis.patch.yml`), and writes `~/.dsh/.model-catalogue.json` for the
 bridges to serve. An id the file already describes keeps its tuned limits and
 name; a new one gets limits inferred from its family; a retired one is dropped.
 If the configured default names a model that is gone, it is repointed at a
-surviving one.
+surviving one. A change is written as a `~/.dsh/settings.yaml` holding only the
+changed lists (and the default, when it moved), which the harness imports into
+the profile as it starts; with nothing to change it writes no such file.
 
 A CLI that cannot answer — not installed, not signed in — leaves the configured
 list untouched rather than emptying it. Run it by hand with `--dry-run` to see

@@ -115,7 +115,12 @@ fi
 # Seed provider configuration on a fresh volume. Without this the agy and
 # opencode providers simply do not exist in the UI after a first deploy.
 mkdir -p "$HOME/.dsh" "$HOME/.gemini/antigravity-cli"
-if [[ ! -f "$HOME/.dsh/settings.yaml" ]]; then
+# Only on a volume that has never booted: the harness imports settings.yaml
+# into the profile once and renames it to settings.yaml.imported, so a missing
+# file afterwards is normal, and seeding it again would re-import the seed over
+# the operator's choices (the default model, the provider lists) on every boot.
+if [[ ! -f "$HOME/.dsh/settings.yaml" && ! -f "$HOME/.dsh/settings.yaml.imported" \
+      && ! -f "$HOME/.dsh/profiles/web/cordis.patch.yml" ]]; then
   echo "[entrypoint] seeding ~/.dsh/settings.yaml"
   cp "$APP_DIR/deploy/settings.seed.yaml" "$HOME/.dsh/settings.yaml"
 fi

@@ -78,7 +78,7 @@ map of features to the code that implements them.
 | Feature | Where it lives | State |
 | --- | --- | --- |
 | Hardened auth gate | `packages/host/webserver/src/auth.ts` | Live. scrypt digest, `timingSafeEqual`, server-side revoke on logout, session TTL, `Secure` cookie derived from `X-Forwarded-Proto`, 10 failures / 15 min per client, 8 KB body cap, separate bearer token. A malformed digest **fails the boot** rather than silently 400-ing every request. |
-| Dokploy deployment | `deploy/Dockerfile`, `deploy/entrypoint.sh`, `docker-compose.yml` | Live on `harness.linkfa.de`. The entrypoint seeds `~/.dsh/settings.yaml` once on a fresh volume, so providers and models exist before first login. |
+| Dokploy deployment | `deploy/Dockerfile`, `deploy/entrypoint.sh`, `docker-compose.yml` | Live on `harness.linkfa.de`. The entrypoint seeds `~/.dsh/settings.yaml` only on a volume that has never booted (no `settings.yaml.imported`, no profile patch); the harness imports it into the profile once, so providers and models exist before first login. |
 | agy + opencode providers | `agy-bridge.mjs`, `opencode-bridge.mjs` | Live, at parity. Both expose session id, heartbeat (no idle-timeout retries) and streamed tool progress. |
 | Browser control | `packages/host/browser-bridge`, `deploy/browser-extension/`, `deploy/plugins/browser.cordis.yml` | Connection works. See open thread 4.2. |
 | DeerFlow remote browser | `deploy/plugins/deerflow-browser.cordis.yml` | Live. Configuration only — the harness's own `@deepseek-ai/dsh-mcp-client` speaks the protocol; nothing hand-rolled. 23 tools as `mcp__deerflow__*`. |

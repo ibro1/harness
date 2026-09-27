@@ -1,4 +1,5 @@
-# Seeded into ~/.dsh/settings.yaml on first boot when that file does not exist.
+# Seeded into ~/.dsh/settings.yaml on a volume that has never booted; the harness
+# imports it into the profile once and renames it to settings.yaml.imported.
 # Registers the two local bridges as providers. Edit in the UI afterwards; the
 # volume keeps your changes and this file is never applied again.
 ui-onboarding:

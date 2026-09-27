@@ -17,6 +17,11 @@ import yaml from 'js-yaml'
 
 const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), '.dsh')
 const SETTINGS_PATH = join(DSH_HOME, 'settings.yaml')
+// Since 0.1.7 the harness keeps edited settings in the profile patch and reads
+// settings.yaml only once, as an import it renames away. So the current lists
+// are read from the profile, and a change is handed back as a settings.yaml
+// holding just the changed sections, which the next start imports.
+const PROFILE_PATCH = join(DSH_HOME, 'profiles', process.env.DSH_PROFILE ?? 'web', 'cordis.patch.yml')
 const CATALOGUE_PATH = join(DSH_HOME, '.model-catalogue.json')
 const DRY_RUN = process.argv.includes('--dry-run')
 
@@ -88,12 +93,30 @@ function summarise(provider, before, after) {
   return `${provider}: ${String(after.length)} models, ${parts.join(' ')}`
 }
 
-if (!existsSync(SETTINGS_PATH)) {
-  console.error(`sync-models: no settings at ${SETTINGS_PATH}; nothing to sync`)
-  process.exit(0)
+/** The sections to sync, from a pending settings.yaml or else the profile's own rows. */
+function loadCurrent() {
+  if (existsSync(SETTINGS_PATH)) return { source: SETTINGS_PATH, document: yaml.load(readFileSync(SETTINGS_PATH, 'utf8')) ?? {}, pending: true }
+  if (!existsSync(PROFILE_PATCH)) return undefined
+  let rows
+  try {
+    rows = yaml.load(readFileSync(PROFILE_PATCH, 'utf8'))
+  } catch (error) {
+    console.error(`sync-models: cannot read ${PROFILE_PATCH} (${error.message.split('\n')[0]}); nothing to sync`)
+    process.exit(0)
+  }
+  const config = (id) => (Array.isArray(rows) ? rows : []).find((row) => row?.id === id)?.config
+  const document = {}
+  if (config('llm-pi-ai') !== undefined) document['llm-pi-ai'] = config('llm-pi-ai')
+  if (config('agent-default-model') !== undefined) document['agent-default-model'] = config('agent-default-model')
+  return { source: PROFILE_PATCH, document, pending: false }
 }
 
-const document = yaml.load(readFileSync(SETTINGS_PATH, 'utf8')) ?? {}
+const current = loadCurrent()
+if (current === undefined) {
+  console.error(`sync-models: no settings at ${SETTINGS_PATH} or ${PROFILE_PATCH}; nothing to sync`)
+  process.exit(0)
+}
+const document = current.document
 const providers = document['llm-pi-ai']?.providers
 if (providers === undefined) {
   console.error('sync-models: settings declare no llm-pi-ai providers; nothing to sync')
@@ -103,6 +126,7 @@ if (providers === undefined) {
 const sources = [['agy', listAgy], ['opencode', listOpencode]]
 const catalogue = {}
 let changed = false
+let defaultChanged = false
 
 for (const [provider, list] of sources) {
   if (providers[provider] === undefined) continue
@@ -138,6 +162,7 @@ if (fallback !== undefined && providers[fallback.provider] !== undefined) {
     console.error(`sync-models: default ${fallback.provider}/${fallback.model} is gone; using ${available[0]}`)
     document['agent-default-model'] = { provider: fallback.provider, model: available[0] }
     changed = true
+    defaultChanged = true
   }
 }
 
@@ -151,5 +176,16 @@ if (!changed) {
   console.error('sync-models: settings already match')
   process.exit(0)
 }
-writeFileSync(SETTINGS_PATH, yaml.dump(document, { lineWidth: 120 }))
-console.error(`sync-models: updated ${SETTINGS_PATH}`)
+if (current.pending) {
+  writeFileSync(SETTINGS_PATH, yaml.dump(document, { lineWidth: 120 }))
+  console.error(`sync-models: updated ${SETTINGS_PATH}`)
+  process.exit(0)
+}
+// Only the synced lists and, when it moved, the default: the import merges
+// objects, so nothing else the operator set in the profile is restated.
+const handoff = { 'llm-pi-ai': { providers: Object.fromEntries(sources
+  .filter(([provider]) => providers[provider] !== undefined)
+  .map(([provider]) => [provider, { models: providers[provider].models }])) } }
+if (defaultChanged) handoff['agent-default-model'] = document['agent-default-model']
+writeFileSync(SETTINGS_PATH, yaml.dump(handoff, { lineWidth: 120 }))
+console.error(`sync-models: wrote ${SETTINGS_PATH} for the harness to import into the profile`)
