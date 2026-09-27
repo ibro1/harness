@@ -543,6 +543,159 @@ To use it: nothing to enable for rendering. In a session, ask for an
 infographic, a LinkedIn graphic, a campaign visual or a capture page, and the
 agent loads the skill and follows `SKILL.md`.
 
+## Plugins the entrypoint mounts
+
+Besides the sections above, the entrypoint layers these plugins over the Web
+profile with `--patch`. Each prints one `[entrypoint]` line at boot saying it
+is on, so the container log is the quickest way to see what a given deploy
+runs.
+
+| Plugin | On by default | Turn off with | Model tools reach agy/opencode |
+|---|---|---|---|
+| Session outputs | yes | `DSH_OUTPUTS=0` | no |
+| Page capture | yes | `DSH_CAPTURE=0` | no |
+| Cloudflare | yes | `DSH_CLOUDFLARE=0` | no |
+| Postgres | yes | `DSH_POSTGRES=0` | no |
+| Dokploy control | yes | `DSH_DOKPLOY=0` | only with `DSH_DOKPLOY_TOKEN` |
+| WhatsApp | when `wa-svc` is in the image | `DSH_WHATSAPP=0` | yes |
+| Composer tools | always | — | not a tool |
+| Background-job notifier | always | — | not a tool |
+| LLM gateway | only with `DSH_LLM_GATEWAY_TOKEN` | leave the token unset | not a tool |
+
+**The last column matters more than it looks.** The agy and opencode CLIs run
+their own agent loop and discard the tools the harness offers, so a model
+reached through them sees a plugin's tools only if the entrypoint also
+registers them with that CLI over MCP. Today that is done for the browser,
+DeerFlow, Dokploy and WhatsApp. Outputs, capture, Cloudflare and Postgres
+reach DeepSeek models only; ask a Gemini or opencode model to purge a cache
+and it has no tool to do it with. The same applies to harness plugins
+switched on from the Plugins page, such as Agent Teams.
+
+**Credentials for these plugins.** Cloudflare, Postgres and Dokploy each take
+a secret either inline in the settings card or as the *name* of an
+environment variable (`apiTokenEnv`, `dsnEnv`, `apiKeyEnv`). Compose forwards
+only the variables it lists, so a name you choose yourself cannot reach the
+container that way. Put such variables in `~/.dsh/plugin-env` on the state
+volume instead, one `NAME=value` per line; the entrypoint exports that file
+at boot, and nothing else is read from it. A restart picks up a change.
+
+### Session outputs
+
+`publish_output` copies a finished file into `<session cwd>/.outputs`, which
+the composer's Session outputs drawer lists and downloads. Writing a file
+somewhere in the workspace does not deliver it; publishing does. Files are
+copied, never moved, a name that is taken gets a suffix rather than being
+overwritten, and a file outside the session's working directory is refused.
+Nothing is ever removed, so a long-lived workspace grows until it is cleared
+by hand.
+
+### Page capture
+
+`capture_page` screenshots a URL with headless Chromium and measures it:
+horizontal overflow, broken images, the box of a CSS selector. The PNG lands
+in Session outputs. It needs Chromium in the image; without it the boot line
+is a warning and every capture fails. Loopback and private addresses are
+refused, because the harness's own services and bridges listen on loopback.
+Each capture starts from an empty browser profile, so a page behind a login
+renders logged out.
+
+### Cloudflare
+
+Zone tools for purging cache and reading, setting and deleting DNS records,
+plus, when an account is configured, adding a zone and checking whether it is
+active. Configure it under **Plugins → Cloudflare**:
+
+- **`zones`**: one entry per zone, `{ name, zoneId }` plus a token scoped to
+  that zone (Zone → DNS → Edit and Zone → Cache Purge → Purge). The model
+  names a zone; it never supplies a zone id or a token.
+- **`accounts`** (optional): only for adding zones. That token needs Zone →
+  Zone → Edit across the account, which reaches every domain in it, so keep
+  it out of the zone list and leave `accounts` empty if you never add zones.
+
+With several zones or accounts configured, a tool called without naming one
+refuses and lists them instead of guessing. `cloudflare_dns_set` refuses an MX
+with no priority, and refuses to pick when several records share a name and
+type; `cloudflare_dns_delete` removes one record and refuses to guess the same
+way. Neither asks for confirmation, and a deleted record is not recoverable
+from here. SRV records can be deleted but not created. The zone's **Zone ID**
+is on its Overview page, not the Account ID beside it.
+
+### Postgres
+
+`postgres_databases`, `postgres_tables`, `postgres_query` and
+`postgres_execute` against databases configured under **Plugins → Postgres**,
+one entry per database with a connection string inline (`dsn`) or by variable
+name (`dsnEnv`). Every entry is read-only by default, and the database server
+enforces it: queries run in a read-only transaction that is rolled back, so a
+write hidden in a CTE still fails. `postgres_execute` works only on an entry
+that sets `readOnly: false`, and commits with no undo. The model names a
+database and never sees its connection string. Results are capped at 200 rows.
+
+### Dokploy control
+
+`dokploy_servers`, `dokploy_projects`, `dokploy_status` and `dokploy_deploy`
+against servers configured under **Plugins → Dokploy**, one entry per server
+with a URL and an API key inline or by variable name. `dokploy_deploy` starts
+a real deployment with no confirmation. Setting `DSH_DOKPLOY_TOKEN` also
+mounts a token-guarded command route and registers the tools with agy and
+opencode over MCP as `dsh-dokploy`; without it, only DeepSeek models get them.
+
+### WhatsApp
+
+A whatsmeow sidecar (`wa-svc`, loopback 8003) holds the linked device; its
+session lives in `~/.dsh/whatsapp/store.db` on the state volume, so a scanned
+link survives redeploys. Link a phone by scanning the QR code under
+**Plugins → WhatsApp**. The agent can read chats freely, but
+`whatsapp_send` only queues a draft: nothing is sent until you press Approve
+in that card, and an unapproved draft is dropped on restart. The tools reach
+agy and opencode over MCP as `dsh-whatsapp`.
+
+Two optional doors for other services on the box, each with its own token so
+neither holds the harness's:
+
+- **`WA_EXTERNAL_TOKEN`**: `/whatsapp/api/*` lets a service drive its *own*
+  WhatsApp sessions. It must name a session, and it can never name `default`,
+  which is yours.
+- **`WA_ANNOUNCE_TOKEN`** with **`WA_ANNOUNCE_CHATS`** (`Label=jid,…`):
+  `/whatsapp/announce` posts to those chats on your account with no approval.
+  The allowlist, not the token, is what limits it, and each chat is rate
+  limited by `WA_ANNOUNCE_COOLDOWN_SECONDS`.
+
+### Composer tools
+
+Routes behind the password gate that the web composer uses:
+`/workspace-upload` streams a file into the current session's working
+directory (2 GiB cap), `/workspace-files` and `/workspace-download` list and
+download what a session produced (`.outputs/` and the older `edit/`), and
+`/voice-transcribe` turns a voice note into text through Groq Whisper. Voice
+needs `GROQ_API_KEY`; without it that route answers 503 and the rest work.
+
+### Background-job notifier
+
+Lets a long job the agent starts in the background wake the session when it
+finishes, instead of the agent blocking a turn or polling. The entrypoint
+generates `DSH_BG_TOKEN` at each boot and exports `DSH_NOTIFY_URL` to the
+CLIs; a job ends with a `curl -XPOST "$DSH_NOTIFY_URL&session=…"`, and the
+session gets a new turn to report the result. The route accepts loopback
+callers with that token only, so it is not reachable from outside the
+container.
+
+### LLM gateway
+
+Lets another service on the box use the harness's agy and opencode models
+through the OpenAI protocol, at `/llm/agy/v1` and `/llm/opencode/v1`, with
+`Authorization: Bearer $DSH_LLM_GATEWAY_TOKEN`. The bridges have no
+authentication of their own, which is why they must never get a domain; this
+is the one authenticated way in. The token is deliberately separate from
+`DSH_AUTH_API_TOKEN`: a leaked gateway token spends model quota, not the
+harness. Leave the token unset and the routes do not exist.
+
+A caller that reaches the gateway through the public domain goes through
+Cloudflare, which cuts any request whose response has not started within 100
+seconds with a 524, and a CLI-backed completion often takes longer. Such a
+caller should call the gateway from inside the box, or start the work and
+poll for it, rather than hold one request open for a long generation.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

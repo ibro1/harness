@@ -19,7 +19,7 @@ kind: "package-reference"
 
 ## Summary
 
-Closes the edge half of the deploy loop that [dsh-host-dokploy](../dokploy/README.md) opens. A deploy can be correct at the origin and still serve stale bytes for hours, separately per edge location, because the changed assets were cached — an HTML document updates while its images do not, and the only remaining fix is a person opening the Cloudflare dashboard. Five tools reach the model: `cloudflare_zones`, `cloudflare_purge`, `cloudflare_dns_list`, `cloudflare_dns_set`, `cloudflare_cache_status`.
+Closes the edge half of the deploy loop that [dsh-host-dokploy](../dokploy/README.md) opens. A deploy can be correct at the origin and still serve stale bytes for hours, separately per edge location, because the changed assets were cached — an HTML document updates while its images do not, and the only remaining fix is a person opening the Cloudflare dashboard. Six tools reach the model for the configured zones: `cloudflare_zones`, `cloudflare_purge`, `cloudflare_dns_list`, `cloudflare_dns_set`, `cloudflare_dns_delete`, `cloudflare_cache_status`; three more act on an account once one is configured.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -44,7 +44,8 @@ Composition config, all defaulted:
 - `cloudflare_zones` — the configured zones by name and zone id; tokens are never shown.
 - `cloudflare_purge` — drop cached responses for a zone: `urls` for up to 30 absolute URLs, or `everything: true` for a full purge. One of the two is required; an empty `urls` is refused rather than widened into a full purge.
 - `cloudflare_dns_list` — a zone's DNS records, optionally narrowed by `type` and exact `name`.
-- `cloudflare_dns_set` — upsert one record from `type`, `name`, `content`, and optional `ttl` and `proxied`. The record is looked up by name and type; the reply says whether it was replaced or created.
+- `cloudflare_dns_set` — upsert one record from `type`, `name`, `content`, and optional `ttl`, `proxied`, `priority` and `id`. The record is looked up by `id` when given, otherwise by name and type; the reply says whether it was replaced or created.
+- `cloudflare_dns_delete` — remove one record by `id`, or by a `type` and `name` that match exactly one.
 - `cloudflare_cache_status` — the `cf-cache-status`, `age`, `etag`, `last-modified` and `content-length` of one absolute URL.
 
 Every tool except `cloudflare_cache_status` takes an optional `zone`, needed only when more than one is configured.
@@ -72,7 +73,8 @@ A new zone is usable for DNS as soon as it exists, because `cloudflare_dns_set` 
 - **Cloudflare answers `200` with `success: false`** for many failures, so the HTTP status decides nothing: every response is parsed, `success` is checked, and the `errors[].message` text becomes the tool's failure message.
 - **The SSRF check and the request resolve the hostname separately.** A name that answers differently between the two calls can still reach a private address. The unfollowed `HEAD` bounds what that yields to one response's headers; a deployment that needs more should route outbound traffic through a proxy that enforces the same rule.
 - **No confirmation gate on a purge or a DNS write.** Both act directly; put the agent behind an approval preset when a cold cache or a DNS change would matter.
-- **One record per `cloudflare_dns_set` call**, and a name and type carrying several records is resolved to the first one Cloudflare returns. Round-robin record sets are edited in the dashboard.
+- **One record per `cloudflare_dns_set` call.** A name and type carrying several records is refused unless the call names one by `id`, so a round-robin set is edited one record at a time.
+- **SRV records cannot be created.** Cloudflare takes an SRV value as structured fields rather than a content string; `cloudflare_dns_delete` removes one, and creating one is done in the dashboard.
 
 <a id="dev-note"></a>
 ### Dev Note
