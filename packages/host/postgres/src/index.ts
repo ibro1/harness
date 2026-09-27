@@ -21,17 +21,13 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-
-/** The settings namespace holding the database roster. */
-const NS = 'postgres'
 
 /** One configured database, as stored in settings. */
 export interface PostgresDatabase {
@@ -47,33 +43,28 @@ export interface PostgresDatabase {
   statementTimeoutMs?: number
 }
 
-/** The resolved `postgres` settings section. */
-export interface PostgresSettings {
-  databases: PostgresDatabase[]
-}
-
 /** Server-side statement timeout applied when an entry does not choose one. */
 const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000
 
-/** Schema for the settings namespace; a DSN is a credential, so `dsnEnv` is the documented preference. */
-const CONFIG_SCHEMA: z<PostgresSettings> = z.object({
-  databases: z.array(z.object({
-    name: z.string().required().description('A short label you choose for this database, used when asking a tool to act on it.'),
-    dsnEnv: z.string().description('Preferred: name of the environment variable holding this database connection string (e.g. PG_DSN_MAIN), so the DSN stays out of settings. Requires that variable to be set on the harness.'),
-    dsn: z.string().description('Alternative to dsnEnv: the connection string itself, for example postgres://user:pass@host:5432/db. Simpler, but it is stored here in settings and shown in this form.'),
-    readOnly: z.boolean().default(true).description('Leave on so tools may only read. Turn it off to let postgres_execute write to, and delete from, this database.'),
-    statementTimeoutMs: z.natural().min(100).default(DEFAULT_STATEMENT_TIMEOUT_MS).description('Server-side statement timeout, so a careless query cannot hold a connection open.'),
-  })).default([]).description('Postgres databases this harness may query. Give each database either dsnEnv or dsn.'),
-})
+/** The database roster, edited from the Plugins page; a DSN is a credential, so `dsnEnv` is the documented preference. */
+const DATABASES_SCHEMA: z<PostgresDatabase[]> = z.array(z.object({
+  name: z.string().required().description('A short label you choose for this database, used when asking a tool to act on it.'),
+  dsnEnv: z.string().description('Preferred: name of the environment variable holding this database connection string (e.g. PG_DSN_MAIN), so the DSN stays out of settings. Requires that variable to be set on the harness.'),
+  dsn: z.string().description('Alternative to dsnEnv: the connection string itself, for example postgres://user:pass@host:5432/db. Simpler, but it is stored here in settings and shown in this form.'),
+  readOnly: z.boolean().default(true).description('Leave on so tools may only read. Turn it off to let postgres_execute write to, and delete from, this database.'),
+  statementTimeoutMs: z.natural().min(100).default(DEFAULT_STATEMENT_TIMEOUT_MS).description('Server-side statement timeout, so a careless query cannot hold a connection open.'),
+})).default([]).description('Postgres databases this harness may query. Give each database either dsnEnv or dsn.')
 
 /** The plugin name, for the Loader. */
 export const name = 'postgres'
 
 /** The services this plugin reads. */
-export const inject = ['settings', 'agents', 'webServer']
+export const inject = ['agents', 'webServer']
 
-/** Composition config; the roster lives in settings, so nothing is required here. */
+/** Composition config. The databases are editable live from the Plugins page; nothing is required. */
 export interface Config {
+  /** The databases the tools may act on. */
+  databases: Volatile<PostgresDatabase[]>
   /** Most rows one query renders into the model's context, however many matched. */
   maxRows: number
   /** Byte budget for one query's rendered table, so a wide result cannot flood the context. */
@@ -84,8 +75,9 @@ export interface Config {
   token: string
 }
 
-/** Composition config; the roster lives in settings, so nothing is required here. */
-export const Config: z<Config> = z.object({
+/** Composition config. The databases are editable live from the Plugins page; nothing is required. */
+export const Config = z.object({
+  databases: DATABASES_SCHEMA.volatile(),
   maxRows: z.natural().min(1).max(1000).default(200),
   maxOutputBytes: z.natural().min(1024).default(64_000),
   path: z.string().default('/postgres'),
@@ -816,8 +808,7 @@ export function setPoolFactory(factory: SqlPoolFactory): SqlPoolFactory {
  * @param config - validated composition config.
  */
 export function apply(ctx: Context, config: Config): void {
-  const scope = ctx.settings.register(NS, CONFIG_SCHEMA, { base: { databases: [] } })
-  const readDatabases: ReadDatabases = () => scope.get().databases
+  const readDatabases: ReadDatabases = () => config.databases.get()
   const pools = new PoolRegistry(dsn => poolFactory(dsn))
   ctx.effect(() => () => {
     void pools.dispose()

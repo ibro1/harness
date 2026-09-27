@@ -17,7 +17,7 @@ kind: "package-reference"
 
 ## Summary
 
-Lets an agent answer questions about a database itself. An agent that can deploy an app, read its logs and edit its code still cannot say how many rows are in a table or why a job is stuck; until now the answer was a SQL statement handed to a human to paste into a terminal. Databases are configured in the `postgres` user-settings namespace — one entry per database, edited in the settings UI the same way models are. Four tools reach the model: `postgres_databases`, `postgres_query`, `postgres_execute`, `postgres_tables`.
+Lets an agent answer questions about a database itself. An agent that can deploy an app, read its logs and edit its code still cannot say how many rows are in a table or why a job is stuck; until now the answer was a SQL statement handed to a human to paste into a terminal. Databases are an editable Config field, `databases`, set on the **Plugins → Postgres** page and saved into the profile, one entry per database. Four tools reach the model: `postgres_databases`, `postgres_query`, `postgres_execute`, `postgres_tables`.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

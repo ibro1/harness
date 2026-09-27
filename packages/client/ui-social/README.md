@@ -1,5 +1,5 @@
 ---
-description: "Social plugin card for Settings → Plugins: what the agent can post to, which credentials are about to lapse, which targets skip the approval gate, and one Disconnect per provider."
+description: "Social plugin page on the Plugins page: what the agent can post to, which credentials are about to lapse, which targets skip the approval gate, and one Disconnect per provider."
 kind: "package-reference"
 ---
 
@@ -18,7 +18,7 @@ kind: "package-reference"
 
 ## Summary
 
-The browser half of the social capability's human surface: one card in Settings → Plugins that answers two questions without a conversation — **what can this thing post to, and is any of it about to stop working** — and carries the forms for the platform applications it posts through.
+The browser half of the social capability's human surface: one page on the Plugins page that answers two questions without a conversation — **what can this thing post to, and is any of it about to stop working** — and carries the forms for the platform applications it posts through.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -27,11 +27,11 @@ Two different things get called credentials here, and the card keeps them apart.
 
 The other thing the card adds is that **state is not configuration**: before it, the only way to learn that a LinkedIn token lapses in four days was to ask the agent to list targets, and that is a fact somebody should be able to see.
 
-The card reads `GET /social/status` and posts to `POST /social/disconnect`, both served by [`dsh-tool-social`](../../social/tool-social/README.md) behind the web server's password gate. The application forms read and write each provider's own settings namespace through `ctx.settingsScope`, and write secrets through the credentials domain.
+The card reads `GET /social/status` and posts to `POST /social/disconnect`, both served by [`dsh-tool-social`](../../social/tool-social/README.md) behind the web server's password gate. The application forms read and write each provider's editable Config fields through `ctx.configForms`, and write secrets through the credentials domain.
 
 ## Use this package
 
-Mount it alongside `ui-settings-plugins`. It registers one card into `settings.plugin.item` keyed `social`, and the tab lists a card only while the Host serves a settings namespace of the same name — `tool-social` serves an empty `social` namespace for exactly that reason. Nothing appears if only one half is composed.
+Mount it alongside `ui-plugin-manager`. It registers one page into `plugins.item` keyed `social` when `GET /social/status` answers JSON, which is only while `tool-social` is composed. Nothing appears if only the browser half is.
 
 ### What the card shows
 
@@ -57,9 +57,9 @@ The application blocks render in every state, including `error` and `empty`. A d
 
 `SocialCard.tsx` holds its own state and `fetch`es the two routes directly, following `ui-whatsapp`: the status half shows live host state rather than editing a settings blob.
 
-The application half is the opposite kind of thing and uses the opposite machinery: `app-credentials-controller.ts` builds one `CardForm` per provider namespace, re-exported from `ui-settings-plugins` so this card stages and saves exactly as the shipped plugin cards do rather than inventing a second answer to what Save means. The **secret** is not a section field at all — a secret written into a settings document rides every read of that section back to the browser and sits in the form. Each section names the environment variable or credential record instead, and the secret is written through `ctx.remote.credentials.set`, which reports only whether one is configured and never hands one back. That is the split the web-search card uses for its API key.
+The application half is the opposite kind of thing and uses the opposite machinery: `app-credentials-controller.ts` builds one form per provider entry over `ctx.configForms`, and a save writes that block's fields in one revision-fenced mutation, so the fields a block saves land together or not at all. The **secret** is not a section field at all — a secret written into a settings document rides every read of that section back to the browser and sits in the form. Each section names the environment variable or credential record instead, and the secret is written through `ctx.remote.credentials.set`, which reports only whether one is configured and never hands one back. That is the split the web-search card uses for its API key.
 
-`APP_CREDENTIAL_SPECS` names the three namespaces statically, as `ui-settings-plugins` names its seven cards: a fourth provider joins by adding an entry. While the card is open it re-reads the status every 30 seconds — expiry moves in days, so a fast poll would only add noise. Row classes carry the host's `state` discriminant, and the readiness colour comes from that one field rather than from any arithmetic in the browser: the warning window is the provider's own policy (`reauthWarningDays` on LinkedIn, for instance), and recomputing it here would let the card and the seam disagree.
+`APP_CREDENTIAL_SPECS` names the three provider entries statically: a fourth provider joins by adding an entry. While the card is open it re-reads the status every 30 seconds — expiry moves in days, so a fast poll would only add noise. Row classes carry the host's `state` discriminant, and the readiness colour comes from that one field rather than from any arithmetic in the browser: the warning window is the provider's own policy (`reauthWarningDays` on LinkedIn, for instance), and recomputing it here would let the card and the seam disagree.
 
 Every string routes through the typed `social` dictionary in `locales.ts`, with the `zh` key set as the source of truth and `en` checked complete against it.
 
@@ -75,7 +75,7 @@ None. This package contributes no tool, no prompt text, and no session event, an
 - **A missing or wrong redirect URI is editable here but not diagnosable here.** The field is on the card, and saving it takes effect without a redeploy. What the card cannot say is whether the value matches what the platform has registered: a provider only refuses when a sign-in starts, so a mismatch never appears in `targets()` and the status route has nothing to report. Reporting it needs the providers to publish their own configuration readiness through the seam.
 - **A secret already set in the process environment cannot be edited from the card.** The inherited environment outranks the credential store this card writes to, so a save there would be stored and then shadowed. The control is disabled and names the variable rather than accepting a write that would do nothing — but the fix is in the deployment's environment, which is not a place this card can reach. Ids and redirect URIs are unaffected: those resolve settings-first.
 - **The application blocks do not say whether a value works.** They report what is stored — set here, inherited, secret configured or not — and no block ever shows `ready`. Proving an application id and secret go together means starting a sign-in, which is a conversation with the agent rather than a button here.
-- **A provider composed with no settings service loses its block, silently.** The block renders only while its namespace is served, and a deployment mounting the providers without a settings service gets no application forms and no line saying why. That deployment can still set everything through the environment, which is why it is a limitation rather than a defect.
+- **A provider whose entry is not composed loses its block, silently.** The block renders only while the Host serves that provider's form, so a deployment mounting only some providers gets no forms for the rest and no line saying why. It can still set everything through the environment.
 - **Disconnect depends on the host resolving a credential address.** The social seam publishes no provider-to-record lookup, so a provider whose record cannot be addressed shows an explanation instead of a button — see `tool-social`'s `credentialKeys` config. The card cannot offer to fix that from here, because writing plugin config is not this card's job.
 - **No per-target disconnect.** A credential authorizes a provider, not one Page or channel, so the smallest thing this card can remove is a provider's whole grant. Removing one Page would need a provider-level operation the seam does not have.
 - **The result line is not a log.** What a disconnect removed is shown until the next action and then gone; there is no durable record of it in the session. A durable "the operator disconnected this account" fact needs a session event of its own.

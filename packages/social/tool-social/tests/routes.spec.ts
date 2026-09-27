@@ -5,7 +5,7 @@
  * surfaces, the disconnect that removes a record, every refusal that leaves
  * storage untouched, and that both routes mount authenticated.
  *
- * The `social`, `webServer`, `credentials`, and `settings` services are stubs,
+ * The `social`, `webServer`, and `credentials` services are stubs,
  * because this package owns the routes and what they expose, not the registry,
  * the web server, or the credential store.
  */
@@ -78,7 +78,6 @@ interface MountOptions {
 /** What a mounted plugin exposes to a test. */
 interface Mounted {
   routes: Map<string, RecordedRoute>
-  namespaces: string[]
   deleted: string[]
   described: string[]
   reads: string[]
@@ -87,7 +86,6 @@ interface Mounted {
 /** Mount the plugin against stub services and capture what it registered. */
 function mount(options: MountOptions = {}): Mounted {
   const routes = new Map<string, RecordedRoute>()
-  const namespaces: string[] = []
   const deleted: string[] = []
   const described: string[] = []
   const reads: string[] = []
@@ -120,18 +118,6 @@ function mount(options: MountOptions = {}): Mounted {
     effect(fn: () => unknown) { return fn() },
     get(service: string) {
       if (service === 'credentials') return credentials
-      if (service === 'settings') {
-        return { register(ns: string) { namespaces.push(ns); return { get: () => ({}) } } }
-      }
-      return undefined
-    },
-    // The plugin awaits the settings service in a scope rather than sampling
-    // for it. This stub holds one, so the scope runs at once; the timing that
-    // makes the difference on a real boot is covered in settings-card.spec.ts.
-    inject(deps: string[], fn: (scope: unknown) => void) {
-      const resolved = Object.fromEntries(deps.map(dep => [dep, ctx.get(dep)]))
-      if (Object.values(resolved).some(value => value === undefined)) return undefined
-      fn({ ...ctx, ...resolved })
       return undefined
     },
     tools: { register() { return () => {} } },
@@ -147,7 +133,7 @@ function mount(options: MountOptions = {}): Mounted {
     },
   }
   apply(ctx as unknown as Context, options.config ?? {})
-  return { routes, namespaces, deleted, described, reads }
+  return { routes, deleted, described, reads }
 }
 
 /** The captured response of one request. */
@@ -197,10 +183,6 @@ describe('social routes', () => {
       // deployment password. An explicit false would publish it anonymously.
       expect(route.authenticate).toBeUndefined()
     }
-  })
-
-  it('serves the social settings namespace so the card is listed', () => {
-    expect(mount().namespaces).toEqual(['social'])
   })
 
   it('reports every target with its id, provider, label, accepts and readiness', async () => {
@@ -458,9 +440,6 @@ describe('social routes', () => {
     const ctx = {
       effect(fn: () => () => void) { disposers.push(fn()); return () => {} },
       get: () => undefined,
-      // No settings service here, so the awaited scope never runs; this test
-      // is about the routes leaving with the fiber.
-      inject: () => undefined,
       tools: { register: () => () => {} },
       webServer: {
         register(route: RecordedRoute) {

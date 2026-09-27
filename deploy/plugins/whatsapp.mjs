@@ -15,14 +15,11 @@
 // sidecar fails safe.
 
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import z from '@deepseek-ai/schemastery'
 
 export const name = 'whatsapp'
-// 'settings' is load-bearing: the Settings → Plugins tab only renders a card
-// whose key is ALSO a settings namespace the host serves. WhatsApp has nothing
-// to configure (it's linked by scanning the card's QR), so the namespace is an
-// empty schema — its mere presence is what lists the card.
-export const inject = ['webServer', 'settings']
+// The Plugins page lists the card while GET /whatsapp/status answers, so this
+// plugin needs no settings form of its own: it has nothing to configure.
+export const inject = ['webServer']
 
 const SVC_URL = (process.env.WA_SVC_URL ?? 'http://127.0.0.1:8003').replace(/\/$/, '')
 const SVC_TOKEN = (process.env.WA_SVC_TOKEN ?? '').trim()
@@ -226,14 +223,6 @@ export function apply(ctx) {
   } else {
     announce(`proxying sidecar ${SVC_URL}; command route ${AGENT_TOKEN === '' ? 'DISABLED (no WA_AGENT_TOKEN)' : 'enabled'}`)
   }
-
-  // Serve the `whatsapp` settings namespace so the Settings → Plugins tab lists
-  // the card (its key must be both a registered card AND a served namespace).
-  // Empty schema: there is nothing to configure — linking happens via the QR.
-  // Called directly, NOT via ctx.effect: settings.register returns a scope, not
-  // a disposer, so wrapping it makes cordis reject it as an "Invalid effect"
-  // (the same direct call dokploy's host plugin uses).
-  ctx.settings.register('whatsapp', z.object({}).description('WhatsApp is linked from this card by scanning a QR — nothing to configure.'), { base: {} })
 
   const route = (path, handler) =>
     ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `whatsapp: ${path}`)

@@ -16,7 +16,7 @@ kind: "package-reference"
 
 ## Summary
 
-Lets an agent see and drive your Dokploy servers. Servers are configured in the `dokploy` user-settings namespace — added and edited in the settings UI the same way models are, one entry per server with a name, a base URL, and the name of an environment variable holding that server's API key. The key itself lives in the environment, never in settings, exactly as a model's `apiKeyEnv` does. Four tools reach the model: `dokploy_servers`, `dokploy_projects`, `dokploy_deploy`, `dokploy_status`.
+Lets an agent see and drive your Dokploy servers. Servers are an editable Config field, `servers`, set on the **Plugins → Dokploy** page and saved into the profile, one entry per server with a name, a base URL, and the name of an environment variable holding that server's API key. The key itself lives in the environment, never in settings, exactly as a model's `apiKeyEnv` does. Four tools reach the model: `dokploy_servers`, `dokploy_projects`, `dokploy_deploy`, `dokploy_status`.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

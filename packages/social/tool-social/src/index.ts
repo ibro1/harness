@@ -37,8 +37,6 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { SocialMedia, SocialTarget } from '@deepseek-ai/dsh-social'
 import type {} from '@deepseek-ai/dsh-user-approval'
-// Type-only merge: declares `Context.settings`, resolved optionally below.
-import type {} from '@deepseek-ai/dsh-settings'
 import { parseDeclaredKeys, registerSocialRoutes } from './routes.ts'
 
 /** The plugin name, for the Loader. */
@@ -392,26 +390,4 @@ export function apply(ctx: Context, config: Config = {}): void {
     ctx.effect(() => ctx.tools.register(tool), `tool-social: ${tool.name}`)
   }
   registerSocialRoutes(ctx, exempt, credentialKeys)
-  // The Settings → Plugins tab dispatches one card per settings namespace the
-  // Host serves, so the card is listed only while `social` is a served
-  // namespace. There is nothing to configure from a form — accounts are
-  // connected by asking the agent, and `postWithoutApproval` is a composition
-  // decision, not a user preference — so the schema is empty and its presence
-  // is the whole contribution.
-  //
-  // Through `ctx.inject` rather than `ctx.get`, which is the difference between
-  // a listed card and no card at all. The settings service is file-backed and
-  // resolves its `Service.init` off disk, so it is reliably absent at the
-  // moment this plugin applies; a `ctx.get('settings')?.` here read undefined
-  // on every boot and registered nothing, silently, forever. Keeping it out of
-  // `inject` is still right — a composition with no settings service should
-  // lose the card, not the tools — and the scoped inject keeps that property
-  // while waiting for the service instead of sampling for it once.
-  //
-  // Called directly inside the scope, NOT through `ctx.effect`:
-  // `settings.register` returns a scope rather than a disposer (it files its
-  // own effect), and wrapping it makes Cordis reject an invalid effect.
-  ctx.inject(['settings'], (settingsCtx: Context) => {
-    settingsCtx.settings.register('social', z.object({}).description('Social accounts are connected by asking the agent to sign in, and this card shows what they can post to. Nothing here is edited from a form.'), { base: {} })
-  })
 }

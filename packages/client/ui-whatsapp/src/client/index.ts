@@ -1,7 +1,7 @@
 /**
  * Browser half: the WhatsApp plugin page. Registers one page into the Plugins
- * page (`plugins.item`, while the Host serves the `whatsapp` settings
- * namespace) that links an account by QR,
+ * page (`plugins.item`, when the Host answers its status route) that links an
+ * account by QR,
  * shows the linked state, disconnects, and approves or discards the messages
  * the agent has queued to send. All behaviour talks to the host /whatsapp/*
  * routes; this half owns only the card and its copy.
@@ -9,11 +9,10 @@
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-// Type-only merges: the plugins.item SlotMap entry, ctx.locale, ctx.settingsScope,
-// and the SlotRegistry face.
+// Type-only merges: the plugins.item SlotMap entry, ctx.locale, and the
+// SlotRegistry face.
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { en, zh, type WhatsAppKey } from './locales.ts'
 import { WhatsAppCard } from './WhatsAppCard.tsx'
@@ -30,15 +29,29 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Locale dictionary namespace owned by this plugin. */
 const NS = 'whatsapp'
 
-/** The settings namespace the host plugin serves, which gates this page. */
-const WHATSAPP_NS = 'whatsapp'
-
 /** Services this plugin injects. */
-export const inject = ['slots', 'locale', 'settingsScope']
+export const inject = ['slots', 'locale']
+
+/**
+ * Whether the Host composes the WhatsApp plugin. The plugin has nothing to
+ * configure, so it has no settings form whose presence could gate the page;
+ * its own status route does instead. Only a JSON answer means the plugin is
+ * there: a path no route claims answers 404 or with the web app's HTML shell.
+ * @returns true when GET /whatsapp/status answers JSON.
+ */
+export async function hostServesWhatsApp(): Promise<boolean> {
+  try {
+    const response = await fetch('/whatsapp/status')
+    return (response.headers.get('content-type') ?? '').includes('application/json')
+  } catch (_error) {
+    // No answer at all reads as no plugin; the page is simply not listed.
+    return false
+  }
+}
 
 /**
  * Apply the plugin: register the dictionaries and mount the WhatsApp page on
- * the Plugins page while the Host serves its namespace.
+ * the Plugins page when the Host composes the plugin.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
@@ -53,25 +66,16 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
   }, WhatsAppCard))
 
-  // The page registers only while the Host serves this plugin's settings
-  // namespace, so a deployment that does not compose it shows no dead entry.
-  // The shared SettingsScope mirror updates after document commits and reconnects.
-  const describeFace = ctx.settingsScope.describe()
+  // Probed once per page load: whether the plugin is composed changes only
+  // with a redeploy, which reloads the page.
   ctx.effect(() => {
     let off: (() => void) | undefined
-    const sync = (): void => {
-      const served = describeFace.getSnapshot().view?.namespaces.some(view => view.ns === WHATSAPP_NS) ?? false
-      if (served && off === undefined) off = register()
-      else if (!served && off !== undefined) {
-        off()
-        off = undefined
-      }
-    }
-    const unsubscribe = describeFace.subscribe(sync)
-    void describeFace.ensure()
-    sync()
+    let live = true
+    void hostServesWhatsApp().then((served) => {
+      if (served && live) off = register()
+    })
     return () => {
-      unsubscribe()
+      live = false
       off?.()
     }
   }, 'ui-whatsapp: configuration page')

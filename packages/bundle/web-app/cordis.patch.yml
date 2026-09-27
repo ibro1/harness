@@ -102,6 +102,10 @@
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
 
+    # One background job's observation record streamed over Typert Remote;
+    # the roster rides the session control stream above.
+    - id: job-controller
+      name: '@deepseek-ai/dsh-api-job-controller'
     # Workspace file service: bounded read, directory listing, and the
     # agent-write change feed inside the session workspace root.
     - id: terminal-controller
@@ -109,8 +113,27 @@
     - id: workspace-files
       name: '@deepseek-ai/dsh-api-workspace-files'
 
+    # Durable Host-wide reminders. The Schedule service owns the task store and
+    # delivers each due occurrence as a follow-up in its original Session;
+    # `time-context` supplies the current time, browser zone, and elapsed time
+    # the model needs to resolve an unqualified date or time. The browser half
+    # is the `ui-schedule` row below.
+    - id: time-context
+      name: '@deepseek-ai/dsh-time-context'
+      disabled: true
+
+    - id: schedule
+      name: '@deepseek-ai/dsh-schedule'
+      disabled: true
+
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
+    - id: ui-settings-account
+      name: '@deepseek-ai/dsh-client-ui-settings-account'
+
+    - id: account-controller
+      name: '@deepseek-ai/dsh-api-account-controller'
+
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
 
@@ -120,6 +143,12 @@
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
+
+    # The Host inspect providers are process-global: the registry rejects a
+    # duplicate id, so they register here once and every preset's `tool-cordis`
+    # row reads them.
+    - id: cordis-inspect-providers
+      name: '@deepseek-ai/dsh-tool-cordis/host'
 
     # Ordinary provider for the parsed Web flags. Its plugin-level injection
     # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
@@ -220,8 +249,75 @@
     - id: ui-social
       name: '@deepseek-ai/dsh-client-ui-social'
 
+    # Fork-local operations and social plugins, for the Dokploy deployment
+    # (deploy/entrypoint.sh exports DSH_DEPLOY=1; elsewhere they stay off).
+    # Inserted in this bundle layer, not by the entrypoint's --patch overlays:
+    # the profile patch that holds Plugins-page edits composes after bundles and
+    # before overlays, so an entry an overlay inserts can never take a saved
+    # edit. Each DSH_* switch the entrypoint documents still turns one off.
+    - id: cloudflare
+      name: '@deepseek-ai/dsh-host-cloudflare'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_CLOUDFLARE === '0'
+      config:
+        path: !!js process.env.DSH_CLOUDFLARE_PATH || '/cloudflare'
+        token: !!js process.env.DSH_CLOUDFLARE_TOKEN || ''
+
+    - id: postgres
+      name: '@deepseek-ai/dsh-host-postgres'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_POSTGRES === '0'
+      config:
+        path: !!js process.env.DSH_POSTGRES_PATH || '/postgres'
+        token: !!js process.env.DSH_POSTGRES_TOKEN || ''
+
+    - id: dokploy
+      name: '@deepseek-ai/dsh-host-dokploy'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_DOKPLOY === '0'
+      config:
+        path: !!js process.env.DSH_DOKPLOY_PATH || '/dokploy'
+        token: !!js process.env.DSH_DOKPLOY_TOKEN || ''
+
+    # Social posting speaks publicly under the operator's name, so it is off
+    # unless DSH_SOCIAL=1. The authorization seam comes from dsh-base.
+    - id: social
+      name: '@deepseek-ai/dsh-social'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_SOCIAL !== '1'
+
+    - id: tool-social
+      name: '@deepseek-ai/dsh-tool-social'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_SOCIAL !== '1'
+      config:
+        postWithoutApproval: []
+        credentialKeys:
+          facebook: 'social-meta/default'
+          instagram: 'social-meta/default'
+
+    - id: social-linkedin
+      name: '@deepseek-ai/dsh-social-linkedin'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_SOCIAL !== '1'
+      config:
+        redirectUri: !!js process.env.SOCIAL_LINKEDIN_REDIRECT_URI || ''
+
+    - id: social-meta
+      name: '@deepseek-ai/dsh-social-meta'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_SOCIAL !== '1'
+      config:
+        redirectUri: !!js process.env.SOCIAL_META_REDIRECT_URI || ''
+        publicMediaBaseUrl: !!js process.env.SOCIAL_META_PUBLIC_MEDIA_BASE_URL || ''
+
+    - id: social-youtube
+      name: '@deepseek-ai/dsh-social-youtube'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_SOCIAL !== '1'
+      config:
+        redirectUri: !!js process.env.SOCIAL_YOUTUBE_REDIRECT_URI || ''
+
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
+
+    - id: shortcuts
+      name: '@deepseek-ai/dsh-client-shortcuts'
+
+    - id: ui-shortcuts
+      name: '@deepseek-ai/dsh-client-ui-shortcuts'
 
     - id: ui-layout
       name: '@deepseek-ai/dsh-client-ui-layout'
@@ -252,9 +348,10 @@
     - id: ui-sidebar-documentpreview
       name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
 
-    # Sandboxed HTTP(S) Browser tabs, including loopback targets.
+    # Web profiles opt in; Desktop retains sandboxed HTTP(S) Browser tabs.
     - id: ui-sidebar-browser
       name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
+      disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
 
     - id: ui-sidebar-terminal
       name: '@deepseek-ai/dsh-client-ui-sidebar-terminal'
@@ -281,9 +378,6 @@
     # bundles the sidebar page leaves out are inspected here.
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
-
-    - id: ui-settings-unarchive-sessions
-      name: '@deepseek-ai/dsh-client-ui-settings-unarchive-sessions'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
@@ -345,16 +439,17 @@
     - id: ui-reference
       name: '@deepseek-ai/dsh-client-ui-reference'
 
-    # Read-only active Schedule catalog. The shipped Web graph resolves the
-    # client package but leaves it disabled; the explicit Schedule overlay
-    # enables this same row together with the host Schedule services.
+
+    # Background jobs: the session-header roster with on-demand streaming
+    # record panels over the session job-output service.
+    - id: ui-jobs
+      name: '@deepseek-ai/dsh-client-ui-jobs'
+
+    # Task management and Session reminder catalog over the Host Schedule
+    # service mounted above.
     - id: ui-schedule
       name: '@deepseek-ai/dsh-client-ui-schedule'
       disabled: true
-
-    # Background jobs: the session-header list over the jobsBySession mirror.
-    - id: ui-jobs
-      name: '@deepseek-ai/dsh-client-ui-jobs'
 
     # Goal surface: GoalBar in the input dock over the goal session projection.
     - id: ui-goal
@@ -378,10 +473,31 @@
     - id: ui-agent-preset
       name: '@deepseek-ai/dsh-client-ui-agent-preset'
 
-    # Plugin configuration: the host-plane sections a user owns, as expandable
-    # cards. A namespace this deployment does not expose renders nothing.
+    # The Built-in plugins settings section: the navigation entry and the tab
+    # row the inventory tab registers into. The official configuration pages
+    # are the companion rows below.
     - id: ui-settings-plugins
       name: '@deepseek-ai/dsh-client-ui-settings-plugins'
+
+    # The official settings pages: one companion package per host-plane
+    # namespace, each registering its page into the Plugins page while the
+    # Host serves the namespace.
+    - id: ui-settings-shell
+      name: '@deepseek-ai/dsh-client-ui-settings-shell'
+
+    - id: ui-settings-agent-loop
+      name: '@deepseek-ai/dsh-client-ui-settings-agent-loop'
+
+    - id: ui-settings-subagent
+      name: '@deepseek-ai/dsh-client-ui-settings-subagent'
+
+    - id: ui-settings-web-search
+      name: '@deepseek-ai/dsh-client-ui-settings-web-search'
+
+    # Fork-local: the Dokploy, Cloudflare and Postgres settings pages, each
+    # registered while its plugin's namespace is served.
+    - id: ui-settings-operations
+      name: '@deepseek-ai/dsh-client-ui-settings-operations'
 
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
@@ -521,15 +637,11 @@
 - id: tool-web
   disabled: true
 
-# The preset roster. The shipped presets are bundled inside
-# `dsh-agent-presets` itself and prepended as a read-only `system` root
-# (`includeShippedRoot`); `$DSH_HOME/.agent-presets` is where a person — or an
-# agent — authors their own, appended by the same package (`includeUserRoot`),
-# and carries the same trust as shell access because a preset IS a
-# composition. This row only names the default and any deployment-added
-# `roots`; no launcher patching is involved.
+# The preset selection registry. The shipped preset declarations follow as
+# separate patch files under `presets/`, listed after this file in
+# `package.json` `dsh.bundle.patch`.
 - insert:
-    - id: agent-presets
-      name: '@deepseek-ai/dsh-agent-presets'
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
         default: standard

@@ -52,24 +52,6 @@ export async function readGrant(
   }
 }
 
-/**
- * Store this package's grant, replacing whatever was there.
- *
- * A fresh authorization replaces rather than merges: the new token's Pages,
- * scopes, and expiry all belong to that grant, and half of an old one beside
- * them would describe access nobody has.
- * @param credentials - the credential seam.
- * @param key - this plugin's record key.
- * @param grant - the grant to store.
- */
-export async function writeGrant(
-  credentials: CredentialProvider,
-  key: CredentialKey,
-  grant: MetaGrant,
-): Promise<void> {
-  await credentials.modifyRecord(key, () => Promise.resolve({ kind: 'grant', payload: grant }))
-}
-
 /** What the stored expiry says about a token right now. */
 export interface GrantLifetime {
   /** Whether the user token has already lapsed, so no call is worth making. */

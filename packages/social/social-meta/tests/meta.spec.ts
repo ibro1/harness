@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { AuthorizationFlow } from '@deepseek-ai/dsh-authorization'
+import type { AuthorizationFlow, AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { apply, type Config } from '../src/index.ts'
 import type { SocialProvider } from '../src/types.ts'
@@ -117,8 +117,21 @@ function grantRecord(overrides: Record<string, unknown> = {}): CredentialRecord 
   }
 }
 
+/** Config with the Plugins-page fields as plain values; the mount wraps them the way the Loader does. */
+type PlainConfig = Omit<Config, 'appId' | 'redirectUri' | 'appSecretEnv' | 'publicMediaBaseUrl'> & {
+  appId: string
+  redirectUri: string
+  appSecretEnv?: string
+  publicMediaBaseUrl: string
+}
+
+/** A registered flow whose session supplies `commit` itself, storing the record as the service does. */
+type TestFlow = Omit<AuthorizationFlow, 'run'> & {
+  run(session: Omit<AuthorizationSession, 'commit'>): Promise<void>
+}
+
 /** Config for a mount pointed at the stub, with the Instagram waits shortened. */
-function config(base: string, overrides: Partial<Config> = {}): Config {
+function config(base: string, overrides: Partial<PlainConfig> = {}): PlainConfig {
   return {
     account: 'default',
     appId: '',
@@ -142,29 +155,22 @@ function config(base: string, overrides: Partial<Config> = {}): Config {
 /** One mounted plugin: what it registered, and the handle that disposes it. */
 interface Mounted {
   providers: SocialProvider[]
-  flows: AuthorizationFlow[]
+  flows: TestFlow[]
   stored: () => CredentialRecord | undefined
   dispose: () => void
 }
 
 /** Mount the plugin against stub seams. */
-function mount(options: { config: Config; record?: CredentialRecord; settings?: Record<string, string> }): Mounted {
+function mount(options: {
+  config: PlainConfig
+  record?: CredentialRecord
+  pluginsPage?: Partial<Record<'appId' | 'redirectUri' | 'appSecretEnv' | 'publicMediaBaseUrl', string>>
+}): Mounted {
   const providers: SocialProvider[] = []
-  const flows: AuthorizationFlow[] = []
+  const flows: TestFlow[] = []
   const disposers: Array<() => void> = []
   let stored = options.record
-  const settingsSection = options.settings
   const ctx = {
-    // The plugin awaits the settings service in a scope rather than sampling
-    // for it, because it resolves after the plugin applies on a real boot. A
-    // spec that supplies a section gets one; otherwise the scope never runs,
-    // which is the shape a deployment with no settings service is in.
-    inject(deps: string[], run: (scope: unknown) => void) {
-      if (settingsSection === undefined || !deps.includes('settings')) return undefined
-      run({ settings: { register: () => ({ get: () => settingsSection }) } })
-      return undefined
-    },
-
     credentials: {
       resolve: (ref: string) => Promise.resolve({ value: `secret-for-${ref}`, source: 'env' }),
       readRecord: () => Promise.resolve(stored),
@@ -175,8 +181,12 @@ function mount(options: { config: Config; record?: CredentialRecord; settings?: 
     },
     authorization: {
       registerFlow(flow: AuthorizationFlow) {
-        flows.push(flow)
-        return () => { flows.splice(flows.indexOf(flow), 1) }
+        const registered: TestFlow = {
+          ...flow,
+          run: session => flow.run({ ...session, commit: (record) => { stored = record; return Promise.resolve() } }),
+        }
+        flows.push(registered)
+        return () => { flows.splice(flows.indexOf(registered), 1) }
       },
     },
     // A property, not `get('social')`: the seam declares `Context.social` and
@@ -194,7 +204,21 @@ function mount(options: { config: Config; record?: CredentialRecord; settings?: 
       return disposer
     },
   }
-  apply(ctx as unknown as Context, options.config)
+  // A value saved from the Plugins page is the plugin's own config field.
+  const page = options.pluginsPage ?? {}
+  const plain = options.config
+  const appId = page.appId ?? plain.appId
+  const redirectUri = page.redirectUri ?? plain.redirectUri
+  const appSecretEnv = page.appSecretEnv ?? plain.appSecretEnv
+  const publicMediaBaseUrl = page.publicMediaBaseUrl ?? plain.publicMediaBaseUrl
+  const resolved: Config = {
+    ...plain,
+    appId: { get: () => appId },
+    redirectUri: { get: () => redirectUri },
+    appSecretEnv: { get: () => appSecretEnv },
+    publicMediaBaseUrl: { get: () => publicMediaBaseUrl },
+  }
+  apply(ctx as unknown as Context, resolved)
   return {
     providers,
     flows,
@@ -447,7 +471,7 @@ describe('social-meta instagram publishing', () => {
 })
 
 describe('the application credentials', () => {
-  it('signs in with the app id and redirect URI typed into settings, over the environment', async () => {
+  it('signs in with the app id and redirect URI saved from the Plugins page, over the environment', async () => {
     const base = await stubGraph(graphHandler({
       routes: {
         'GET oauth/access_token': request => request.query.get('grant_type') === 'fb_exchange_token'
@@ -457,7 +481,7 @@ describe('the application credentials', () => {
     }))
     const mounted = mount({
       config: config(base),
-      settings: { appId: 'typed-into-the-card', redirectUri: 'https://harness.example/typed' },
+      pluginsPage: { appId: 'typed-into-the-card', redirectUri: 'https://harness.example/typed' },
     })
     const flow = mounted.flows[0]
     if (flow === undefined) throw new Error('no authorization flow was registered')

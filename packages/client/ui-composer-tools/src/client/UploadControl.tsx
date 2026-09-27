@@ -3,7 +3,7 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 // Type-only merges: the input.left SlotMap entry and the session-scope sessionId.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import { IconPaperclipOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconPaperclipOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import * as store from './store.ts'
 import css from './tools.module.css'
 
@@ -115,7 +115,7 @@ export function UploadControl({ sessionId, t, insertDraft, attachImages }: Uploa
         onMouseDown={(event) => { event.preventDefault() }}
         onClick={() => { inputRef.current?.click() }}
       >
-        <IconPaperclipOutline16 size={16} />
+        <IconPaperclipOutlineRegular size={16} />
       </button>
       <input ref={inputRef} type="file" multiple className={css.hidden} onChange={onPick} />
     </>

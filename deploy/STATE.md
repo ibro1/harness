@@ -88,7 +88,7 @@ map of features to the code that implements them.
 | Mobile layer | `packages/client/ui-mobile` | Live. Off-canvas sidebar, full-screen settings, right-side details drawer, no tooltips on touch. |
 | WhatsApp | `deploy/whatsapp-svc/` (Go), `deploy/plugins/whatsapp.mjs`, `deploy/mcp/whatsapp-mcp.mjs`, `packages/client/ui-whatsapp` | Live and paired. Multi-session: one WhatsApp account per session key, selected with `?session=`/`X-WA-Session`, defaulting to `WA_DEFAULT_SESSION` so the card and agent are unchanged. `/whatsapp/api/*` (opt-in on `WA_EXTERNAL_TOKEN`) lets another service drive its own tenants' sessions and refuses the operator's default one. See 4.1 for the pairing history. |
 | GitHub webhook ingress | `deploy/webhook/` | Live. README §"GitHub webhook ingress". |
-| Dokploy control plugin | `deploy/plugins/dokploy.cordis.yml`, `deploy/mcp/dokploy-mcp.mjs` | Live. |
+| Dokploy control plugin | `packages/bundle/web-app/cordis.patch.yml` (entry `dokploy`), `deploy/mcp/dokploy-mcp.mjs` | Live. |
 | LLM gateway | `deploy/plugins/llm-gateway.mjs` | The one authenticated door to the loopback agy/opencode bridges, so another service on this box can use these models. Opt-in on `DSH_LLM_GATEWAY_TOKEN` — a dedicated token, **not** `DSH_AUTH_API_TOKEN`, which would grant the whole harness. Rainmaker is its first consumer. |
 
 WhatsApp send policy, as chosen: the agent drafts and queues; you approve

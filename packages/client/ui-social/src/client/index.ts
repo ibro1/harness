@@ -1,7 +1,7 @@
 /**
  * Browser half: the social plugin page. Registers one page into the Plugins
- * page (`plugins.item`, while the Host serves the `social` settings
- * namespace) that shows every target the agent
+ * page (`plugins.item`, when the Host answers its status route) that shows
+ * every target the agent
  * can post to, how each credential stands, which targets publish without
  * asking, and a Disconnect per provider.
  *
@@ -22,7 +22,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { en, zh, type SocialKey } from './locales.ts'
 import { SocialCard } from './SocialCard.tsx'
 import { SocialCredentialsController } from './app-credentials-controller.ts'
-// Type-only merges: ctx.settingsScope, and the ctx.remote credentials namespace
+// Type-only merges: ctx.configForms, and the ctx.remote credentials namespace
 // the write-only secret controls are written through.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -45,16 +45,30 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Locale dictionary namespace owned by this plugin. */
 const NS = 'social'
 
-/** The settings namespace the host plugin serves, which gates this page. */
-const SOCIAL_NS = 'social'
+/**
+ * Whether the Host composes the social plugins. The tool plugin has nothing to
+ * configure, so it has no settings form whose presence could gate the page;
+ * its own status route does instead. Only a JSON answer means the plugin is
+ * there: a path no route claims answers 404 or with the web app's HTML shell.
+ * @returns true when GET /social/status answers JSON.
+ */
+export async function hostServesSocial(): Promise<boolean> {
+  try {
+    const response = await fetch('/social/status')
+    return (response.headers.get('content-type') ?? '').includes('application/json')
+  } catch (_error) {
+    // No answer at all reads as no plugin; the page is simply not listed.
+    return false
+  }
+}
 
 /**
- * Services this plugin injects. `settingsScope` and the credentials namespace
+ * Services this plugin injects. `configForms` and the credentials namespace
  * are required rather than optional: the card's application-credential forms
  * are half of what it is for, and a card that silently dropped them would look
  * like a deployment with nothing to configure.
  */
-export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.credentials']
+export const inject = ['slots', 'locale', 'configForms', 'remote', 'remote.credentials']
 
 /**
  * Apply the plugin: register the dictionaries and mount the social card into
@@ -76,25 +90,16 @@ export function apply(ctx: ClientContext): void {
     inject: () => credentials.inject(),
   }, SocialCard))
 
-  // The page registers only while the Host serves this plugin's settings
-  // namespace, so a deployment that does not compose it shows no dead entry.
-  // The shared SettingsScope mirror updates after document commits and reconnects.
-  const describeFace = ctx.settingsScope.describe()
+  // Probed once per page load: whether the plugins are composed changes only
+  // with a redeploy, which reloads the page.
   ctx.effect(() => {
     let off: (() => void) | undefined
-    const sync = (): void => {
-      const served = describeFace.getSnapshot().view?.namespaces.some(view => view.ns === SOCIAL_NS) ?? false
-      if (served && off === undefined) off = register()
-      else if (!served && off !== undefined) {
-        off()
-        off = undefined
-      }
-    }
-    const unsubscribe = describeFace.subscribe(sync)
-    void describeFace.ensure()
-    sync()
+    let live = true
+    void hostServesSocial().then((served) => {
+      if (served && live) off = register()
+    })
     return () => {
-      unsubscribe()
+      live = false
       off?.()
     }
   }, 'ui-social: configuration page')

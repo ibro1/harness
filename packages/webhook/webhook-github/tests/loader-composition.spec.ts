@@ -30,6 +30,7 @@ describe('real Loader composition', () => {
       '  config:',
       "    host: '127.0.0.1'",
       '    port: 0',
+      '    authenticate: false',
       "- name: '@deepseek-ai/dsh-webhook-github'",
       '  config:',
       '    source: loader',

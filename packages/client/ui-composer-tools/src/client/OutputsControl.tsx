@@ -5,9 +5,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import {
   Modal,
-  IconFolderOpenOutline16,
-  IconDownloadOutline16,
-  IconRefreshOutline16,
+  IconFolderOpenOutlineRegular,
+  IconDownloadOutlineRegular,
+  IconRefreshOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './tools.module.css'
 
@@ -87,7 +87,7 @@ export function OutputsControl({ sessionId, t }: OutputsControlProps) {
               aria-label={t('outputs.download', { name: file.name })}
               title={t('outputs.download', { name: file.name })}
             >
-              <IconDownloadOutline16 size={16} />
+              <IconDownloadOutlineRegular size={16} />
             </a>
           </li>
         ))}
@@ -105,7 +105,7 @@ export function OutputsControl({ sessionId, t }: OutputsControlProps) {
         onMouseDown={(event) => { event.preventDefault() }}
         onClick={() => { setOpen(true); load() }}
       >
-        <IconFolderOpenOutline16 size={16} />
+        <IconFolderOpenOutlineRegular size={16} />
       </button>
       <Modal
         open={open}
@@ -116,7 +116,7 @@ export function OutputsControl({ sessionId, t }: OutputsControlProps) {
         <div className={css.outContent}>
           <div className={css.outBar}>
             <button type="button" className={css.outRefresh} onClick={() => { load() }} disabled={loading}>
-              <IconRefreshOutline16 size={16} />
+              <IconRefreshOutlineRegular size={16} />
               <span>{t('outputs.refresh')}</span>
             </button>
           </div>

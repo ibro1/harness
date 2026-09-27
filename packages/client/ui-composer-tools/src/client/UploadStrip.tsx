@@ -3,7 +3,7 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 // Type-only merges: the composer.dock SlotMap entry and the session-scope sessionId.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import { IconCloseOutline16, IconFolderOpenOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCloseOutlineRegular, IconFolderOpenOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import * as store from './store.ts'
 import css from './tools.module.css'
 
@@ -47,7 +47,7 @@ export function UploadStrip({ sessionId, t, watchSubmit }: UploadStripProps) {
         <span key={item.id} className={item.status === 'error' ? `${css.chip} ${css.chipError}` : css.chip}>
           {item.isImage && item.previewUrl !== undefined
             ? <img className={css.thumb} src={item.previewUrl} alt="" />
-            : <span className={css.thumbIcon}><IconFolderOpenOutline16 size={16} /></span>}
+            : <span className={css.thumbIcon}><IconFolderOpenOutlineRegular size={16} /></span>}
           <span className={css.name} title={item.name}>{item.name}</span>
           {item.status === 'uploading' && <span className={css.meta}>{t('pct', { pct: item.pct })}</span>}
           {item.status === 'error' && <span className={css.metaError} title={item.error ?? ''}>{t('uploadFailed')}</span>}
@@ -58,7 +58,7 @@ export function UploadStrip({ sessionId, t, watchSubmit }: UploadStripProps) {
             title={t('remove', { name: item.name })}
             onClick={() => { store.remove(sessionId, item.id) }}
           >
-            <IconCloseOutline16 size={14} />
+            <IconCloseOutlineRegular size={14} />
           </button>
         </span>
       ))}

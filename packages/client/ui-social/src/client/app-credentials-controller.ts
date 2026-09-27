@@ -29,7 +29,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsFormPathOp, SettingsFormScope } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** Form field the write-only secret control stages under. */
 const SECRET_FIELD = 'secret'
@@ -220,14 +220,14 @@ class AppCredentialForm {
 
   /**
    * @param spec - which application this form configures.
-   * @param scope - the bound settings scope for that application's namespace.
+   * @param scope - the form over that application's plugin entry.
    * @param ctx - the card plugin's context, whose `remote.credentials` namespace
    * answers for the secret the section references.
    * @param changed - called whenever this form's projection moves.
    */
   constructor(
     readonly spec: AppCredentialSpec,
-    private readonly scope: SettingsScope<AppSection>,
+    private readonly scope: SettingsFormScope<AppSection>,
     private readonly ctx: ClientContext,
     private readonly changed: () => void,
   ) {
@@ -333,20 +333,22 @@ class AppCredentialForm {
     this.changed()
     let landed = true
     try {
+      const ops: SettingsFormPathOp[] = []
       for (const field of this.fields()) {
         const staged = this.staged.get(field)
         if (staged === undefined) continue
         const text = staged.text.trim()
         // An empty draft clears the field, so emptying a control and saving is
         // the same gesture as resetting it.
-        if (staged.clear || text === '') await this.scope.unset(field)
-        else await this.scope.set(field, text)
+        ops.push(staged.clear || text === '' ? { op: 'unset', path: [field] } : { op: 'set', path: [field], value: text })
       }
+      // One fenced write for the section: the fields a block saves land together or not at all.
+      if (ops.length > 0) landed = await this.scope.mutate(ops, this.scope.getSnapshot().revision)
       const secret = this.staged.get(SECRET_FIELD)
       // A blank secret draft writes nothing, which keeps the stored secret
       // rather than clearing it — the control cannot show what is there, so a
       // blank box must not be read as "remove it".
-      if (secret !== undefined && secret.text.trim() !== '') {
+      if (landed && secret !== undefined && secret.text.trim() !== '') {
         landed = await this.writeSecret(secret.text.trim())
       }
     } catch {
@@ -423,7 +425,7 @@ export class SocialCredentialsController {
   private readonly store: SnapshotStore<readonly AppCredentialState[]>
 
   /**
-   * @param ctx - the card plugin's context, carrying `settingsScope` and `remote.credentials`.
+   * @param ctx - the card plugin's context, carrying `configForms` and `remote.credentials`.
    */
   constructor(ctx: ClientContext) {
     // The store exists before the first form, because a form's constructor
@@ -433,7 +435,7 @@ export class SocialCredentialsController {
     for (const spec of APP_CREDENTIAL_SPECS) {
       this.forms.push(new AppCredentialForm(
         spec,
-        ctx.settingsScope.bind<AppSection>({ namespace: spec.namespace }),
+        ctx.configForms.get<AppSection>(spec.namespace),
         ctx,
         () => { publish() },
       ))

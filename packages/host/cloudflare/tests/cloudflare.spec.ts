@@ -70,7 +70,7 @@ function ok(result: unknown): { json: unknown } {
 }
 
 /**
- * Mount the plugin against a stub zone roster and a single stub agent, and
+ * Mount the plugin against a zone roster and a single stub agent, and
  * return that agent's registered tools by name.
  */
 function mount(
@@ -91,16 +91,14 @@ function mount(
     },
   }
   const ctx = {
-    settings: {
-      register() {
-        return { get: () => ({ zones, accounts }), watch: () => () => {}, patch: () => Promise.resolve() }
-      },
-    },
     agents: { list: () => [{ ctx: agentCtx }] },
     on() {},
     effect(fn: () => unknown) { fn() },
   }
-  const config: Config = { timeoutMs: 5000, path: '/cloudflare', token: '', apiBase }
+  const config: Config = {
+    timeoutMs: 5000, path: '/cloudflare', token: '', apiBase,
+    zones: { get: () => zones }, accounts: { get: () => accounts },
+  }
   apply(ctx as unknown as Context, config)
   return tools
 }
@@ -397,7 +395,10 @@ describe('cloudflare MCP surface', () => {
     const tools = buildCloudflareTools(
       () => [{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }],
       () => [],
-      { timeoutMs: 5000, path: '/cloudflare', token: '', apiBase: 'https://api.cloudflare.com/client/v4' },
+      {
+        timeoutMs: 5000, path: '/cloudflare', token: '', apiBase: 'https://api.cloudflare.com/client/v4',
+        zones: { get: () => [] }, accounts: { get: () => [] },
+      },
     )
     expect(tools.map(t => t.name)).toEqual([
       'cloudflare_zones', 'cloudflare_purge', 'cloudflare_dns_list', 'cloudflare_dns_set', 'cloudflare_dns_delete',

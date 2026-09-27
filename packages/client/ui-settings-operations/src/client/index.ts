@@ -1,0 +1,69 @@
+/**
+ * The Dokploy, Cloudflare and Postgres settings pages, browser half: the
+ * servers, zones, accounts and databases an agent may act on. Each page
+ * registers into the Plugins page's `plugins.item` slot while the Host serves
+ * its namespace, so a deployment that leaves a plugin out shows no trace of it.
+ */
+
+// Type-only: pulls the locale plugin's Context merge (ctx.locale).
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: the ctx.configForms Context merge. Cross-plugin collaboration
+// goes through the service, never a value import (client bundle purity gate).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: the Plugins page's SlotMap merge (the 'plugins.item' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { CloudflareCard } from './CloudflareCard.tsx'
+import { DokployCard } from './DokployCard.tsx'
+import { PostgresCard } from './PostgresCard.tsx'
+import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-controller.ts'
+import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
+import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
+import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
+
+export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from './cloudflare-card-controller.ts'
+export type { DokployCardFace, DokployCardState, DokploySettings } from './dokploy-card-controller.ts'
+export type { PostgresCardFace, PostgresCardState, PostgresSettings } from './postgres-card-controller.ts'
+export type { OperationsSettingsLocaleKey } from './locales.ts'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** Dokploy, Cloudflare and Postgres settings page copy. */
+    'settings.operations': OperationsSettingsLocaleKey
+  }
+}
+
+/** Dictionary namespace owned by this plugin. */
+export const NS = 'settings.operations'
+
+/** Required services (cordis fiber inject). */
+export const inject = ['slots', 'locale', 'configForms']
+
+/**
+ * Mount each page while the Host serves its namespace.
+ * @param ctx - the browser plugin context.
+ */
+export function apply(ctx: ClientContext): void {
+  const t = ctx.locale.bind(NS)
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-operations: dictionaries')
+
+  const dokploy = new DokployCardController(ctx.configForms.get(DOKPLOY_NS))
+  const postgres = new PostgresCardController(ctx.configForms.get(POSTGRES_NS))
+  const cloudflare = new CloudflareCardController(ctx.configForms.get(CLOUDFLARE_NS))
+  ctx.effect(() => () => {
+    dokploy.dispose()
+    postgres.dispose()
+    cloudflare.dispose()
+  }, 'ui-settings-operations: form subscriptions')
+
+  ctx.effect(() => ctx.configForms.whileServed([DOKPLOY_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'dokploy', order: 50, label: () => t('dokployTitle'), locale: NS, inject: () => dokploy.inject(),
+  }, DokployCard))), 'ui-settings-operations: Dokploy page')
+  ctx.effect(() => ctx.configForms.whileServed([POSTGRES_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'postgres', order: 60, label: () => t('postgresTitle'), locale: NS, inject: () => postgres.inject(),
+  }, PostgresCard))), 'ui-settings-operations: Postgres page')
+  ctx.effect(() => ctx.configForms.whileServed([CLOUDFLARE_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'cloudflare', order: 70, label: () => t('cloudflareTitle'), locale: NS, inject: () => cloudflare.inject(),
+  }, CloudflareCard))), 'ui-settings-operations: Cloudflare page')
+}

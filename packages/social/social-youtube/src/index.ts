@@ -20,7 +20,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { credentialKey, credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
@@ -44,8 +44,6 @@ export type {
 // The seam declares `Context.social`; `inject` above makes it present by `apply`.
 import type {} from '@deepseek-ai/dsh-social'
 import { firstConfigured, resolveAppCredential } from '@deepseek-ai/dsh-social'
-// Type-only merge: declares `Context.settings`, awaited in a scope in `apply`.
-import type {} from '@deepseek-ai/dsh-settings'
 
 /** The plugin name, for the Loader, and the scope half of this plugin's credential key. */
 export const name = 'social-youtube'
@@ -68,16 +66,24 @@ const MINE = `${TARGET_PREFIX}me`
 
 /** Composition config: which Google client to sign in with, and what to upload as. */
 export interface Config {
-  /** The Google Cloud OAuth client id, when it is given here rather than through the credential seam. */
-  clientId: string
+  /**
+   * The Google Cloud OAuth client id, when it is given here rather than
+   * through the credential seam; editable from the Plugins page.
+   */
+  clientId: Volatile<string>
   /** That client's secret, on the same terms. */
   clientSecret: string
   /** Environment variable holding the client id, resolved through the credential seam when `clientId` is empty. */
   clientIdRef: string
   /** Environment variable holding the client secret, on the same terms. */
   clientSecretRef: string
-  /** A redirect URI registered on the OAuth client; the human copies the address they land on back into the sign-in. */
-  redirectUri: string
+  /**
+   * A redirect URI registered on the OAuth client; the human copies the
+   * address they land on back into the sign-in. Editable from the Plugins page.
+   */
+  redirectUri: Volatile<string>
+  /** Variable naming the client secret, set from the Plugins page; overrides `clientSecretRef` when present. */
+  clientSecretEnv: Volatile<string | undefined>
   /** What every upload asks for. `private` is the default because a model can invoke this. */
   privacyStatus: 'private' | 'unlisted' | 'public'
   /** The `videoCategories` id every upload is filed under; `22` is People & Blogs. */
@@ -105,12 +111,13 @@ export interface Config {
 }
 
 /** Composition config: which Google client to sign in with, and what to upload as. */
-export const Config: z<Config> = z.object({
-  clientId: z.string().default('').description('Google Cloud OAuth client id. Leave empty to read it from the environment variable named by clientIdRef.'),
+export const Config = z.object({
+  clientId: z.string().default('').description('Google Cloud OAuth client id. Leave empty to read it from the environment variable named by clientIdRef.').volatile(),
   clientSecret: z.string().default('').description('That client\'s secret. Leave empty to read it from the environment variable named by clientSecretRef.'),
   clientIdRef: z.string().default('GOOGLE_CLIENT_ID').description('Environment variable holding the OAuth client id.'),
   clientSecretRef: z.string().default('GOOGLE_CLIENT_SECRET').description('Environment variable holding the OAuth client secret.'),
-  redirectUri: z.string().default('http://localhost').description('A redirect URI registered on the OAuth client. The sign-in sends the human here and asks them to paste the address they land on, so a page that does not exist is fine.'),
+  redirectUri: z.string().default('http://localhost').description('A redirect URI registered on the OAuth client. The sign-in sends the human here and asks them to paste the address they land on, so a page that does not exist is fine.').volatile(),
+  clientSecretEnv: z.string().description('Name of the environment variable holding the OAuth client secret, overriding clientSecretRef. The secret itself is written through the credential store, never into this document.').volatile(),
   privacyStatus: z.union([z.const('private'), z.const('unlisted'), z.const('public')]).default('private').description('Privacy every upload asks for. YouTube can still hold it at private while the OAuth client is unverified.'),
   categoryId: z.string().default('22').description('YouTube videoCategories id every upload is filed under; 22 is People & Blogs.'),
   madeForKids: z.boolean().default(false).description('What every upload declares for selfDeclaredMadeForKids.'),
@@ -141,7 +148,6 @@ class YouTubeProvider implements SocialProvider {
     private readonly ctx: Context,
     private readonly config: Config,
     private readonly key: CredentialKey,
-    private readonly readSettings: () => AppSettings,
   ) {}
 
   /** Drop the cached access token, so the next call mints one from the stored record. */
@@ -258,7 +264,7 @@ class YouTubeProvider implements SocialProvider {
       ...channel === undefined ? {} : { channelId: channel.id, channelTitle: channel.title },
     }
     const record: CredentialRecord = { kind: 'grant', payload }
-    await this.ctx.credentials.modifyRecord(this.key, () => Promise.resolve(record))
+    await session.commit(record)
   }
 
   /** The stored grant, or what to do about there not being one. */
@@ -317,19 +323,18 @@ class YouTubeProvider implements SocialProvider {
 
   /** Where Google is and who this harness signs in as, resolved per call so a changed secret takes effect at once. */
   private async settings(): Promise<OAuthSettings & ApiSettings> {
-    const section = this.readSettings()
     const clientId = await this.clientCredential(
-      section.clientId, this.config.clientId, this.config.clientIdRef, 'client id')
+      undefined, this.config.clientId.get(), this.config.clientIdRef, 'client id')
     // The secret is never a literal in settings: it is addressed by reference
     // and read through the credential seam, which is what the settings card
     // writes into without ever reading it back.
     const clientSecret = await this.clientCredential(
       undefined, this.config.clientSecret,
-      firstConfigured(section.clientSecretEnv, this.config.clientSecretRef) ?? '', 'client secret')
+      firstConfigured(this.config.clientSecretEnv.get(), this.config.clientSecretRef) ?? '', 'client secret')
     return {
       clientId,
       clientSecret,
-      redirectUri: firstConfigured(section.redirectUri, this.config.redirectUri) ?? '',
+      redirectUri: firstConfigured(this.config.redirectUri.get()) ?? '',
       authBaseUrl: this.config.authBaseUrl,
       tokenBaseUrl: this.config.tokenBaseUrl,
       apiBaseUrl: this.config.apiBaseUrl,
@@ -396,68 +401,13 @@ function unready(reason: string): SocialTarget {
  * @throws when the chunk size is not a multiple of the 262144 bytes Google
  *   requires, which is a misconfiguration nothing later can recover from.
  */
-/**
- * The settings namespace this plugin serves, so the OAuth client can be entered
- * in Settings → Plugins → Social instead of only at deploy time.
- */
-const SETTINGS_NS = 'social-youtube'
-
-/** The Google OAuth client fields a person can edit from the settings card. */
-export interface AppSettings {
-  /** The OAuth client id, which Google shows on the credential's own page. */
-  clientId?: string
-  /** Name of the environment variable or credential record holding the client secret. */
-  clientSecretEnv?: string
-  /** A redirect URI registered on the OAuth client. */
-  redirectUri?: string
-}
-
-/**
- * Schema for {@link SETTINGS_NS}.
- *
- * There is no client-secret field, deliberately: this section names the
- * *reference* and the card writes the secret through the credentials domain,
- * which never reads one back.
- */
-const APP_SETTINGS_SCHEMA: z<AppSettings> = z.object({
-  clientId: z.string().description('The Google Cloud OAuth client id. Not a secret — it appears in every consent URL.'),
-  clientSecretEnv: z.string().description('Name of the environment variable holding the OAuth client secret. The secret itself is written through the credential store, never into this document.'),
-  redirectUri: z.string().description('A redirect URI registered on the OAuth client. The sign-in sends the human here and asks them to paste the address they land on, so a page that does not exist is fine.'),
-})
-
-/**
- * Serve the settings namespace and return a live read of it.
- *
- * Awaited in a scope rather than sampled with `ctx.get`: the settings service
- * is file-backed and resolves after a plugin composed alongside it applies.
- * Absent settings is a supported composition, so it stays out of `inject`.
- *
- * @param ctx - the plugin context.
- * @param config - validated composition config, seeding the section's base.
- * @returns a read of the current section, empty until the service arrives.
- */
-function installAppSettings(ctx: Context, config: Config): () => AppSettings {
-  let read: () => AppSettings = () => ({})
-  ctx.inject(['settings'], (settingsCtx: Context) => {
-    const scope = settingsCtx.settings.register(SETTINGS_NS, APP_SETTINGS_SCHEMA, {
-      base: {
-        clientId: config.clientId,
-        clientSecretEnv: config.clientSecretRef,
-        redirectUri: config.redirectUri,
-      },
-    })
-    read = () => scope.get()
-  })
-  return () => read()
-}
-
 export function apply(ctx: Context, config: Config): void {
   if (config.chunkBytes % CHUNK_GRANULARITY !== 0) {
     throw new Error(`social-youtube chunkBytes must be a multiple of ${String(CHUNK_GRANULARITY)} bytes; `
       + `${String(config.chunkBytes)} is not.`)
   }
   const key = credentialKey(name, 'oauth')
-  const provider = new YouTubeProvider(ctx, config, key, installAppSettings(ctx, config))
+  const provider = new YouTubeProvider(ctx, config, key)
 
   ctx.effect(() => ctx.authorization.registerFlow({
     key,

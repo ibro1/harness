@@ -13,21 +13,19 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-
-/** The settings namespace holding the server roster. */
-const NS = 'dokploy'
 
 /** One configured Dokploy server, as stored in settings. */
 interface DokployServer {
+  /** A short label the caller names this server by. */
   name: string
+  /** Base URL of the Dokploy server. */
   url: string
   /** Name of the environment variable holding this server's API key (preferred). */
   apiKeyEnv?: string
@@ -35,29 +33,24 @@ interface DokployServer {
   apiKey?: string
 }
 
-/** The resolved `dokploy` settings section. */
-interface DokployConfig {
-  servers: DokployServer[]
-}
-
-/** Schema for the settings namespace; the API key is a masked secret. */
-const CONFIG_SCHEMA: z<DokployConfig> = z.object({
-  servers: z.array(z.object({
-    name: z.string().required().description('A short label you choose for this server, used when asking a tool to act on it.'),
-    url: z.string().required().description('Base URL of the Dokploy server, for example https://server.example.com.'),
-    apiKeyEnv: z.string().description('Preferred: name of the environment variable holding this server API key (e.g. DOKPLOY_KEY_MAIN), so the key stays out of settings. Requires that variable to be set on the harness.'),
-    apiKey: z.string().description('Alternative to apiKeyEnv: the API key itself. Simpler, but it is stored here in settings and shown in this form.'),
-  })).default([]).description('Dokploy servers this harness may query and deploy through. Give each server either apiKeyEnv or apiKey.'),
-})
+/** The server roster, edited from the Plugins page. */
+const SERVERS_SCHEMA: z<DokployServer[]> = z.array(z.object({
+  name: z.string().required().description('A short label you choose for this server, used when asking a tool to act on it.'),
+  url: z.string().required().description('Base URL of the Dokploy server, for example https://server.example.com.'),
+  apiKeyEnv: z.string().description('Preferred: name of the environment variable holding this server API key (e.g. DOKPLOY_KEY_MAIN), so the key stays out of settings. Requires that variable to be set on the harness.'),
+  apiKey: z.string().description('Alternative to apiKeyEnv: the API key itself. Simpler, but it is stored here in settings and shown in this form.'),
+})).default([]).description('Dokploy servers this harness may query and deploy through. Give each server either apiKeyEnv or apiKey.')
 
 /** The plugin name, for the Loader. */
 export const name = 'dokploy'
 
 /** The services this plugin reads. */
-export const inject = ['settings', 'agents', 'webServer']
+export const inject = ['agents', 'webServer']
 
-/** Composition config; the roster lives in settings, so nothing is required here. */
+/** Composition config. The servers are editable live from the Plugins page; nothing is required. */
 export interface Config {
+  /** The servers the tools may act on. */
+  servers: Volatile<DokployServer[]>
   /** Milliseconds one API call may take before it is abandoned. */
   timeoutMs: number
   /** Absolute path of the token-guarded command route MCP clients reach. */
@@ -66,8 +59,9 @@ export interface Config {
   token: string
 }
 
-/** Composition config; the roster lives in settings, so nothing is required here. */
-export const Config: z<Config> = z.object({
+/** Composition config. The servers are editable live from the Plugins page; nothing is required. */
+export const Config = z.object({
+  servers: SERVERS_SCHEMA.volatile(),
   timeoutMs: z.natural().min(1000).default(15_000),
   path: z.string().default('/dokploy'),
   token: z.string().default(''),
@@ -397,8 +391,7 @@ async function handleCommand(req: IncomingMessage, res: ServerResponse, tools: T
  * @param config - validated composition config.
  */
 export function apply(ctx: Context, config: Config): void {
-  const scope = ctx.settings.register(NS, CONFIG_SCHEMA, { base: { servers: [] } })
-  const readServers: ReadServers = () => scope.get().servers
+  const readServers: ReadServers = () => config.servers.get()
 
   // A token-guarded command route, so a CLI's MCP client (agy, opencode) can
   // reach the same tools a direct-provider agent gets natively. The token is

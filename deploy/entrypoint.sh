@@ -13,6 +13,10 @@ PORT="${DSH_PORT:-3080}"
 # guard is worth keeping. socat republishes it on the container interface so
 # Traefik can reach it, with the password gate and Traefik in front.
 INTERNAL_PORT="${DSH_INTERNAL_PORT:-3081}"
+# Turns on the deployment plugins the web-app bundle inserts (Cloudflare,
+# Postgres, Dokploy, social). They live in that bundle rather than in a --patch
+# overlay so the Plugins page can save their settings.
+export DSH_DEPLOY=1
 # The port Traefik routes /github to. Named rather than derived: it was once
 # PORT+1, which is INTERNAL_PORT on the default ports, so socat raced the
 # harness for the same socket and lost. Keep it in step with the
@@ -278,7 +282,6 @@ fi
 # recalled. DSH_SOCIAL=1 turns it on. Even then every post asks for approval
 # first unless a specific target id is exempted in the plugin's config.
 if [[ "${DSH_SOCIAL:-0}" == "1" ]]; then
-  patch_args+=(--patch "$APP_DIR/deploy/plugins/social.cordis.yml")
   echo "[entrypoint] Social posting enabled (social_targets, social_post); connect accounts by asking the agent to sign in"
   for pair in "LinkedIn:SOCIAL_LINKEDIN_REDIRECT_URI" "Meta:SOCIAL_META_REDIRECT_URI" "YouTube:SOCIAL_YOUTUBE_REDIRECT_URI"; do
     social_label="${pair%%:*}"
@@ -324,7 +327,6 @@ fi
 # the settings UI, and with none configured the tools say so. DSH_CLOUDFLARE=0
 # leaves the plugin out.
 if [[ "${DSH_CLOUDFLARE:-1}" != "0" ]]; then
-  patch_args+=(--patch "$APP_DIR/deploy/plugins/cloudflare.cordis.yml")
   echo "[entrypoint] Cloudflare control enabled; configure zones under Settings -> cloudflare"
   if [[ -n "${DSH_CLOUDFLARE_TOKEN:-}" && "${DSH_CLOUDFLARE_MCP:-1}" != "0" ]]; then
     register_cli_mcp dsh-cloudflare cloudflare-mcp.mjs DSH_CLOUDFLARE_TOKEN DSH_CLOUDFLARE_COMMAND_URL \
@@ -336,7 +338,6 @@ fi
 # the statement. Databases are configured in the settings UI; with none
 # configured the tools report that. DSH_POSTGRES=0 leaves the plugin out.
 if [[ "${DSH_POSTGRES:-1}" != "0" ]]; then
-  patch_args+=(--patch "$APP_DIR/deploy/plugins/postgres.cordis.yml")
   echo "[entrypoint] Postgres access enabled (read-only unless a database sets readOnly false); configure under Settings -> postgres"
   if [[ -n "${DSH_POSTGRES_TOKEN:-}" && "${DSH_POSTGRES_MCP:-1}" != "0" ]]; then
     register_cli_mcp dsh-postgres postgres-mcp.mjs DSH_POSTGRES_TOKEN DSH_POSTGRES_COMMAND_URL \
@@ -348,7 +349,6 @@ fi
 # UI, and with none configured the tools simply report that. Set DSH_DOKPLOY=0
 # to leave the plugin out entirely.
 if [[ "${DSH_DOKPLOY:-1}" != "0" ]]; then
-  patch_args+=(--patch "$APP_DIR/deploy/plugins/dokploy.cordis.yml")
   echo "[entrypoint] Dokploy control enabled; configure servers under Settings -> dokploy"
 
   # With a command-route token set, expose the Dokploy tools to the agy and

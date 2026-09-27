@@ -103,9 +103,21 @@ interface Mounted {
   dispose: () => void
 }
 
+/** Config with the Plugins-page fields as plain values; the mount wraps them the way the Loader does. */
+type PlainConfig = Omit<Config, 'clientId' | 'redirectUri' | 'clientSecretEnv'> & {
+  clientId: string
+  redirectUri: string
+  clientSecretEnv?: string
+}
+
 /** Mount the plugin on a stubbed context and hand back what it registered. */
-function mount(origin: string, record: unknown, overrides: Partial<Config> = {}, settingsSection?: Record<string, string>): Mounted {
-  const config: Config = {
+function mount(
+  origin: string,
+  record: unknown,
+  overrides: Partial<PlainConfig> = {},
+  pluginsPage?: Partial<Record<'clientId' | 'redirectUri' | 'clientSecretEnv', string>>,
+): Mounted {
+  const plain: PlainConfig = {
     clientId: 'client-id',
     clientSecret: 'client-secret',
     clientIdRef: 'GOOGLE_CLIENT_ID',
@@ -125,20 +137,20 @@ function mount(origin: string, record: unknown, overrides: Partial<Config> = {},
     uploadBaseUrl: origin,
     ...overrides,
   }
+  // A value saved from the Plugins page is the plugin's own config field.
+  const clientId = pluginsPage?.clientId ?? plain.clientId
+  const redirectUri = pluginsPage?.redirectUri ?? plain.redirectUri
+  const clientSecretEnv = pluginsPage?.clientSecretEnv ?? plain.clientSecretEnv
+  const config: Config = {
+    ...plain,
+    clientId: { get: () => clientId },
+    redirectUri: { get: () => redirectUri },
+    clientSecretEnv: { get: () => clientSecretEnv },
+  }
   const providers: SocialProvider[] = []
   const flows: Mounted['flows'] = []
   const disposers: (() => void)[] = []
   const ctx = {
-    // The plugin awaits the settings service in a scope rather than sampling
-    // for it, because it resolves after the plugin applies on a real boot. A
-    // spec that supplies a section gets one; otherwise the scope never runs,
-    // which is the shape a deployment with no settings service is in.
-    inject(deps: string[], run: (scope: unknown) => void) {
-      if (settingsSection === undefined || !deps.includes('settings')) return undefined
-      run({ settings: { register: () => ({ get: () => settingsSection }) } })
-      return undefined
-    },
-
     effect(fn: () => () => void) {
       disposers.push(fn())
       return () => {}
@@ -336,7 +348,7 @@ describe('social-youtube upload', () => {
 })
 
 describe('the application credentials', () => {
-  it('sends the human to the consent page built from what settings holds, over the config', async () => {
+  it('sends the human to the consent page built from what the Plugins page saved', async () => {
     const mounted = mount('https://youtube.invalid', undefined, {
       clientId: 'from-config', redirectUri: 'https://harness.example/config',
     }, {

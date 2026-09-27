@@ -375,14 +375,14 @@ Environment tab says — every variable has to be passed through in
 
 | | What it is | Where it goes |
 |---|---|---|
-| **Application** credentials — a client id, an app id, a secret, a redirect URI | Identifies *your registered app* to the platform. Set once. | Settings → Plugins → Social, or the environment below |
+| **Application** credentials — a client id, an app id, a secret, a redirect URI | Identifies *your registered app* to the platform. Set once. | Plugins → Social accounts, or the environment below |
 | **Account** credential — the access token | Identifies *you*, and is what a post is published as | Obtained by the sign-in flow, kept in the credential store. **Never typed anywhere.** |
 
 Only the first kind is configuration. The rest of this section is about it.
 
 ### Setting the application credentials
 
-The card is the shorter road: open Settings → Plugins → Social, fill in the
+The card is the shorter road: open Plugins → Social accounts, fill in the
 application block for each platform, and press Save. Nothing needs a redeploy,
 and a mistyped value is corrected in place.
 
@@ -448,7 +448,7 @@ agent.
 ### Connecting an account
 
 Ask the agent — "connect my LinkedIn account". It returns the consent URL, you
-sign in, you paste the redirected address back. Settings → Plugins → Social then
+sign in, you paste the redirected address back. Plugins → Social accounts then
 shows what each account can post to and whether its credential is about to
 lapse.
 
@@ -545,10 +545,17 @@ agent loads the skill and follows `SKILL.md`.
 
 ## Plugins the entrypoint mounts
 
-Besides the sections above, the entrypoint layers these plugins over the Web
-profile with `--patch`. Each prints one `[entrypoint]` line at boot saying it
-is on, so the container log is the quickest way to see what a given deploy
-runs.
+Besides the sections above, the deployment runs these plugins. Each prints one
+`[entrypoint]` line at boot saying it is on, so the container log is the
+quickest way to see what a given deploy runs.
+
+Cloudflare, Postgres, Dokploy and the social providers have settings you edit
+on the Plugins page, so they are inserted by the web-app bundle
+(`packages/bundle/web-app/cordis.patch.yml`) and switched on by the
+`DSH_DEPLOY=1` the entrypoint exports. The rest are `--patch` overlays in
+`deploy/plugins/`. The difference matters: the profile file that holds
+Plugins-page edits composes after bundles and before `--patch` overlays, so a
+plugin an overlay inserts can never take a saved edit.
 
 | Plugin | On by default | Turn off with | Model tools reach agy/opencode |
 |---|---|---|---|

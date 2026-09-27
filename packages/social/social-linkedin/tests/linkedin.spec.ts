@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { AuthorizationFlow, AuthorizationNotice, AuthorizationPrompt } from '@deepseek-ai/dsh-authorization'
+import type { AuthorizationFlow, AuthorizationNotice, AuthorizationPrompt, AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import type { CredentialKey, CredentialRecord, CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { apply, type Config } from '../src/index.ts'
 import type { LinkedInGrant, SocialProvider } from '../src/types.ts'
@@ -103,34 +103,37 @@ async function stubLinkedIn(handler: (call: Recorded) => Reply): Promise<{ base:
   return { base: `http://127.0.0.1:${String(address.port)}`, calls }
 }
 
+/** A registered flow whose session supplies `commit` itself, storing into the stub records as the service does. */
+type TestFlow = Omit<AuthorizationFlow, 'run'> & {
+  run(session: Omit<AuthorizationSession, 'commit'>): Promise<void>
+}
+
+/** Config with the Plugins-page fields as plain values; the mount wraps them the way the Loader does. */
+type PlainConfig = Omit<Config, 'clientId' | 'redirectUri' | 'clientSecretEnv'> & {
+  clientId: string
+  redirectUri: string
+  clientSecretEnv?: string
+}
+
 /** The mounted plugin, with the seams it contributed to. */
 interface Mounted {
   providers: Map<string, SocialProvider>
-  flows: Map<string, AuthorizationFlow>
+  flows: Map<string, TestFlow>
   records: Map<string, CredentialRecord>
   /** Run every disposer the registrations returned, as a fiber teardown would. */
   disposeAll: () => void
 }
 
 /** Mount the plugin against stub seams, with a stored record when one is given. */
-function mount(overrides: Partial<Config>, stored?: CredentialRecord, settingsSection?: Record<string, string>): Mounted {
+function mount(overrides: Partial<PlainConfig>, stored?: CredentialRecord, pluginsPage?: Partial<Record<'clientId' | 'redirectUri' | 'clientSecretEnv', string>>): Mounted {
   const providers = new Map<string, SocialProvider>()
-  const flows = new Map<string, AuthorizationFlow>()
+  const flows = new Map<string, TestFlow>()
   const records = new Map<string, CredentialRecord>()
   const refs = new Map<string, string>([['LINKEDIN_CLIENT_ID', 'client-1'], ['LINKEDIN_CLIENT_SECRET', 'secret-1']])
   const disposers: (() => void)[] = []
   if (stored !== undefined) records.set(KEY, stored)
 
   const ctx = {
-    // The plugin awaits the settings service in a scope rather than sampling
-    // for it, because it resolves after the plugin applies on a real boot. A
-    // spec that supplies a section gets one; otherwise the scope never runs,
-    // which is the shape a deployment with no settings service is in.
-    inject(deps: string[], run: (scope: unknown) => void) {
-      if (settingsSection === undefined || !deps.includes('settings')) return undefined
-      run({ settings: { register: () => ({ get: () => settingsSection }) } })
-      return undefined
-    },
     effect(run: () => unknown) {
       const disposer = run()
       if (typeof disposer === 'function') disposers.push(disposer as () => void)
@@ -154,7 +157,13 @@ function mount(overrides: Partial<Config>, stored?: CredentialRecord, settingsSe
     },
     authorization: {
       registerFlow(flow: AuthorizationFlow) {
-        flows.set(flow.key, flow)
+        flows.set(flow.key, {
+          ...flow,
+          run: session => flow.run({
+            ...session,
+            commit: (record) => { records.set(flow.key, record); return Promise.resolve() },
+          }),
+        })
         return () => { flows.delete(flow.key) }
       },
     },
@@ -166,7 +175,7 @@ function mount(overrides: Partial<Config>, stored?: CredentialRecord, settingsSe
     },
   }
 
-  const config: Config = {
+  const plain: PlainConfig = {
     clientId: '',
     clientIdRef: 'LINKEDIN_CLIENT_ID',
     clientSecretRef: 'LINKEDIN_CLIENT_SECRET',
@@ -177,6 +186,16 @@ function mount(overrides: Partial<Config>, stored?: CredentialRecord, settingsSe
     authBaseUrl: 'https://www.linkedin.com',
     timeoutMs: 5000,
     ...overrides,
+  }
+  // A value saved from the Plugins page is the plugin's own config field.
+  const clientId = pluginsPage?.clientId ?? plain.clientId
+  const redirectUri = pluginsPage?.redirectUri ?? plain.redirectUri
+  const clientSecretEnv = pluginsPage?.clientSecretEnv ?? plain.clientSecretEnv
+  const config: Config = {
+    ...plain,
+    clientId: { get: () => clientId },
+    redirectUri: { get: () => redirectUri },
+    clientSecretEnv: { get: () => clientSecretEnv },
   }
   apply(ctx as unknown as Context, config)
   return {

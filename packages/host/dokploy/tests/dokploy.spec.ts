@@ -46,7 +46,7 @@ async function stubDokploy(handler: (endpoint: string, body: string) => { status
 }
 
 /**
- * Mount the plugin against a stub settings roster and a single stub agent, and
+ * Mount the plugin against a server roster and a single stub agent, and
  * return that agent's registered tools by name.
  */
 function mount(servers: { name: string; url: string; apiKeyEnv: string }[]): Map<string, RecordedTool> {
@@ -63,16 +63,11 @@ function mount(servers: { name: string; url: string; apiKeyEnv: string }[]): Map
     },
   }
   const ctx = {
-    settings: {
-      register() {
-        return { get: () => ({ servers }), watch: () => () => {}, patch: () => Promise.resolve() }
-      },
-    },
     agents: { list: () => [{ ctx: agentCtx }] },
     on() {},
     effect(fn: () => unknown) { fn() },
   }
-  apply(ctx as unknown as Context, { timeoutMs: 5000, path: '/dokploy', token: '' })
+  apply(ctx as unknown as Context, { timeoutMs: 5000, path: '/dokploy', token: '', servers: { get: () => servers } })
   return tools
 }
 
@@ -187,10 +182,11 @@ describe('dokploy tools', () => {
         },
       }
       const ctx = {
-        settings: { register: () => ({ get: () => ({ servers: [{ name: 'main', url, apiKey: 'inline-key' }] }), watch: () => () => {}, patch: () => Promise.resolve() }) },
         agents: { list: () => [{ ctx: agentCtx }] }, on() {}, effect(f: () => unknown) { f() },
       }
-      apply(ctx as unknown as Context, { timeoutMs: 5000, path: '/dokploy', token: '' })
+      apply(ctx as unknown as Context, {
+        timeoutMs: 5000, path: '/dokploy', token: '', servers: { get: () => [{ name: 'main', url, apiKey: 'inline-key' }] },
+      })
       return map
     })()
     await tools.get('dokploy_projects')!.execute({}, exec)

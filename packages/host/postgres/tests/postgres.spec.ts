@@ -69,9 +69,9 @@ afterEach(() => {
 })
 
 /**
- * Mount the plugin against a stub settings roster and a single stub agent, and
+ * Mount the plugin against a database roster and a single stub agent, and
  * return that agent's registered tools by name. The roster array is held by
- * reference, so a test may edit it between calls the way settings would.
+ * reference, so a test may edit it between calls the way a Plugins-page save would.
  */
 function mount(databases: PostgresDatabase[], overrides: Partial<Config> = {}): Map<string, RecordedTool> {
   const tools = new Map<string, RecordedTool>()
@@ -87,17 +87,12 @@ function mount(databases: PostgresDatabase[], overrides: Partial<Config> = {}): 
     },
   }
   const ctx = {
-    settings: {
-      register() {
-        return { get: () => ({ databases }), watch: () => () => {}, update: () => Promise.resolve() }
-      },
-    },
     agents: { list: () => [{ ctx: agentCtx }] },
     on() {},
     effect(fn: () => unknown) { fn() },
   }
   apply(ctx as unknown as Context, {
-    maxRows: 200, maxOutputBytes: 64_000, path: '/postgres', token: '', ...overrides,
+    maxRows: 200, maxOutputBytes: 64_000, path: '/postgres', token: '', databases: { get: () => databases }, ...overrides,
   })
   return tools
 }
@@ -394,7 +389,7 @@ describe('postgres MCP surface', () => {
     const tools = buildPostgresTools(
       () => [{ name: 'main', dsn: 'postgres://main' }],
       new PoolRegistry(driver.factory),
-      { maxRows: 200, maxOutputBytes: 64_000, path: '/postgres', token: '' },
+      { maxRows: 200, maxOutputBytes: 64_000, path: '/postgres', token: '', databases: { get: () => [] } },
     )
     expect(tools.map(tool => tool.name))
       .toEqual(['postgres_databases', 'postgres_query', 'postgres_execute', 'postgres_tables'])

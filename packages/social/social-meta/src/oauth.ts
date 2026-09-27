@@ -15,11 +15,11 @@ import { randomUUID } from 'node:crypto'
 import type { AuthorizationFlow, AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import type { CredentialKey, CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { GraphEndpoint } from './graph.ts'
+import type { MetaGrant } from './types.ts'
 import {
   FACEBOOK_PUBLISH_PERMISSION, FACEBOOK_SCOPES, INSTAGRAM_PUBLISH_PERMISSION, INSTAGRAM_SCOPES,
   fetchGrantedScopes, fetchPages, graphRequest,
 } from './graph.ts'
-import { writeGrant } from './grant.ts'
 
 /** What the flow needs to run one sign-in. */
 export interface MetaFlowOptions {
@@ -169,13 +169,14 @@ export function metaAuthorizationFlow(options: MetaFlowOptions): AuthorizationFl
         fetchGrantedScopes(options.endpoint, userToken),
         fetchPages(options.endpoint, userToken),
       ])
-      await writeGrant(options.credentials, options.key, {
+      const grant: MetaGrant = {
         version: 1,
         userToken,
         ...expiresAt === undefined ? {} : { expiresAt },
         obtainedAt: Date.now(),
         grantedScopes,
-      })
+      }
+      await session.commit({ kind: 'grant', payload: grant })
       session.notify({ message: summary(options, pages, grantedScopes) })
     },
   }

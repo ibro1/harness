@@ -19,7 +19,7 @@ kind: "package-reference"
 
 ## Summary
 
-The Consumer role of the social capability seam, for both of its audiences. It injects `ctx.social` and puts two tools in front of the model — `social_targets`, which lists the accounts, Pages and channels the harness can post to, and `social_post`, which publishes one post to one of them — and mounts two HTTP routes in front of a person, which the [social card](../../client/ui-social/README.md) in Settings → Plugins reads.
+The Consumer role of the social capability seam, for both of its audiences. It injects `ctx.social` and puts two tools in front of the model — `social_targets`, which lists the accounts, Pages and channels the harness can post to, and `social_post`, which publishes one post to one of them — and mounts two HTTP routes in front of a person, which the [social page](../../client/ui-social/README.md) on the Plugins page reads.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -134,7 +134,7 @@ It fails closed. No match and more than one match both refuse with the stored ad
 
 ### Composition
 
-`inject` is `tools`, `social`, and `webServer`. The web server is required because the human surface is half of what this package is for, and mounting it without one would silently ship a card nobody can reach. `credentials`, `settings`, and `approval` are resolved with `ctx.get(...)` where they are used, so a composition missing one fails that one operation closed with a legible refusal instead of keeping the whole plugin — including the harmless catalog — unmounted. With no settings service the routes still serve; only the card stops being listed, because the Settings → Plugins tab dispatches one card per served namespace and this plugin serves an empty `social` namespace for exactly that purpose.
+`inject` is `tools`, `social`, and `webServer`. The web server is required because the human surface is half of what this package is for, and mounting it without one would silently ship a card nobody can reach. `credentials`, `settings`, and `approval` are resolved with `ctx.get(...)` where they are used, so a composition missing one fails that one operation closed with a legible refusal instead of keeping the whole plugin — including the harmless catalog — unmounted. The social page lists itself when `GET /social/status` answers JSON, so this plugin needs no settings form of its own.
 
 ## Model Experience
 

@@ -19,7 +19,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -43,8 +43,6 @@ export type {
 // The seam declares `Context.social`; `inject` above makes it present by `apply`.
 import type {} from '@deepseek-ai/dsh-social'
 import { firstConfigured, resolveAppCredential } from '@deepseek-ai/dsh-social'
-// Type-only merge: declares `Context.settings`, awaited in a scope in `apply`.
-import type {} from '@deepseek-ai/dsh-settings'
 
 /** The plugin name, for the Loader. It is also the credential key's scope. */
 export const name = 'social-linkedin'
@@ -54,14 +52,16 @@ export const inject = ['social', 'credentials', 'authorization']
 
 /** Composition config. */
 export interface Config {
-  /** The LinkedIn application's client id, when the composition gives it outright. */
-  clientId: string
+  /** The LinkedIn application's client id, when given outright; editable from the Plugins page. */
+  clientId: Volatile<string>
   /** Environment-variable name holding the LinkedIn application's client id. */
   clientIdRef: string
   /** Environment-variable name holding the LinkedIn application's client secret. */
   clientSecretRef: string
-  /** Redirect URI registered on the LinkedIn application; sign-in cannot start without it. */
-  redirectUri: string
+  /** Redirect URI registered on the LinkedIn application; sign-in cannot start without it. Editable from the Plugins page. */
+  redirectUri: Volatile<string>
+  /** Variable naming the client secret, set from the Plugins page; overrides `clientSecretRef` when present. */
+  clientSecretEnv: Volatile<string | undefined>
   /** The `LinkedIn-Version` every versioned REST call carries, in `YYYYMM` form. */
   apiVersion: string
   /** How many days before the token lapses a target starts reporting itself unready. */
@@ -84,17 +84,20 @@ export interface Config {
  * credential seam per call. That is also what lets the settings card write a
  * new secret without ever reading the old one back.
  *
- * Each value is resolved settings-first; see `resolveAppCredential`.
+ * The client id, the redirect URI and the secret's variable are editable from
+ * the Plugins page; see `resolveAppCredential`.
  */
-export const Config: z<Config> = z.object({
+export const Config = z.object({
   clientId: z.string().default('')
-    .description('The LinkedIn application client id. Leave empty to read it from the environment variable named by clientIdRef, or to let the settings card supply it.'),
+    .description('The LinkedIn application client id. Leave empty to read it from the environment variable named by clientIdRef.').volatile(),
   clientIdRef: z.string().default('LINKEDIN_CLIENT_ID')
     .description('Name of the environment variable holding the LinkedIn application client id.'),
   clientSecretRef: z.string().default('LINKEDIN_CLIENT_SECRET')
     .description('Name of the environment variable holding the LinkedIn application client secret.'),
   redirectUri: z.string().default('')
-    .description('The redirect URI registered on the LinkedIn application. LinkedIn compares it byte-for-byte, so it must match the registration exactly. Sign-in refuses to start while this is empty.'),
+    .description('The redirect URI registered on the LinkedIn application. LinkedIn compares it byte-for-byte, so it must match the registration exactly. Sign-in refuses to start while this is empty.').volatile(),
+  clientSecretEnv: z.string()
+    .description('Name of the environment variable holding the client secret, overriding clientSecretRef. The secret itself is written through the credential store, never into this document.').volatile(),
   apiVersion: z.string().default('202608')
     .description('The LinkedIn-Version header value, YYYYMM. LinkedIn supports each version for about a year, so this needs raising before the configured one lapses.'),
   reauthWarningDays: z.natural().default(7)
@@ -223,72 +226,8 @@ function resolveTarget(id: string): ResolvedTarget {
  * @param ctx - the plugin context, injecting `social`, `credentials`, and `authorization`.
  * @param config - validated composition config.
  */
-/**
- * The settings namespace this plugin serves, so the application credentials can
- * be entered in Settings → Plugins → Social instead of only at deploy time.
- *
- * Named after the plugin, which is also how its credential records are scoped.
- */
-const SETTINGS_NS = 'social-linkedin'
-
-/** The LinkedIn application fields a person can edit from the settings card. */
-export interface AppSettings {
-  /** The application's client id, which LinkedIn prints on the app's own page. */
-  clientId?: string
-  /** Name of the environment variable or credential record holding the client secret. */
-  clientSecretEnv?: string
-  /** The redirect URI registered on the application. */
-  redirectUri?: string
-}
-
-/**
- * Schema for {@link SETTINGS_NS}.
- *
- * There is no client-secret field, deliberately. A secret written into a
- * settings document rides every read of that document back to the browser and
- * sits in the form; this section names the *reference* instead, and the card
- * writes the secret through the credentials domain, which never reads one back.
- */
-const APP_SETTINGS_SCHEMA: z<AppSettings> = z.object({
-  clientId: z.string().description('The LinkedIn application client id, from the Auth tab of your app. Not a secret — LinkedIn shows it on the app page.'),
-  clientSecretEnv: z.string().description('Name of the environment variable holding the client secret. The secret itself is written through the credential store, never into this document.'),
-  redirectUri: z.string().description('An Authorized redirect URL registered on the LinkedIn application. LinkedIn compares it byte for byte, so it must match the registration exactly.'),
-})
-
-/**
- * Serve the settings namespace and return a live read of it.
- *
- * Awaited in a scope rather than sampled with `ctx.get`: the settings service
- * is file-backed and resolves after a plugin composed alongside it applies, so
- * sampling for it at `apply` reads undefined on every boot and serves nothing.
- * Absent settings is a supported composition — the plugin then runs on the
- * composition config and the environment alone — so it stays out of `inject`.
- *
- * @param ctx - the plugin context.
- * @param config - validated composition config, seeding the section's base.
- * @returns a read of the current section, empty until the service arrives.
- */
-function installAppSettings(ctx: Context, config: Config): () => AppSettings {
-  let read: () => AppSettings = () => ({})
-  ctx.inject(['settings'], (settingsCtx: Context) => {
-    const scope = settingsCtx.settings.register(SETTINGS_NS, APP_SETTINGS_SCHEMA, {
-      // The composition layer shows through the card as the value a cleared
-      // field falls back to, so a deployment that set these in cordis.yml sees
-      // what it set rather than an empty form.
-      base: {
-        clientId: config.clientId,
-        clientSecretEnv: config.clientSecretRef,
-        redirectUri: config.redirectUri,
-      },
-    })
-    read = () => scope.get()
-  })
-  return () => read()
-}
-
 export function apply(ctx: Context, config: Config): void {
   const key: CredentialKey = credentialKey(name, 'member')
-  const readSettings = installAppSettings(ctx, config)
   const api: ApiSettings = {
     apiBaseUrl: config.apiBaseUrl,
     version: config.apiVersion,
@@ -303,21 +242,20 @@ export function apply(ctx: Context, config: Config): void {
    * Resolved per attempt so a client secret added after boot is picked up.
    */
   const oauthSettings = async (): Promise<OAuthSettings> => {
-    const section = readSettings()
     const resolve = async (ref: string): Promise<string | undefined> =>
       (await ctx.credentials.resolve(credentialRef(ref)))?.value
-    const redirectUri = firstConfigured(section.redirectUri, config.redirectUri)
+    const redirectUri = firstConfigured(config.redirectUri.get())
     if (redirectUri === undefined) {
       throw new Error('LinkedIn sign-in needs a redirect URI: enter it in Settings → Plugins → Social, or set it on this plugin. It must match one registered on your LinkedIn application byte for byte.')
     }
     const clientId = await resolveAppCredential(
-      { settings: section.clientId, config: config.clientId, ref: config.clientIdRef },
+      { config: config.clientId.get(), ref: config.clientIdRef },
       { platform: 'LinkedIn', what: 'client id' }, resolve)
     // The secret is never a literal in any layer: it is addressed by reference
     // and read through the credential seam, which is what the settings card
     // writes into without ever reading it back.
     const clientSecret = await resolveAppCredential(
-      { ref: firstConfigured(section.clientSecretEnv, config.clientSecretRef) },
+      { ref: firstConfigured(config.clientSecretEnv.get(), config.clientSecretRef) },
       { platform: 'LinkedIn', what: 'client secret' }, resolve)
     return {
       clientId,
@@ -345,7 +283,7 @@ export function apply(ctx: Context, config: Config): void {
     const pasted = await session.prompt({
       kind: 'text',
       message: 'Paste the address LinkedIn redirected you to (or just the code parameter from it).',
-      placeholder: `${config.redirectUri}?code=…&state=…`,
+      placeholder: `${config.redirectUri.get()}?code=…&state=…`,
     })
     const code = extractCode(pasted, state)
     const token = await exchangeCode(settings, code, session.signal)
@@ -358,7 +296,7 @@ export function apply(ctx: Context, config: Config): void {
       memberId: member.id,
       ...(member.name === undefined ? {} : { memberName: member.name }),
     }
-    await ctx.credentials.modifyRecord(key, () => Promise.resolve({ kind: 'grant', payload: grant }))
+    await session.commit({ kind: 'grant', payload: grant })
     session.notify({
       message: `Signed in as ${member.name ?? member.id}. This credential expires on ${isoDay(token.expiresAt)}; LinkedIn issues no refresh token, so sign in again before then.`,
     })

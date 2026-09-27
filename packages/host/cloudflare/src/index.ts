@@ -25,21 +25,19 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-
-/** The settings namespace holding the zone roster. */
-const NS = 'cloudflare'
 
 /** One configured Cloudflare zone, as stored in settings. */
 interface CloudflareZone {
+  /** A short label the caller names this zone by. */
   name: string
+  /** The Cloudflare zone id, from the zone overview page. */
   zoneId: string
   /** Name of the environment variable holding this zone's API token (preferred). */
   apiTokenEnv?: string
@@ -67,41 +65,39 @@ interface CloudflareAccount {
   apiToken?: string
 }
 
-/** The resolved `cloudflare` settings section. */
-interface CloudflareConfig {
-  zones: CloudflareZone[]
-  accounts: CloudflareAccount[]
-}
-
 /**
- * Schema for the settings namespace. Both token forms are optional here and
- * the settings card accepts either, because a zone authenticates with whichever
- * one is present; a zone carrying neither fails at its first call with a
- * message naming what to set.
+ * The zone roster, edited from the Plugins page. Both token forms are
+ * optional here and the page accepts either, because a zone authenticates with
+ * whichever one is present; a zone carrying neither fails at its first call
+ * with a message naming what to set.
  */
-const CONFIG_SCHEMA: z<CloudflareConfig> = z.object({
-  zones: z.array(z.object({
-    name: z.string().required().description('A short label you choose for this zone, used when asking a tool to act on it.'),
-    zoneId: z.string().required().description('The Cloudflare zone id, from the zone overview page.'),
-    apiTokenEnv: z.string().description('Preferred: name of the environment variable holding this zone API token (e.g. CLOUDFLARE_TOKEN_SITE), so the token stays out of settings. Requires that variable to be set on the harness.'),
-    apiToken: z.string().description('Alternative to apiTokenEnv: the API token itself. Simpler, but it is stored here in settings and shown in this form.'),
-  })).default([]).description('Cloudflare zones this harness may purge and edit DNS on. Give each zone either apiTokenEnv or apiToken.'),
-  accounts: z.array(z.object({
-    name: z.string().required().description('A short label you choose for this account, used when asking a tool to act on it.'),
-    id: z.string().required().description('The Cloudflare account id, from any zone overview page or from the dashboard URL.'),
-    apiTokenEnv: z.string().description('Preferred: name of the environment variable holding this account token (e.g. CLOUDFLARE_ACCOUNT_TOKEN), so it stays out of settings.'),
-    apiToken: z.string().description('Alternative to apiTokenEnv: the account token itself. Simpler, but stored here in settings and shown in this form.'),
-  })).default([]).description('Optional. Only needed to create zones or list every zone on an account; each token needs Zone: Edit across all zones in its account, which reaches every domain that account owns.'),
-})
+const ZONES_SCHEMA: z<CloudflareZone[]> = z.array(z.object({
+  name: z.string().required().description('A short label you choose for this zone, used when asking a tool to act on it.'),
+  zoneId: z.string().required().description('The Cloudflare zone id, from the zone overview page.'),
+  apiTokenEnv: z.string().description('Preferred: name of the environment variable holding this zone API token (e.g. CLOUDFLARE_TOKEN_SITE), so the token stays out of settings. Requires that variable to be set on the harness.'),
+  apiToken: z.string().description('Alternative to apiTokenEnv: the API token itself. Simpler, but it is stored here in settings and shown in this form.'),
+})).default([]).description('Cloudflare zones this harness may purge and edit DNS on. Give each zone either apiTokenEnv or apiToken.')
+
+/** The account credentials, kept apart from the zones for the reason {@link CloudflareAccount} gives. */
+const ACCOUNTS_SCHEMA: z<CloudflareAccount[]> = z.array(z.object({
+  name: z.string().required().description('A short label you choose for this account, used when asking a tool to act on it.'),
+  id: z.string().required().description('The Cloudflare account id, from any zone overview page or from the dashboard URL.'),
+  apiTokenEnv: z.string().description('Preferred: name of the environment variable holding this account token (e.g. CLOUDFLARE_ACCOUNT_TOKEN), so it stays out of settings.'),
+  apiToken: z.string().description('Alternative to apiTokenEnv: the account token itself. Simpler, but stored here in settings and shown in this form.'),
+})).default([]).description('Optional. Only needed to create zones or list every zone on an account; each token needs Zone: Edit across all zones in its account, which reaches every domain that account owns.')
 
 /** The plugin name, for the Loader. */
 export const name = 'cloudflare'
 
 /** The services this plugin reads. */
-export const inject = ['settings', 'agents', 'webServer']
+export const inject = ['agents', 'webServer']
 
-/** Composition config; the roster lives in settings, so nothing is required here. */
+/** Composition config. The zones and accounts are editable live from the Plugins page; nothing is required. */
 export interface Config {
+  /** The zones the tools may act on. */
+  zones: Volatile<CloudflareZone[]>
+  /** The account credentials zone creation needs. */
+  accounts: Volatile<CloudflareAccount[]>
   /** Milliseconds one API call may take before it is abandoned. */
   timeoutMs: number
   /** Absolute path of the token-guarded command route MCP clients reach. */
@@ -112,8 +108,10 @@ export interface Config {
   apiBase: string
 }
 
-/** Composition config; the roster lives in settings, so nothing is required here. */
-export const Config: z<Config> = z.object({
+/** Composition config. The zones and accounts are editable live from the Plugins page; nothing is required. */
+export const Config = z.object({
+  zones: ZONES_SCHEMA.volatile(),
+  accounts: ACCOUNTS_SCHEMA.volatile(),
   timeoutMs: z.natural().min(1000).default(15_000),
   path: z.string().default('/cloudflare'),
   token: z.string().default(''),
@@ -887,9 +885,8 @@ async function handleCommand(req: IncomingMessage, res: ServerResponse, tools: T
  * @param config - validated composition config.
  */
 export function apply(ctx: Context, config: Config): void {
-  const scope = ctx.settings.register(NS, CONFIG_SCHEMA, { base: { zones: [], accounts: [] } })
-  const readZones: ReadZones = () => scope.get().zones
-  const readAccounts: ReadAccounts = () => scope.get().accounts
+  const readZones: ReadZones = () => config.zones.get()
+  const readAccounts: ReadAccounts = () => config.accounts.get()
 
   // A token-guarded command route, so a CLI's MCP client (agy, opencode) can
   // reach the same tools a direct-provider agent gets natively. The token is
