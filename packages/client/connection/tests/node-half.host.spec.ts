@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { createServer, request as httpRequest } from 'node:http'
 import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AddressInfo } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
@@ -383,6 +383,90 @@ describe('connection node half', () => {
     expect(routes.map(candidate => candidate.path)).toEqual([API_PATH])
     await fiber.dispose()
     expect(routes).toHaveLength(0)
+  })
+
+  describe('a call that outlasts a proxy\'s idle limit', () => {
+    afterEach(() => { vi.useRealTimers() })
+
+    /** Mount one dedicated channel whose handler settles when the test says so. */
+    async function slowChannel(): Promise<{
+      send: (rpcId: string) => { done: Promise<void>; state: ReturnType<typeof fakeResponse>['state'] }
+      settle: (outcome: { value: unknown } | { error: Error }) => void
+      dispose: () => Promise<void>
+    }> {
+      const { routes, connection, dispose } = await mounted()
+      let settle!: (outcome: { value: unknown } | { error: Error }) => void
+      connection.rpc.handle('/rpc', () => new Promise((resolve, reject) => {
+        settle = (outcome) => {
+          if ('error' in outcome) reject(outcome.error)
+          else resolve({ ok: true, value: outcome.value })
+        }
+      }))
+      const route = routes.find(candidate => candidate.path === '/rpc')!
+      const headers = { host: '127.0.0.1:3080', cookie: browserCookie(connection, '127.0.0.1:3080') }
+      return {
+        send(rpcId) {
+          const { response, state } = fakeResponse()
+          const done = Promise.resolve(route.handler(fakePost(headers, '/rpc/council/run', {
+            type: 'client-request', rpcId, method: 'council/run', payload: {},
+          }), response))
+          return { done, state }
+        },
+        settle: (outcome) => { settle(outcome) },
+        dispose,
+      }
+    }
+
+    it('starts the response and keeps it alive until the envelope is ready', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+      const channel = await slowChannel()
+      const { done, state } = channel.send('rpc-slow')
+      await vi.advanceTimersByTimeAsync(19_000)
+      expect(state.status).toBeUndefined()
+      // Well past the 20-second start, and past two keep-alive intervals.
+      await vi.advanceTimersByTimeAsync(46_000)
+      expect(state.status).toBe(200)
+      expect(state.headers).toMatchObject({ 'content-type': 'application/json' })
+      expect(state.headers?.['cache-control']).toContain('no-transform')
+      channel.settle({ value: { decision: 'queue' } })
+      await done
+      const body = String(state.body)
+      expect(body.startsWith('   ')).toBe(true)
+      // What the browser client does with it: one ordinary JSON read.
+      expect(await new Response(body).json()).toEqual({
+        type: 'server-response',
+        rpcId: 'rpc-slow',
+        result: { ok: true, value: { decision: 'queue' } },
+      })
+      await channel.dispose()
+    })
+
+    it('answers a call that settles in time exactly as before', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+      const channel = await slowChannel()
+      const { done, state } = channel.send('rpc-fast')
+      await vi.advanceTimersByTimeAsync(5_000)
+      channel.settle({ value: 1 })
+      await done
+      expect(state.status).toBe(200)
+      expect(state.headers?.['cache-control']).toBeUndefined()
+      expect(String(state.body).startsWith('{')).toBe(true)
+      await channel.dispose()
+    })
+
+    it('fails the body when a slow handler throws after the status is committed', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+      const channel = await slowChannel()
+      const { done, state } = channel.send('rpc-broken')
+      await vi.advanceTimersByTimeAsync(25_000)
+      expect(state.status).toBe(200)
+      channel.settle({ error: new Error('handler broke') })
+      // The web server destroys a started response whose handler rejects, so
+      // the client's read fails the way a 500 would.
+      await expect(done).rejects.toThrow('handler broke')
+      expect(state.body).toBeUndefined()
+      await channel.dispose()
+    })
   })
 
   it('dispatches claimed /api endpoints and withdraws the claim', async () => {

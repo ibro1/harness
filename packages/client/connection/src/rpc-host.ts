@@ -243,14 +243,71 @@ function rpcFetchHandler(
         })
       }
 
-      try {
-        const result = await handler(endpoint, message.payload, request.signal)
-        return fullResponse(message.rpcId, result)
-      } catch (error) {
-        return new Response(`handler failure: ${String(error)}`, { status: 500 })
-      }
+      const settled = handler(endpoint, message.payload, request.signal).then(
+        result => ({ ok: true as const, result }),
+        (error: unknown) => ({ ok: false as const, error }),
+      )
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const early = await Promise.race([
+        settled,
+        new Promise<undefined>((resolve) => { timer = setTimeout(() => { resolve(undefined) }, RPC_KEEPALIVE_AFTER_MS) }),
+      ])
+      clearTimeout(timer)
+      if (early === undefined) return keepAliveResponse(message.rpcId, settled)
+      return early.ok
+        ? fullResponse(message.rpcId, early.result)
+        : new Response(`handler failure: ${String(early.error)}`, { status: 500 })
     },
   }
+}
+
+/**
+ * How long a call may run before its response starts streaming. A reverse
+ * proxy gives up on an origin that sends nothing for a while — Cloudflare
+ * answers 524 after 100 seconds — and a command such as a multi-model
+ * deliberation legitimately runs for minutes inside one call.
+ */
+const RPC_KEEPALIVE_AFTER_MS = 20_000
+/** Interval between keep-alive bytes once a call's response has started. */
+const RPC_KEEPALIVE_INTERVAL_MS = 20_000
+const KEEPALIVE_BYTE = new TextEncoder().encode(' ')
+
+/**
+ * Commit a slow call's 200 now and send its envelope when it settles, with a
+ * space every interval in between. JSON ignores leading whitespace, so the
+ * client's `response.json()` reads the same envelope either way. A handler
+ * that throws after the status is committed can no longer answer 500, so the
+ * body is errored instead: the client's read rejects, the same transport
+ * failure a 500 raises. `no-transform` keeps the gzip layer, and any proxy
+ * honouring it, from holding the small writes back.
+ */
+function keepAliveResponse(
+  rpcId: RpcIdType,
+  settled: Promise<{ ok: true; result: ConnectionRpcResult<unknown> } | { ok: false; error: unknown }>,
+): Response {
+  let interval: ReturnType<typeof setInterval> | undefined
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(KEEPALIVE_BYTE)
+      interval = setInterval(() => { controller.enqueue(KEEPALIVE_BYTE) }, RPC_KEEPALIVE_INTERVAL_MS)
+      void settled.then((outcome) => {
+        clearInterval(interval)
+        if (!outcome.ok) {
+          controller.error(outcome.error)
+          return
+        }
+        const envelope: ConnectionServerResponse = { type: 'server-response', rpcId, result: outcome.result }
+        controller.enqueue(new TextEncoder().encode(JSON.stringify(envelope)))
+        controller.close()
+      })
+    },
+    cancel() {
+      clearInterval(interval)
+    },
+  })
+  return new Response(body, {
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-transform' },
+  })
 }
 
 function invalidEnvelopeResponse(body: unknown, issues: readonly object[]): Response {
