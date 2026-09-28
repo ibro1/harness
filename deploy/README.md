@@ -722,6 +722,18 @@ seconds with a 524, and a CLI-backed completion often takes longer. Such a
 caller should call the gateway from inside the box, or start the work and
 poll for it, rather than hold one request open for a long generation.
 
+## Profile repair
+
+Plugins installed from the Plugins page live in `~/.dsh/profiles/web` on the
+state volume, so they outlive every image. Below 1.0 a caret range never
+crosses a minor version, so an installed plugin never updates itself across an
+upstream API change; it just shows a **Problem** badge. On every boot the
+entrypoint runs `deploy/repair-profile.mjs`, which removes profile bundles
+upstream has retired (the Agent Teams Web UI bundle, folded into Agent Teams in
+0.1.7) and reinstalls plugins below the first release that works on this
+harness (`dsh-mnemon` below 0.5.16). With nothing to repair it prints nothing;
+`--dry-run` shows what it would change.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

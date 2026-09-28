@@ -197,6 +197,11 @@ if command -v agy >/dev/null 2>&1 || command -v opencode >/dev/null 2>&1; then
   node "$APP_DIR/deploy/sync-models.mjs" || echo "[entrypoint] model sync failed; the configured lists stand" >&2
 fi
 
+# Plugins installed from the UI live on the volume and outlive the image; after
+# an upgrade, drop bundles upstream retired and lift plugins whose old releases
+# call retired APIs (deploy/repair-profile.mjs lists both).
+APP_DIR="$APP_DIR" node "$APP_DIR/deploy/repair-profile.mjs" || echo "[entrypoint] profile repair failed; plugins stay as installed" >&2
+
 for binary in agy opencode; do
   if ! command -v "$binary" >/dev/null 2>&1; then
     echo "[entrypoint] WARNING: '$binary' not on PATH — its provider will fail until /opt/harness/bin holds it." >&2
