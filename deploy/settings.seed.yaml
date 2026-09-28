@@ -11,6 +11,7 @@ llm-pi-ai:
       api: openai-completions
       baseURL: http://127.0.0.1:8001/v1
       apiKeyEnv: AGY_API_KEY
+      sessionHeader: x-dsh-session-id
       defaultInput:
         - text
         - image
@@ -90,6 +91,7 @@ llm-pi-ai:
       api: openai-completions
       baseURL: http://127.0.0.1:8002/v1
       apiKeyEnv: OPENCODE_API_KEY
+      sessionHeader: x-dsh-session-id
       defaultInput:
         - text
         - image

@@ -133,6 +133,20 @@ const catalogue = {}
 let changed = false
 let defaultChanged = false
 
+// The bridges read the calling session's id from this header, and the
+// provider sends it only when `sessionHeader` names it. A profile seeded before
+// the field existed lacks it, which silently cut every session-scoped MCP tool
+// off from its session, so it is kept in place here.
+const SESSION_HEADER = 'x-dsh-session-id'
+const sessionHeaderFixed = []
+for (const [provider] of sources) {
+  if (providers[provider] === undefined || providers[provider].sessionHeader === SESSION_HEADER) continue
+  providers[provider].sessionHeader = SESSION_HEADER
+  sessionHeaderFixed.push(provider)
+  changed = true
+}
+if (sessionHeaderFixed.length > 0) console.error(`sync-models: set sessionHeader ${SESSION_HEADER} on ${sessionHeaderFixed.join(', ')}`)
+
 for (const [provider, list] of sources) {
   if (providers[provider] === undefined) continue
   let live
@@ -190,7 +204,10 @@ if (current.pending) {
 // objects, so nothing else the operator set in the profile is restated.
 const handoff = { 'llm-pi-ai': { providers: Object.fromEntries(sources
   .filter(([provider]) => providers[provider] !== undefined)
-  .map(([provider]) => [provider, { models: providers[provider].models }])) } }
+  .map(([provider]) => [provider, {
+    models: providers[provider].models,
+    ...sessionHeaderFixed.includes(provider) ? { sessionHeader: SESSION_HEADER } : {},
+  }])) } }
 if (defaultChanged) handoff['agent-default-model'] = document['agent-default-model']
 writeFileSync(SETTINGS_PATH, yaml.dump(handoff, { lineWidth: 120 }))
 console.error(`sync-models: wrote ${SETTINGS_PATH} for the harness to import into the profile`)

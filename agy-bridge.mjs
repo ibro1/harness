@@ -84,6 +84,19 @@ function catalogueModels(provider, fallback) {
   return fallback
 }
 
+/** Header the llm-pi-ai provider's `sessionHeader` names; lower-case, as Node delivers it. */
+const SESSION_HEADER = (process.env.DSH_BRIDGE_SESSION_HEADER || 'x-dsh-session-id').toLowerCase()
+
+/**
+ * The calling harness session's id, from the session header, or from a body
+ * field for a client that sends it there; undefined when neither is present.
+ */
+function sessionIdOf(req, body) {
+  const header = req.headers[SESSION_HEADER]
+  if (typeof header === 'string' && header !== '') return header
+  return body.sessionId !== undefined ? String(body.sessionId) : undefined
+}
+
 function saveBase64Image(dataUrl) {
   try {
     let ext = 'png'
@@ -105,6 +118,18 @@ function saveBase64Image(dataUrl) {
   }
 }
 
+/**
+ * How agy should work inside the harness, appended after the harness's own
+ * system prompt. Measured on a local run: without it, a Lead that spawned a
+ * teammate spent a dozen shell steps searching the harness's session files for
+ * the reply, because a teammate's message reaches the Lead only when the
+ * harness starts its next step, which for agy is after this reply ends.
+ */
+const BRIDGE_NOTES = `[Bridge Notes]
+You are running inside DeepSeek Harness through a bridge. The harness's tools are MCP servers whose names start with "dsh-"; call them with call_mcp_tool, reading only the tool descriptions you need. Do not inspect the harness itself (its source, logs, session files, processes, or your brain folder) to find or work around a tool.
+Messages from teammates are delivered by the harness after you finish this reply. When wait_agent reports a mailbox change, or you are waiting for a teammate's answer, end your reply with a one-line status; the message arrives as your next input.
+`
+
 function formatPrompt(messages, system) {
   let promptParts = []
   let savedImages = []
@@ -112,6 +137,7 @@ function formatPrompt(messages, system) {
   if (system) {
     promptParts.push(`[System Instructions]\n${system}\n`)
   }
+  if (process.env.AGY_BRIDGE_NOTES !== '0') promptParts.push(BRIDGE_NOTES)
 
   for (const msg of messages) {
     const role = msg.role || 'user'
@@ -221,12 +247,15 @@ const server = createServer(async (req, res) => {
       const stream = body.stream !== false
       const { prompt, savedImages } = formatPrompt(messages, system)
 
-      // The harness sends the originating session id (pi-ai adapter passes it in
-      // the request body). Expose it to the CLI as DSH_SESSION_ID so a skill can
-      // hand the user a download link back to THIS session's workspace, paired
-      // with $DSH_PUBLIC_HOST (e.g. the video-use skill's finished render).
-      const childEnv = body.sessionId !== undefined
-        ? { ...process.env, DSH_SESSION_ID: String(body.sessionId) }
+      // The originating session id arrives in the header the provider's
+      // `sessionHeader` names (deploy/settings.seed.yaml sets it). Exposed to
+      // the CLI as DSH_SESSION_ID, it reaches the MCP servers the CLI starts,
+      // so session-scoped tools (outputs, capture, Agent Teams) act on THIS
+      // session, a skill can link back to its workspace, and the
+      // background-notify hook can wake it.
+      const sessionId = sessionIdOf(req, body)
+      const childEnv = sessionId !== undefined
+        ? { ...process.env, DSH_SESSION_ID: sessionId }
         : process.env
 
       const id = `chatcmpl-${Date.now()}`
@@ -258,6 +287,8 @@ const server = createServer(async (req, res) => {
         let usage = null
         let emittedText = false
         let lastActivity = Date.now()
+        // Tool steps agy took inside this one request, for the close line.
+        const toolSteps = []
 
         const send = (delta) => {
           res.write(`data: ${JSON.stringify({
@@ -298,6 +329,7 @@ const server = createServer(async (req, res) => {
               // ACTIVE opens a progress line for the call; DONE closes it with a
               // tick + duration. Both keep the stream alive.
               if (su.state === 'ACTIVE') {
+                toolSteps.push(su.tool_name)
                 const brief = briefParams(su.tool_info)
                 sendProgress(`\n🔧 ${su.tool_name}${brief ? ` — ${brief}` : ''}`)
               } else if (su.state === 'DONE') {
@@ -319,7 +351,8 @@ const server = createServer(async (req, res) => {
 
         proc.on('close', code => {
           clearInterval(heartbeat)
-          console.log(`[AGY proc closed] code=${code} emittedText=${emittedText}`)
+          const tokens = usage ? ` in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0}` : ''
+          console.log(`[AGY proc closed] code=${code} emittedText=${emittedText} tools=${toolSteps.length}${tokens}${toolSteps.length ? ` [${toolSteps.join(' ')}]` : ''}`)
           const finalChunk = {
             id,
             object: 'chat.completion.chunk',

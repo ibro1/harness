@@ -25,6 +25,19 @@ const OPENCODE_MODELS = [
  * actually serves; the constant below is only the floor when that file is
  * missing or unreadable, so the list is never hand-maintained in two places.
  */
+/** Header the llm-pi-ai provider's `sessionHeader` names; lower-case, as Node delivers it. */
+const SESSION_HEADER = (process.env.DSH_BRIDGE_SESSION_HEADER || 'x-dsh-session-id').toLowerCase()
+
+/**
+ * The calling harness session's id, from the session header, or from a body
+ * field for a client that sends it there; undefined when neither is present.
+ */
+function sessionIdOf(req, body) {
+  const header = req.headers[SESSION_HEADER]
+  if (typeof header === 'string' && header !== '') return header
+  return body.sessionId !== undefined ? String(body.sessionId) : undefined
+}
+
 function catalogueModels(provider, fallback) {
   try {
     const path = join(process.env.DSH_HOME || join(homedir(), '.dsh'), '.model-catalogue.json')
@@ -199,12 +212,15 @@ const server = createServer(async (req, res) => {
         args.push('-f', f)
       }
 
-      // Expose the originating session id (the pi-ai adapter sends it in the
-      // request body) to the CLI as DSH_SESSION_ID, so a skill can build a
-      // download link and the background-notify hook can wake THIS session —
-      // parity with the agy bridge.
-      const childEnv = body.sessionId !== undefined
-        ? { ...ENV, DSH_SESSION_ID: String(body.sessionId) }
+      // The originating session id arrives in the header the provider's
+      // `sessionHeader` names (deploy/settings.seed.yaml sets it). Exposed to
+      // the CLI as DSH_SESSION_ID, it reaches the MCP servers the CLI starts,
+      // so session-scoped tools (outputs, capture, Agent Teams) act on THIS
+      // session, a skill can link back to its workspace, and the
+      // background-notify hook can wake it.
+      const sessionId = sessionIdOf(req, body)
+      const childEnv = sessionId !== undefined
+        ? { ...ENV, DSH_SESSION_ID: sessionId }
         : ENV
 
       if (stream) {

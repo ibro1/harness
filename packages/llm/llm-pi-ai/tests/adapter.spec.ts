@@ -123,6 +123,23 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
   })
 
+  it('sends the calling session id in the configured session header, and only then', async () => {
+    const named = await mockServer([{ events: textEvents }])
+    await assemble(await harness(named.url, { sessionHeader: 'x-dsh-session-id' }), {
+      model: 'deepseek-v4-flash', messages: [], sessionId: 'session-for-bridge' as never,
+    })
+    expect(named.headers[0]?.['x-dsh-session-id']).toBe('session-for-bridge')
+
+    const unnamed = await mockServer([{ events: textEvents }])
+    await assemble(await harness(unnamed.url), { model: 'deepseek-v4-flash', messages: [], sessionId: 'session-for-bridge' as never })
+    expect(Object.values(unnamed.headers[0] ?? {})).not.toContain('session-for-bridge')
+  })
+
+  it('rejects a session header name Fetch cannot represent', () => {
+    expect(() => resolveProfiles({ openai: { sessionHeader: 'bad header name' } }))
+      .toThrow('provider "openai" header "bad header name" is not valid for Fetch')
+  })
+
   it('forwards common stream options and profile reasoning', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url, {

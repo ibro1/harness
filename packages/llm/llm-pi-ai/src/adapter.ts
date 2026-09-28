@@ -201,12 +201,21 @@ function reasoningInfo(
   }
 }
 
-/** Merge deployment headers while removing case-insensitive attribution collisions. */
-function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+/**
+ * Merge deployment headers and the session header while removing case-insensitive attribution collisions.
+ * @param headers - the route's configured headers.
+ * @param session - the route's session header name and the calling session's id, when both are present.
+ * @returns the headers for one provider request.
+ */
+function requestHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+  session?: { readonly name: string; readonly id: string },
+): Record<string, string> {
   const attribution = attributionHeaders()
   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
+  const merged = { ...headers, ...session === undefined ? {} : { [session.name]: session.id } }
   return {
-    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
+    ...Object.fromEntries(Object.entries(merged).filter(([name]) => !reserved.has(name.toLowerCase()))),
     ...attribution,
   }
 }
@@ -385,7 +394,9 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        headers: requestHeaders(profile.headers, profile.sessionHeader === undefined || options.sessionId === undefined
+          ? undefined
+          : { name: profile.sessionHeader, id: String(options.sessionId) }),
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
       let exhausted = false

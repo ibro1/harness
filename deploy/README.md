@@ -592,10 +592,13 @@ Setting every `*_MCP` switch to `0` (and leaving the browser, DeerFlow,
 Dokploy and WhatsApp tokens unset) is what turns it off.
 
 **Session outputs and page capture over MCP** act on one session's
-workspace, which a command route cannot see. The bridges pass each CLI
-request its session id as `DSH_SESSION_ID`, the CLIs pass it on to the MCP
-servers they start, and the route looks the session's working directory up
-from the harness's session store. A call with no live session is refused
+workspace, which a command route cannot see. The agy and opencode providers
+set `sessionHeader: x-dsh-session-id`, so every model request carries the
+calling session's id; the bridges hand it to each CLI run as
+`DSH_SESSION_ID`, the CLIs pass it on to the MCP servers they start, and the
+route looks the session's working directory up from the harness's session
+store. `deploy/sync-models.mjs` adds the setting at boot to a profile seeded
+before it existed; without it no session-scoped tool can find its session. A call with no live session is refused
 rather than written anywhere else.
 
 **Agent Teams over MCP.** The team tools (`spawn_teammate`, `send_message`,
@@ -755,6 +758,17 @@ Memory Spaces. `MNEMON_DATA_DIR=/home/node/.dsh/mnemon` puts the plugin's
 global store — runtime memory, documents and Memory Spaces — on the `dsh-state`
 volume; the default, `~/.mnemon`, is not a volume and was lost on every
 redeploy.
+
+## How agy is steered
+
+The agy bridge appends a short `[Bridge Notes]` block after the harness's
+system prompt: use the `dsh-*` MCP servers through `call_mcp_tool`, do not
+inspect the harness to work around a tool, and end the reply to receive a
+teammate's message (the harness delivers inbox messages between steps, which
+for agy is after its reply). Measured on a Lead spawning one teammate, it took
+the run from 2 m 50 s / 167K tokens to 34–47 s / 70–76K tokens.
+`AGY_BRIDGE_NOTES=0` removes it. Each finished agy run logs its tool steps and
+token counts on its `[AGY proc closed]` line.
 
 ## Model catalogue
 
