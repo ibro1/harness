@@ -324,7 +324,7 @@ function resolveAccount(
   requested: string | undefined,
 ): { id: string; credential: Credential } {
   if (accounts.length === 0) {
-    throw new Error('No Cloudflare account is configured; add one under Settings → cloudflare. An account is only needed for creating zones and listing every zone on one.')
+    throw new Error('No Cloudflare account is configured; add one under Settings → cloudflare. An account is needed for creating zones, listing every zone on one, and reaching a domain not configured under zones.')
   }
   const named = (): CloudflareAccount => {
     if (requested !== undefined && requested !== '') {
@@ -456,7 +456,7 @@ function registerCloudflareTools(ctx: Context, readZones: ReadZones, readAccount
 export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAccounts, config: Config): ToolDefinition[] {
   const zoneParameter = {
     type: 'string',
-    description: 'Which configured Cloudflare zone to act on, by its name. Omit when only one is configured; use cloudflare_zones to see the names.',
+    description: 'Which Cloudflare zone to act on: a configured zone by its name, or the domain name (for example example.com) of any zone on a configured account. Omit when exactly one zone is configured; use cloudflare_zones and cloudflare_account_zones to see what is reachable.',
   } as const
   const accountParameter = {
     type: 'string',
@@ -477,19 +477,60 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
     init?: { method?: string; body?: unknown },
   ): Promise<unknown> => callCloudflare(config.apiBase, credential, path, init, config.timeoutMs)
 
+  /**
+   * Resolve the zone a call names. A configured zone wins by its name. A name
+   * no configured zone carries is looked up as a domain on each configured
+   * account, and a match acts with that account's token: an operator who
+   * stored an account token has already granted its reach over every domain in
+   * the account, so each one need not be listed again under zones.
+   * @param requested - the zone argument as the caller passed it.
+   * @returns the zone, carrying the token to call it with.
+   * @throws when nothing configured or reachable matches, naming what is.
+   */
+  const findZone = async (requested: string | undefined): Promise<CloudflareZone> => {
+    const zones = readZones()
+    const accounts = readAccounts()
+    const named = requested?.trim() ?? ''
+    if (named === '' || zones.some(zone => zone.name === named) || accounts.length === 0) {
+      return resolveZone(zones, requested)
+    }
+    const refusals: string[] = []
+    for (const account of accounts) {
+      let resolved: { id: string; credential: Credential }
+      try {
+        resolved = resolveAccount(accounts, account.name)
+      } catch (error) {
+        refusals.push(error instanceof Error ? error.message : String(error))
+        continue
+      }
+      const query = new URLSearchParams({ 'name': named, 'account.id': resolved.id })
+      const found = rows(await callAccount(resolved.credential, `/zones?${query.toString()}`))[0]
+      if (found !== undefined) {
+        return { name: named, zoneId: str(found['id']), apiToken: resolved.credential.token }
+      }
+    }
+    const configured = zones.length === 0 ? 'no zones are configured' : `configured zones: ${zones.map(zone => zone.name).join(', ')}`
+    const searched = `no configured account (${accounts.map(account => account.name).join(', ')}) has a domain named ${JSON.stringify(named)}`
+    throw new Error(`No Cloudflare zone named ${JSON.stringify(named)}: ${configured}, and ${searched}.${refusals.length === 0 ? '' : ` ${refusals.join(' ')}`}`)
+  }
+
   return [
     defineTool({
       name: 'cloudflare_zones',
-      description: 'List the Cloudflare zones this harness is configured to manage, by name and zone id. API tokens are never shown.',
+      description: 'List the Cloudflare zones configured by name, with their zone ids, and which configured accounts make every one of their domains reachable by domain name. API tokens are never shown.',
       parameters: {},
       output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
       execute: (_args, exec: ToolRunContext) => {
         exec.signal.throwIfAborted()
         const zones = readZones()
         const text = zones.length === 0
-          ? 'No Cloudflare zones are configured. Add one under Settings → cloudflare.'
+          ? 'No Cloudflare zones are configured by name. Add one under Settings → cloudflare.'
           : `Configured Cloudflare zones:\n${zones.map(zone => `- ${zone.name} (${zone.zoneId})`).join('\n')}`
-        return Promise.resolve(reply(text))
+        const accounts = readAccounts()
+        const reach = accounts.length === 0
+          ? ''
+          : `\nEvery domain on the configured account${accounts.length === 1 ? '' : 's'} (${accounts.map(account => account.name).join(', ')}) is also reachable by its domain name; cloudflare_account_zones lists them.`
+        return Promise.resolve(reply(`${text}${reach}`))
       },
       presentCall: () => ({ card: 'generic', title: 'List Cloudflare zones', kind: 'other', rawInput: '' }),
     }),
@@ -512,7 +553,7 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
       output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
       execute: async (args, exec: ToolRunContext) => {
         exec.signal.throwIfAborted()
-        const zone = resolveZone(readZones(), args.zone)
+        const zone = await findZone(args.zone)
         const urls = args.urls ?? []
         const everything = args.everything === true
         // An empty urls array must never fall through to a full purge: the cost
@@ -560,7 +601,7 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
       output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
       execute: async (args, exec: ToolRunContext) => {
         exec.signal.throwIfAborted()
-        const zone = resolveZone(readZones(), args.zone)
+        const zone = await findZone(args.zone)
         const query = new URLSearchParams()
         if (args.type !== undefined && args.type !== '') query.set('type', args.type)
         if (args.name !== undefined && args.name !== '') query.set('name', args.name)
@@ -595,7 +636,7 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
       output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
       execute: async (args, exec: ToolRunContext) => {
         exec.signal.throwIfAborted()
-        const zone = resolveZone(readZones(), args.zone)
+        const zone = await findZone(args.zone)
         const zonePath = `/zones/${encodeURIComponent(zone.zoneId)}/dns_records`
         // MX without a priority is not a record Cloudflare can store, and the
         // failure is a mail outage rather than an error anyone sees.
@@ -650,7 +691,7 @@ export function buildCloudflareTools(readZones: ReadZones, readAccounts: ReadAcc
       output: { schema: OUTPUT_SCHEMA, render: (_a, v) => [{ type: 'text', text: v.text }] },
       execute: async (args, exec: ToolRunContext) => {
         exec.signal.throwIfAborted()
-        const zone = resolveZone(readZones(), args.zone)
+        const zone = await findZone(args.zone)
         const zonePath = `/zones/${encodeURIComponent(zone.zoneId)}/dns_records`
         const byId = args.id !== undefined && args.id !== ''
         if (!byId && (args.type === undefined || args.type === '' || args.name === undefined || args.name === '')) {

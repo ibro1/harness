@@ -30,7 +30,7 @@ Each field is a JSON array, and each entry supplies its secret one of two ways: 
 - **Dokploy — Servers:** a `name`, a `url`, and a key.
 - **Postgres — Databases:** a `name` and a connection string, plus an optional boolean `readOnly` (true unless set to false) and a positive `statementTimeoutMs`.
 - **Cloudflare — Zones:** a `name`, a `zoneId`, and a token scoped to that zone.
-- **Cloudflare — Accounts (optional):** a `name`, an account `id`, and a token with Zone → Zone → Edit across the account. Only zone creation and account-wide listing need it; leave it empty otherwise.
+- **Cloudflare — Accounts (optional):** a `name`, an account `id`, and a token scoped to the whole account. With one configured, the agent reaches every domain on the account by domain name, so **Zones** need only list domains that should use a narrower token of their own. The token needs DNS Edit and Cache Purge across the account, plus Zone Edit to add domains.
 
 -----
 

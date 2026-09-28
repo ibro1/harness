@@ -428,6 +428,56 @@ describe('cloudflare account tools', () => {
       .rejects.toThrow('CLOUDFLARE_ACCOUNT_UNSET')
   })
 
+  it('reaches a domain not listed under zones through the account token', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(request => request.path.startsWith('/zones?')
+      ? ok([{ id: 'zone-on-account', name: 'shop.example' }])
+      : ok([{ id: 'r1', type: 'A', name: 'shop.example', content: '203.0.113.9' }]), seen)
+    const tools = mount([], base, [ACCOUNT])
+
+    const out = await tools.get('cloudflare_dns_list')!.execute({ zone: 'shop.example' }, exec)
+
+    expect(seen[0]?.path).toContain('name=shop.example')
+    expect(seen[0]?.path).toContain('account.id=acct-1')
+    expect(seen[1]?.path).toBe('/zones/zone-on-account/dns_records')
+    expect(seen.every(request => request.authorization === 'Bearer account-token')).toBe(true)
+    expect(out.text).toContain('A shop.example -> 203.0.113.9')
+  })
+
+  it('prefers a configured zone over the account lookup', async () => {
+    const seen: SeenRequest[] = []
+    const base = await stubCloudflare(() => ok([]), seen)
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base, [ACCOUNT])
+
+    await tools.get('cloudflare_dns_list')!.execute({ zone: 'site' }, exec)
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.path).toBe('/zones/z1/dns_records')
+    expect(seen[0]?.authorization).toBe('Bearer the-real-token')
+  })
+
+  it('names what it searched when no account has the domain', async () => {
+    const base = await stubCloudflare(() => ok([]))
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: 'CLOUDFLARE_TOKEN_TEST' }], base, [ACCOUNT])
+
+    await expect(tools.get('cloudflare_purge')!.execute({ zone: 'elsewhere.example', everything: true }, exec))
+      .rejects.toThrow('configured zones: site, and no configured account (main) has a domain named "elsewhere.example"')
+  })
+
+  it('says why an account without a token could not be searched', async () => {
+    const base = await stubCloudflare(() => ok([]))
+    const tools = mount([], base, [{ name: 'bare', id: 'acct-2' }])
+
+    await expect(tools.get('cloudflare_dns_list')!.execute({ zone: 'shop.example' }, exec))
+      .rejects.toThrow('Cloudflare account bare has no API token')
+  })
+
+  it('says every account domain is reachable when listing zones', async () => {
+    const tools = mount([], 'http://127.0.0.1:1', [ACCOUNT])
+    const { text } = await tools.get('cloudflare_zones')!.execute({}, exec)
+    expect(text).toContain('Every domain on the configured account (main) is also reachable by its domain name')
+  })
+
   it('lists every zone on the account, scoped to the configured account id', async () => {
     const seen: SeenRequest[] = []
     const base = await stubCloudflare(() => ok([

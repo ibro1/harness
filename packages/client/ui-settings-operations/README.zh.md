@@ -30,7 +30,7 @@ kind: "package-reference"
 - **Dokploy — 服务器：** `name`、`url` 和密钥。
 - **Postgres — 数据库：** `name` 和连接串，以及可选的布尔值 `readOnly`（除非设为 false，否则为 true）和正数 `statementTimeoutMs`。
 - **Cloudflare — 站点：** `name`、`zoneId`，以及限定于该站点的令牌。
-- **Cloudflare — 账户（可选）：** `name`、账户 `id`，以及拥有整个账户 Zone → Zone → Edit 权限的令牌。仅创建站点和列出账户下全部站点时需要，否则请留空。
+- **Cloudflare — 账户（可选）：** `name`、账户 `id`，以及作用于整个账户的令牌。配置后，Agent 可按域名访问账户下的每一个域名，因此**站点**只需列出应使用各自更窄令牌的域名。该令牌需要整个账户的 DNS 编辑与缓存清除权限；如需添加域名，还需 Zone 编辑权限。
 
 -----
 

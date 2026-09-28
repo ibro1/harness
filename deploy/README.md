@@ -650,9 +650,12 @@ active. Configure it under **Plugins → Cloudflare**:
 - **`zones`**: one entry per zone, `{ name, zoneId }` plus a token scoped to
   that zone (Zone → DNS → Edit and Zone → Cache Purge → Purge). The model
   names a zone; it never supplies a zone id or a token.
-- **`accounts`** (optional): only for adding zones. That token needs Zone →
-  Zone → Edit across the account, which reaches every domain in it, so keep
-  it out of the zone list and leave `accounts` empty if you never add zones.
+- **`accounts`** (optional): a name, the account id (the hex string in
+  `dash.cloudflare.com/<id>/home`) and an account-wide token. With one
+  configured, the agent reaches every domain on the account by its domain
+  name, so `zones` need only list domains that should use a narrower token of
+  their own. Give the token DNS Edit and Cache Purge on all zones in the
+  account, and Zone Edit as well if the agent should add domains.
 
 With several zones or accounts configured, a tool called without naming one
 refuses and lists them instead of guessing. `cloudflare_dns_set` refuses an MX

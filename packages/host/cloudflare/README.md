@@ -54,9 +54,9 @@ Every tool except `cloudflare_cache_status` takes an optional `zone`, needed onl
 
 `cloudflare_zone_add`, `cloudflare_zone_status` and `cloudflare_account_zones` act on an account rather than on one zone, and they are off until `accounts` holds one. Each entry is a name, an id, and a token, exactly as a zone is; a tool takes the name through its optional `account` argument, and refuses to guess when several are configured rather than defaulting to the first — adding a domain to the wrong account is not undone from here.
 
-The account token needs Zone: Edit across every zone in its account, which reaches every domain that account owns. A per-zone token reaches one zone, which is what makes the zone roster safe to hand a model. Folding the two into one credential would quietly widen every zone token to the account, so account credentials live in their own list and stay empty for anyone who never creates a zone.
+The account token needs Zone: Edit across every zone in its account, which reaches every domain that account owns, so account credentials live in their own list rather than widening any zone's token.
 
-Zones carry their own tokens and never consult this list, so DNS and cache purge work across any number of accounts with `accounts` left empty.
+A zone tool's `zone` argument resolves a configured zone by its name first. A name no configured zone carries is looked up as a domain on each configured account (`GET /zones?name=…&account.id=…`), and a match acts with that account's token: an operator who stored an account token has already granted its reach over every domain in the account, so listing each domain again under `zones` would only repeat that decision. `zones` is then needed only for a domain that should act with a narrower token of its own, or for any domain when no account is configured. The account token needs DNS: Edit and Cache Purge across the account for the DNS and purge tools to work through it.
 
 ## Editing DNS
 
