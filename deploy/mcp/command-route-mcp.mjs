@@ -11,9 +11,9 @@
 // so a schema cannot drift from the one the harness registers.
 //
 // Every call carries the CLI's DSH_SESSION_ID, which the bridges set per
-// request and the CLIs pass on to the servers they spawn. A route whose tools
-// act on a session's workspace resolves the directory from it; the others
-// ignore it.
+// request and the CLIs pass on to the servers they spawn: on the catalogue
+// request as `?session=`, on a tool call in the body. A route whose tools act
+// on a session resolves the directory or agent from it; the others ignore it.
 
 import { createInterface } from 'node:readline'
 
@@ -42,7 +42,8 @@ export function serveCommandRoute({ name, url, token, tokenVar }) {
    * @returns {Promise<object>} the route's JSON answer.
    */
   const route = async (method, body) => {
-    const response = await fetch(url, {
+    const target = method === 'GET' && session !== '' ? `${url}?session=${encodeURIComponent(session)}` : url
+    const response = await fetch(target, {
       method,
       headers: {
         'Authorization': `Bearer ${token}`,

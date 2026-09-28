@@ -1,0 +1,9 @@
+# Agent Teams tools for the agy and opencode CLIs: spawn_teammate, send_message,
+# wait_agent and the team task board over one token-guarded command route,
+# reached through deploy/mcp/agent-tools-mcp.mjs. See deploy/plugins/agent-tools.mjs.
+- insert:
+    - id: agent-tools
+      name: './agent-tools.mjs'
+      config:
+        path: !!js process.env.DSH_AGENT_TOOLS_PATH || '/agent-tools'
+        token: !!js process.env.DSH_AGENT_TOOLS_TOKEN || ''

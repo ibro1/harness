@@ -564,6 +564,7 @@ plugin an overlay inserts can never take a saved edit.
 |---|---|---|---|
 | Session outputs | yes | `DSH_OUTPUTS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
 | Page capture | yes | `DSH_CAPTURE=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
+| Agent Teams tools route | yes; lists tools only while Agent Teams is enabled under Plugins | `DSH_AGENT_TOOLS_MCP=0` | yes, unless `DSH_AGENT_TOOLS_MCP=0` |
 | Cloudflare | yes | `DSH_CLOUDFLARE=0` | yes, unless `DSH_CLOUDFLARE_MCP=0` |
 | Postgres | yes | `DSH_POSTGRES=0` | yes, unless `DSH_POSTGRES_MCP=0` |
 | Dokploy control | yes | `DSH_DOKPLOY=0` | only with `DSH_DOKPLOY_TOKEN` |
@@ -578,10 +579,10 @@ reached through them sees a plugin's tools only if the entrypoint also
 registers them with that CLI over MCP. It does for every plugin in the table
 with a tool: each gets a token-guarded command route on the harness and a
 small MCP server in `deploy/mcp/` that forwards to it. The route tokens for
-Cloudflare, Postgres and the session tools are generated at each boot unless
-you set them, so there is nothing to configure. Harness plugins switched on
-from the Plugins page, such as Agent Teams, have no such bridge and reach
-DeepSeek models only.
+Cloudflare, Postgres, the session tools and the Agent Teams tools are
+generated at each boot unless you set them, so there is nothing to configure.
+Other harness plugins switched on from the Plugins page have no such bridge
+and reach direct-provider models only.
 
 Headless agy refuses every MCP tool call unless it runs with
 `--dangerously-skip-permissions`, and that switch also lets agy use its own
@@ -596,6 +597,18 @@ request its session id as `DSH_SESSION_ID`, the CLIs pass it on to the MCP
 servers they start, and the route looks the session's working directory up
 from the harness's session store. A call with no live session is refused
 rather than written anywhere else.
+
+**Agent Teams over MCP.** The team tools (`spawn_teammate`, `send_message`,
+`list_agents`, `wait_agent`, `interrupt_agent`, `team_task_*`) are registered
+on each team member's agent and act as that agent, so they cannot be rebuilt
+beside a route. `deploy/plugins/agent-tools.mjs` looks up the live agent for
+the CLI's `DSH_SESSION_ID` and runs the named tool through the harness tool
+pipeline with it, so approvals and hooks apply as for any other call. A
+teammate of an agy Lead runs on agy too, in its own session, and reaches its
+own team tools the same way. `wait_agent` may block for up to an hour; the
+route sends a space every 20 s so the connection never idles out. The tool
+calls themselves appear in the agy/opencode reply, not as tool rows in the
+session log, like every other MCP tool here.
 
 **Credentials for these plugins.** Cloudflare, Postgres and Dokploy each take
 a secret either inline in the settings card or as the *name* of an

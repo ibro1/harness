@@ -87,6 +87,9 @@ fi
 if [[ ( "${DSH_OUTPUTS:-1}" != "0" || "${DSH_CAPTURE:-1}" != "0" ) && "${DSH_SESSION_TOOLS_MCP:-1}" != "0" ]]; then
   export DSH_SESSION_TOOLS_TOKEN="${DSH_SESSION_TOOLS_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_AGENT_TOOLS_MCP:-1}" != "0" ]]; then
+  export DSH_AGENT_TOOLS_TOKEN="${DSH_AGENT_TOOLS_TOKEN:-$(random_token)}"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -331,6 +334,17 @@ if [[ -n "${DSH_SESSION_TOOLS_TOKEN:-}" && "${DSH_SESSION_TOOLS_MCP:-1}" != "0" 
   patch_args+=(--patch "$APP_DIR/deploy/plugins/session-tools.cordis.yml")
   register_cli_mcp dsh-session-tools session-tools-mcp.mjs DSH_SESSION_TOOLS_TOKEN DSH_SESSION_TOOLS_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT${DSH_SESSION_TOOLS_PATH:-/session-tools}/command" "session outputs and page capture"
+fi
+
+# Agent Teams tools for the CLIs: spawn_teammate, send_message, wait_agent and
+# the task board. They act as the session's own agent, so the route runs them
+# through the harness tool pipeline for the agent the session id names (see
+# deploy/plugins/agent-tools.mjs). An agent lists them only while Agent Teams
+# is enabled under Plugins.
+if [[ -n "${DSH_AGENT_TOOLS_TOKEN:-}" && "${DSH_AGENT_TOOLS_MCP:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/agent-tools.cordis.yml")
+  register_cli_mcp dsh-agent-tools agent-tools-mcp.mjs DSH_AGENT_TOOLS_TOKEN DSH_AGENT_TOOLS_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT${DSH_AGENT_TOOLS_PATH:-/agent-tools}/command" "Agent Teams tools"
 fi
 
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in
