@@ -734,6 +734,15 @@ upstream has retired (the Agent Teams Web UI bundle, folded into Agent Teams in
 harness (`dsh-mnemon` below 0.5.16). With nothing to repair it prints nothing;
 `--dry-run` shows what it would change.
 
+## Mnemon memory
+
+The image carries the `mnemon` CLI (`@mnemon-dev/mnemon`, pinned in
+`deploy/Dockerfile`), which the `dsh-mnemon` plugin's Native provider runs for
+Memory Spaces. `MNEMON_DATA_DIR=/home/node/.dsh/mnemon` puts the plugin's
+global store — runtime memory, documents and Memory Spaces — on the `dsh-state`
+volume; the default, `~/.mnemon`, is not a volume and was lost on every
+redeploy.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

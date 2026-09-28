@@ -50,6 +50,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
+# The mnemon CLI, which the dsh-mnemon plugin's Native Memory Spaces provider
+# runs. Pinned; the plugin reports a missing CLI on its Memory System page.
+RUN npm install --global @mnemon-dev/mnemon@0.2.9 && npm cache clean --force
+
 # Pre-create every mount point while we are still root, so named volumes
 # inherit node's ownership instead of coming up owned by root.
 RUN mkdir -p /app \
@@ -126,11 +130,14 @@ RUN pnpm install --frozen-lockfile \
     && pnpm run build \
     && pnpm store prune
 
+# MNEMON_DATA_DIR puts dsh-mnemon's global store (runtime memory, documents,
+# Memory Spaces) on the dsh-state volume; its default, ~/.mnemon, is not a volume.
 ENV HOME=/home/node \
     PATH=/opt/harness/bin:/home/node/.local/bin:$PATH \
     NODE_ENV=production \
     DSH_PORT=3080 \
-    DSH_TRUST_PROXY=1
+    DSH_TRUST_PROXY=1 \
+    MNEMON_DATA_DIR=/home/node/.dsh/mnemon
 
 EXPOSE 3080
 
