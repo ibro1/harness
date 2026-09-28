@@ -344,7 +344,7 @@ fi
 if [[ -n "${DSH_AGENT_TOOLS_TOKEN:-}" && "${DSH_AGENT_TOOLS_MCP:-1}" != "0" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/agent-tools.cordis.yml")
   register_cli_mcp dsh-agent-tools agent-tools-mcp.mjs DSH_AGENT_TOOLS_TOKEN DSH_AGENT_TOOLS_COMMAND_URL \
-    "http://127.0.0.1:$INTERNAL_PORT${DSH_AGENT_TOOLS_PATH:-/agent-tools}/command" "Agent Teams tools"
+    "http://127.0.0.1:$INTERNAL_PORT${DSH_AGENT_TOOLS_PATH:-/agent-tools}/command" "Agent Teams"
 fi
 
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in
