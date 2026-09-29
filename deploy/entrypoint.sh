@@ -203,6 +203,15 @@ if command -v agy >/dev/null 2>&1 || command -v opencode >/dev/null 2>&1; then
   node "$APP_DIR/deploy/sync-models.mjs" || echo "[entrypoint] model sync failed; the configured lists stand" >&2
 fi
 
+# Writer locks (<file>.lock) record their holder's PID, and a lock is only
+# taken over when no process with that PID exists. A container restart that cut
+# a write short leaves the lock behind, and PIDs restart from 1 in the new
+# container, so the recorded PID usually names some unrelated live process and
+# every later write to that file (a Plugins-page save, say) times out. Nothing
+# writes the profile before the harness starts, so any lock found here is stale.
+find "$HOME/.dsh/profiles" -maxdepth 2 -name '*.lock' -type f -print -delete 2>/dev/null \
+  | sed 's/^/[entrypoint] removed stale writer lock /' || true
+
 # Plugins installed from the UI live on the volume and outlive the image; after
 # an upgrade, drop bundles upstream retired and lift plugins whose old releases
 # call retired APIs (deploy/repair-profile.mjs lists both).
