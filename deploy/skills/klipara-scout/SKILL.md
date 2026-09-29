@@ -14,10 +14,10 @@ The `scout_*` tools own the lead list, the daily caps and the pause switch. They
 
 1. **`scout_status`.** If outreach is paused, say so in one line and stop.
 2. **Replies first.** Open the Gmail inbox in the DeerFlow browser and look for answers to pitches; open YouTube notifications for replies to your comments. For each reply from a pitched creator, call `scout_record_reply` with the reply verbatim. Do not answer the creator: the owner takes over from a reply.
-3. **Finish samples.** For each `sampling` lead (`scout_leads` with stage `sampling`), call `scout_check_sample`. A job still running is checked again later in the shift or tomorrow.
+3. **Finish samples.** For each `sampling` lead (`scout_leads` with stage `sampling`), call `scout_check_sample`. A job still running needs nothing from you: the plugin checks it every few minutes and sends you a message when samples are ready to pitch.
 4. **Pitch.** For each `sampled` lead, while the pitch cap allows, write and send one pitch (below).
 5. **New samples.** While the sample cap allows: take `found` leads (`scout_leads`, stage `found`), or `scout_search` when there are too few. Pick the leads most likely to pay, then `scout_make_sample` each.
-6. **Before ending,** call `scout_check_sample` once more on the leads you started this shift. Anything sampled can be pitched now if the cap allows; otherwise it waits for tomorrow.
+6. **End the turn** once new samples are started. Do not wait or poll for them: when they finish, a message arrives in this conversation listing them, and you pitch them then.
 7. **End** with a short summary: replies recorded, samples made, pitches sent, anything unusual.
 
 ## Choosing leads

@@ -59,6 +59,8 @@ export interface ScoutState {
   days: Record<string, DayCount>
   paused: { reason: string; at: string } | null
   lastShiftDate: string | null
+  /** Session id of the latest shift, woken when its samples finish. */
+  lastShiftSession?: string
 }
 
 /** A state with nothing in it. */

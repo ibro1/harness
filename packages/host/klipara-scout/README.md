@@ -21,7 +21,7 @@ Once a day this plugin starts a shift Session that works Klipara's outreach: it 
 <a id="use-this-package"></a>
 ## Use this package
 
-Configure it on **Plugins → Klipara Scout**: switch the shift on, set the start time and time zone, the daily caps, search topics, channel size and Shorts limits, the Klipara API key (created on Klipara's API keys page), the WhatsApp chat that hears about replies and pauses, and optionally the model the shift runs on. The leads, with their stage, sample, pitch and replies, are listed on that page above the settings, read from `/scout/leads.json` and refreshed every 15 seconds; `/scout/leads` serves the same list as a standalone page.
+Configure it on **Plugins → Klipara Scout**: switch the shift on, set the start time and time zone, the daily caps, search topics, channel size and Shorts limits, the Klipara API key (created on Klipara's API keys page), the WhatsApp chat that hears about replies and pauses, and optionally the model the shift runs on. The leads, with their stage, sample, pitch and replies, are on their own page, **Plugins → Klipara Scout leads**, which the settings page links with **View leads**; it reads `/scout/leads.json` and refreshes every 15 seconds. Samples finish without anyone asking: every two minutes the plugin checks Klipara for finished jobs, exports and hosts each finished sample, and sends the latest shift Session a message listing them so it pitches them; when that Session is no longer live they wait for the next shift.
 
 A lead moves `found → sampling → sampled → pitched → replied`, then `won` or `lost`; `skipped` records a channel passed over and why, so no later search reads it again.
 

@@ -18,6 +18,7 @@ import { CloudflareCard } from './CloudflareCard.tsx'
 import { DokployCard } from './DokployCard.tsx'
 import { PostgresCard } from './PostgresCard.tsx'
 import { ScoutCard } from './ScoutCard.tsx'
+import { ScoutLeadsPage } from './ScoutLeadsPage.tsx'
 import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-controller.ts'
 import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
 import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
@@ -36,6 +37,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'settings.operations': OperationsSettingsLocaleKey
   }
 }
+
+/** The leads page's `plugins.item` id. */
+const SCOUT_LEADS_ID = 'klipara-scout-leads'
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.operations'
@@ -72,6 +76,10 @@ export function apply(ctx: ClientContext): void {
     name: 'plugins.item', id: 'cloudflare', order: 70, label: () => t('cloudflareTitle'), locale: NS, inject: () => cloudflare.inject(),
   }, CloudflareCard))), 'ui-settings-operations: Cloudflare page')
   ctx.effect(() => ctx.configForms.whileServed([SCOUT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
-    name: 'plugins.item', id: 'klipara-scout', order: 80, label: () => t('scoutTitle'), locale: NS, inject: () => scout.inject(),
+    name: 'plugins.item', id: 'klipara-scout', order: 80, label: () => t('scoutTitle'), locale: NS,
+    inject: () => scout.inject(() => { ctx.get('pluginNavigation')?.openItem(SCOUT_LEADS_ID) }),
   }, ScoutCard))), 'ui-settings-operations: Klipara Scout page')
+  ctx.effect(() => ctx.configForms.whileServed([SCOUT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: SCOUT_LEADS_ID, order: 81, label: () => t('scoutLeadsPageTitle'), locale: NS,
+  }, ScoutLeadsPage))), 'ui-settings-operations: Klipara Scout leads page')
 }

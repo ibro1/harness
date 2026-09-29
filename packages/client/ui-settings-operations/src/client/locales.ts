@@ -15,7 +15,7 @@ export type OperationsSettingsLocaleKey =
   | 'cloudflareTitle' | 'cloudflareDescription' | 'cloudflareZones' | 'cloudflareZonesHint' | 'cloudflareInvalid' | 'cloudflareZonesPlaceholder'
   | 'cloudflareAccounts' | 'cloudflareAccountsHint' | 'cloudflareAccountsInvalid' | 'cloudflareAccountsPlaceholder'
   | 'scoutTitle' | 'scoutDescription' | 'scoutInvalid'
-  | 'scoutLeadsTitle' | 'scoutLeadsEmpty' | 'scoutLeadsToday' | 'scoutLeadsPaused' | 'scoutLeadsFailed'
+  | 'scoutViewLeads' | 'scoutLeadsPageTitle' | 'scoutLeadsDescription' | 'scoutLeadsTitle' | 'scoutLeadsEmpty' | 'scoutLeadsToday' | 'scoutLeadsPaused' | 'scoutLeadsFailed'
   | 'scoutColStage' | 'scoutColChannel' | 'scoutColVideo' | 'scoutColSample' | 'scoutColPitch' | 'scoutColReplies' | 'scoutColUpdated'
   | 'scoutSampleLink'
   | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint`
@@ -48,6 +48,9 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
   'scoutTitle': 'Klipara Scout',
   'scoutDescription': 'An outreach employee for Klipara: a daily shift that finds creators, makes each a free sample clip, pitches it, and records replies.',
+  scoutViewLeads: 'View leads',
+  scoutLeadsPageTitle: 'Klipara Scout leads',
+  scoutLeadsDescription: 'Every creator the Klipara Scout has found, with its stage, sample, pitch and replies.',
   scoutLeadsTitle: 'Leads',
   scoutLeadsEmpty: 'No leads yet. They appear here as the shift finds creators.',
   scoutLeadsToday: 'Today {date}: samples {samples}/{samplesCap}, pitches {pitches}/{pitchesCap}.',
@@ -127,6 +130,9 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
   'scoutTitle': 'Klipara Scout',
   'scoutDescription': 'Klipara 的外联员工：每日班次寻找创作者，为每位制作一段免费样片，发出推介，并记录回复。',
+  scoutViewLeads: '查看线索',
+  scoutLeadsPageTitle: 'Klipara Scout 线索',
+  scoutLeadsDescription: 'Klipara Scout 找到的每一位创作者，以及其阶段、样片、推介与回复。',
   scoutLeadsTitle: '线索',
   scoutLeadsEmpty: '暂无线索。班次找到创作者后会显示在这里。',
   scoutLeadsToday: '今天 {date}：样片 {samples}/{samplesCap}，推介 {pitches}/{pitchesCap}。',

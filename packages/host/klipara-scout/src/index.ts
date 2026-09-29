@@ -24,6 +24,9 @@ import type { ParameterSchemaSpec, ToolDefinition, ToolRunContext, ValueSchemaSp
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { bestCandidate, kliparaClient, type KliparaApi } from './klipara.ts'
 import { serveSample, storeSample } from './samples.ts'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { localTime, parseShiftTime, shiftDue, startShift } from './shift.ts'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
 import { channelFacts, execYtDlp, searchLongVideos, type YtDlpRunner } from './youtube.ts'
@@ -82,6 +85,8 @@ export interface Config {
   shiftPrompt: string
   ytDlp: string
   timeoutMs: number
+  /** How often the plugin checks Klipara for finished samples. */
+  sampleCheckMs: number
   /** The WhatsApp plugin's command route and token, for owner alerts. */
   whatsappUrl: string
   whatsappToken: string
@@ -115,6 +120,7 @@ export const Config = z.object({
   shiftPrompt: z.string().default('Run today\'s Klipara Scout shift. Your instructions are the klipara-scout skill at {skill}: read that file first, then follow it exactly.'),
   ytDlp: z.string().default('yt-dlp'),
   timeoutMs: z.natural().min(1000).default(60_000),
+  sampleCheckMs: z.natural().min(30_000).default(120_000),
   whatsappUrl: z.string().default(''),
   whatsappToken: z.string().default(''),
 })
@@ -168,6 +174,66 @@ function describe(lead: Lead): string {
 }
 
 /**
+ * The lead a tool names.
+ * @param state - the scout state.
+ * @param channelId - the lead's channel id.
+ * @returns the lead.
+ * @throws when no lead has that id.
+ */
+function findLead(state: ScoutState, channelId: string): Lead {
+  const lead = state.leads.find(l => l.channelId === channelId)
+  if (lead === undefined) throw new Error(`No lead with channel id ${channelId}; scout_leads lists them.`)
+  return lead
+}
+
+/** What one sample check found. */
+export interface SampleCheck {
+  /** `ready` when the lead just became `sampled`. */
+  outcome: 'ready' | 'waiting' | 'skipped'
+  text: string
+}
+
+/**
+ * Check one `sampling` lead's Klipara job and, once it is done, export the best
+ * standalone clip, host it, and move the lead to `sampled`.
+ * @param deps - the store, config and external calls.
+ * @param channelId - the lead.
+ * @param signal - cancels the calls.
+ * @returns what happened.
+ */
+export async function finishSample(deps: ScoutDeps, channelId: string, signal: AbortSignal): Promise<SampleCheck> {
+  const iso = (): string => deps.now().toISOString()
+  const find = (state: ScoutState): Lead => findLead(state, channelId)
+  const lead = find(await deps.store.read())
+  if (lead.stage !== 'sampling' || lead.jobId === undefined) throw new Error(`${lead.channelName} is at stage ${lead.stage}, not sampling.`)
+  const job = await deps.klipara.getJob(lead.jobId, signal)
+  if (job.state === 'failed' || job.state === 'cancelled') {
+    const why = `Klipara job ${job.state}${job.errorCode === undefined ? '' : `: ${job.errorCode}`}`
+    await deps.store.update((s) => { advance(find(s), 'skipped', iso(), why) })
+    return { outcome: 'skipped', text: `The Klipara job ${job.state}${job.errorCode === undefined ? '' : ` (${job.errorCode})`}; ${lead.channelName} is skipped.` }
+  }
+  if (job.state !== 'succeeded') return { outcome: 'waiting', text: `Still ${job.state}; check again in a few minutes.` }
+  const best = bestCandidate(await deps.klipara.candidates(lead.jobId, signal))
+  if (best === undefined) {
+    await deps.store.update((s) => { advance(find(s), 'skipped', iso(), 'no clip stands alone') })
+    return { outcome: 'skipped', text: `Klipara found no clip that stands alone in that video; ${lead.channelName} is skipped.` }
+  }
+  const exported = await deps.klipara.exportClip(best.clipId, signal)
+  const sampleId = await storeSample(deps.samplesDir, exported.downloadUrl, signal)
+  const samplePageUrl = `${deps.sampleBase()}/${sampleId}`
+  await deps.store.update((s) => {
+    const l = find(s)
+    l.sampleId = sampleId
+    l.samplePageUrl = samplePageUrl
+    advance(l, 'sampled', iso(), `clip ${best.clipId} (${String(Math.round((best.endMs - best.startMs) / 1000))}s)`)
+  })
+  return {
+    outcome: 'ready',
+    text: `Sample ready for ${lead.channelName}: ${samplePageUrl} (clip ${String(Math.round(best.startMs / 1000))}s–${String(Math.round(best.endMs / 1000))}s of "${lead.videoTitle ?? ''}"). Pitch it with scout_pitch.`,
+  }
+}
+
+/**
  * Build the scout tools without registering them, so one definition serves both
  * the shift Sessions and the CLI command route.
  * @param deps - the store, config, and external calls.
@@ -179,11 +245,6 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
   const iso = (): string => deps.now().toISOString()
   const reply = (text: string): { text: string } => ({ text })
   const channelParameter = { type: 'string', required: true, description: 'The lead\'s YouTube channel id, as scout_search or scout_leads reports it.' } as const
-  const findLead = (state: ScoutState, channelId: string): Lead => {
-    const lead = state.leads.find(l => l.channelId === channelId)
-    if (lead === undefined) throw new Error(`No lead with channel id ${channelId}; scout_leads lists them.`)
-    return lead
-  }
   const refuseWhilePaused = (state: ScoutState): void => {
     if (state.paused !== null) throw new Error(`Outreach is paused (${state.paused.reason}). Stop the shift; only the owner resumes it.`)
   }
@@ -326,35 +387,9 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
     }),
     tool({
       name: 'scout_check_sample',
-      description: 'Check a `sampling` lead\'s Klipara job. When analysis is done, export the best standalone clip (spends one Klip), host it, and move the lead to `sampled` with its public sample link. A failed or clipless job moves the lead to `skipped`.',
+      description: 'Check a `sampling` lead\'s Klipara job now. When analysis is done, export the best standalone clip (spends one Klip), host it, and move the lead to `sampled` with its public sample link. A failed or clipless job moves the lead to `skipped`. The plugin also does this by itself every few minutes and tells the shift when samples are ready.',
       parameters: { channel_id: channelParameter },
-      run: async (args, exec) => {
-        const channelId = String(args['channel_id'])
-        const state = await store.read()
-        const lead = findLead(state, channelId)
-        if (lead.stage !== 'sampling' || lead.jobId === undefined) throw new Error(`${lead.channelName} is at stage ${lead.stage}, not sampling.`)
-        const job = await deps.klipara.getJob(lead.jobId, exec.signal)
-        if (job.state === 'failed' || job.state === 'cancelled') {
-          await store.update((s) => { advance(findLead(s, channelId), 'skipped', iso(), `Klipara job ${job.state}${job.errorCode === undefined ? '' : `: ${job.errorCode}`}`) })
-          return `The Klipara job ${job.state}${job.errorCode === undefined ? '' : ` (${job.errorCode})`}; ${lead.channelName} is skipped.`
-        }
-        if (job.state !== 'succeeded') return `Still ${job.state}; check again in a few minutes.`
-        const best = bestCandidate(await deps.klipara.candidates(lead.jobId, exec.signal))
-        if (best === undefined) {
-          await store.update((s) => { advance(findLead(s, channelId), 'skipped', iso(), 'no clip stands alone') })
-          return `Klipara found no clip that stands alone in that video; ${lead.channelName} is skipped.`
-        }
-        const exported = await deps.klipara.exportClip(best.clipId, exec.signal)
-        const sampleId = await storeSample(deps.samplesDir, exported.downloadUrl, exec.signal)
-        const samplePageUrl = `${deps.sampleBase()}/${sampleId}`
-        await store.update((s) => {
-          const l = findLead(s, channelId)
-          l.sampleId = sampleId
-          l.samplePageUrl = samplePageUrl
-          advance(l, 'sampled', iso(), `clip ${best.clipId} (${String(Math.round((best.endMs - best.startMs) / 1000))}s)`)
-        })
-        return `Sample ready for ${lead.channelName}: ${samplePageUrl} (clip ${String(Math.round(best.startMs / 1000))}s–${String(Math.round(best.endMs / 1000))}s of "${lead.videoTitle ?? ''}"). Pitch it with scout_pitch.`
-      },
+      run: async (args, exec) => (await finishSample(deps, String(args['channel_id']), exec.signal)).text,
     }),
     tool({
       name: 'scout_pitch',
@@ -642,6 +677,7 @@ export function apply(ctx: Context, config: Config): void {
         provider: config.provider.get(),
         model: config.model.get(),
       }, AbortSignal.timeout(120_000))
+      await store.update((s) => { s.lastShiftSession = sessionId })
       process.stderr.write(`klipara-scout: started the ${now.date} shift as session ${sessionId}\n`)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -655,4 +691,38 @@ export function apply(ctx: Context, config: Config): void {
   }
   const timer = setInterval(() => { void tick() }, 60_000)
   ctx.effect(() => () => { clearInterval(timer) })
+
+  // The sample watcher: Klipara takes minutes per video, longer than a shift's
+  // turn, so the plugin finishes samples itself and wakes the latest shift to
+  // pitch them. When that Session is no longer live, they wait for the next shift.
+  let watching = false
+  const watch = async (): Promise<void> => {
+    if (watching || config.kliparaApiKey.get().trim() === '') return
+    watching = true
+    try {
+      const state = await store.read()
+      if (state.paused !== null) return
+      const ready: string[] = []
+      for (const lead of state.leads.filter(l => l.stage === 'sampling')) {
+        try {
+          const check = await finishSample(deps, lead.channelId, AbortSignal.timeout(5 * 60_000))
+          if (check.outcome === 'ready') ready.push(check.text)
+        } catch (error) {
+          process.stderr.write(`klipara-scout: sample check for ${lead.channelName} failed: ${error instanceof Error ? error.message : String(error)}\n`)
+        }
+      }
+      if (ready.length === 0) return
+      process.stderr.write(`klipara-scout: ${String(ready.length)} sample(s) ready\n`)
+      const shift = state.lastShiftSession === undefined ? undefined : ctx.agents.get(brandString<SessionId>(state.lastShiftSession))
+      if (shift === undefined) return
+      shift.followup(createUserMessage({
+        content: [{ type: 'text', text: `Samples finished since your last turn:\n${ready.join('\n')}\n\nPitch them now as the klipara-scout skill says, within today's pitch cap (scout_status shows what is left).` }],
+        source: { kind: 'klipara-scout', form: 'notice', summary: boundContextSummary(`${String(ready.length)} Klipara Scout sample(s) ready`) },
+      }))
+    } finally {
+      watching = false
+    }
+  }
+  const watcher = setInterval(() => { void watch() }, config.sampleCheckMs)
+  ctx.effect(() => () => { clearInterval(watcher) })
 }

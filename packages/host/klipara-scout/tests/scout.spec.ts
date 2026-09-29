@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { bestCandidate, buildScoutTools, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
+import { bestCandidate, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 
@@ -23,7 +23,7 @@ function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config 
     sampleHeadline: live('A clip'), sampleNote: live('note'),
     dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '',
     workspacePath: '/tmp/ws', agentPreset: 'standard', permissionPreset: 'workspace-write', shiftPrompt: 'go',
-    ytDlp: 'yt-dlp', timeoutMs: 5000, whatsappUrl: '', whatsappToken: '',
+    ytDlp: 'yt-dlp', timeoutMs: 5000, sampleCheckMs: 120_000, whatsappUrl: '', whatsappToken: '',
   }
   return { ...base, ...overrides } as Config
 }
@@ -122,6 +122,18 @@ describe('klipara scout', () => {
     expect(ready).toContain(lead.samplePageUrl)
     expect(readFileSync(join(deps.samplesDir, `${lead.sampleId ?? ''}.mp4`), 'utf8')).toBe('fake-mp4')
     expect((await deps.store.read()).days['2026-09-29']).toEqual({ samples: 1, pitches: 0 })
+  })
+
+  it('finishes a sample without the model once Klipara is done, and waits while it is not', async () => {
+    const url = await clipServer()
+    const { run, deps } = setup({ klipara: klipara(url, 'running') })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    expect((await finishSample(deps, 'UC_small', exec.signal)).outcome).toBe('waiting')
+    deps.klipara = klipara(url)
+    const check = await finishSample(deps, 'UC_small', exec.signal)
+    expect(check.outcome).toBe('ready')
+    expect((await deps.store.read()).leads.find(l => l.channelId === 'UC_small')!.stage).toBe('sampled')
   })
 
   it('refuses a sample past the daily cap', async () => {

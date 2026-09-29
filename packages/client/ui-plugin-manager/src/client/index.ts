@@ -38,6 +38,12 @@ declare module '@deepseek-ai/cordis' {
        * @param packageName - npm package name of the bundle.
        */
       openBundle(packageName: string): void
+      /**
+       * Open an official plugin's page, one registered into `plugins.item`.
+       * An absent id displays the plugin list.
+       * @param id - the page's `plugins.item` id.
+       */
+      openItem(id: string): void
     }
   }
 }
@@ -123,6 +129,10 @@ export function apply(ctx: ClientContext): void {
       openBundle: (packageName: string) => {
         ctx.layout.selectPanel(PANEL_ID)
         instance.actions.setView({ kind: 'package', name: packageName })
+      },
+      openItem: (id: string) => {
+        ctx.layout.selectPanel(PANEL_ID)
+        instance.actions.setView({ kind: 'item', id })
       },
     })
     yield () => { void disposeNavigation() }

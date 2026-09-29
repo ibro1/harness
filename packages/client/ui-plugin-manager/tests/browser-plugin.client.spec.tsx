@@ -80,6 +80,18 @@ describe('ui-plugin-manager browser plugin', () => {
     expect(navigation.getSnapshot()).toEqual({ view: { kind: 'package', name: 'dsh-navigation-test' } })
   })
 
+  it('opens an official plugin page on request', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const entry = b.slots.entries('main')[0]!
+    assert(entry.store && 'create' in entry.store)
+    const navigation = entry.store.create()
+    b.ctx.pluginNavigation.openItem('klipara-scout-leads')
+    expect(b.panelInfo.getSnapshot().activePanelId).toBe(PANEL_ID)
+    expect(navigation.getSnapshot()).toEqual({ view: { kind: 'item', id: 'klipara-scout-leads' } })
+  })
+
   it('declares only the services the page and its Remote methods use', () => {
     expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.pluginManager', 'remote.pluginInventory', 'remote.pluginRegistryProbe', 'configForms', 'layout'])
   })

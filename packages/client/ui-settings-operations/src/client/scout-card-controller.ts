@@ -33,6 +33,8 @@ export interface ScoutCardState extends SettingsFormShell {
 
 /** The registration-side face the card's slot entry injects. */
 export interface ScoutCardFace extends SettingsFormActions {
+  /** Open the separate Klipara Scout leads page. */
+  openLeads: () => void
   hooks: {
     /** Card snapshot bound by the renderer as useScoutCard. */
     scoutCard: SnapshotStore<ScoutCardState>
@@ -99,9 +101,10 @@ export class ScoutCardController {
 
   /**
    * Build the face the card's slot registration injects.
-   * @returns the card's snapshot and its form actions.
+   * @param openLeads - opens the leads page.
+   * @returns the card's snapshot, its form actions and the leads link.
    */
-  inject(): ScoutCardFace {
-    return { hooks: { scoutCard: this.store }, ...this.form.actions() }
+  inject(openLeads: () => void): ScoutCardFace {
+    return { hooks: { scoutCard: this.store }, ...this.form.actions(), openLeads }
   }
 }
