@@ -762,16 +762,28 @@ global store — runtime memory, documents and Memory Spaces — on the `dsh-sta
 volume; the default, `~/.mnemon`, is not a volume and was lost on every
 redeploy.
 
-## How agy is steered
+## How the CLI bridges are steered and measured
 
-The agy bridge appends a short `[Bridge Notes]` block after the harness's
-system prompt: use the `dsh-*` MCP servers through `call_mcp_tool`, do not
-inspect the harness to work around a tool, and end the reply to receive a
-teammate's message (the harness delivers inbox messages between steps, which
-for agy is after its reply). Measured on a Lead spawning one teammate, it took
-the run from 2 m 50 s / 167K tokens to 34–47 s / 70–76K tokens.
-`AGY_BRIDGE_NOTES=0` removes it. Each finished agy run logs its tool steps and
-token counts on its `[AGY proc closed]` line.
+Both bridges append a short `[Bridge Notes]` block after the harness's system
+prompt: call the `dsh-*` MCP tools directly, do not inspect the harness to
+work around a tool, and end the reply to receive a teammate's message (the
+harness delivers inbox messages between steps, which for a CLI is after its
+reply). Measured on a Lead spawning one teammate: agy went from 2 m 50 s /
+167K tokens to 34–48 s, and opencode from a dozen shell steps hunting for the
+reply to team-tool calls only, in about 31 s at a 99% cache hit.
+`AGY_BRIDGE_NOTES=0` / `OPENCODE_BRIDGE_NOTES=0` remove them.
+
+Each finished run logs its tool steps and tokens:
+`[AGY proc closed] … tools=7 in=46841 out=3016 context=20866 [view_file …]`,
+and for opencode also `cached=`. `in` is the run's total input across the
+CLI's internal steps (cost); `context` is the largest single call, which is
+what the bridges report to the harness as the prompt size, since the harness
+checks it against the model's context window.
+
+The opencode bridge also passes opencode's own failures through as a stream
+error (a refused key, a locked state database) rather than an empty answer,
+and runs `opencode models` once at start so opencode's state database exists
+before two runs can race to create it.
 
 ## Model catalogue
 

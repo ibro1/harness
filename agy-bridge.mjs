@@ -289,6 +289,11 @@ const server = createServer(async (req, res) => {
         let lastActivity = Date.now()
         // Tool steps agy took inside this one request, for the close line.
         const toolSteps = []
+        // The largest model-call input in this run, from the per-step usage agy
+        // reports: the context only grows, and the last step can be a small
+        // one. agy's final usage sums every internal step, which the harness
+        // would read as a context several times larger than any the model saw.
+        let lastStepInput = 0
 
         const send = (delta) => {
           res.write(`data: ${JSON.stringify({
@@ -338,6 +343,7 @@ const server = createServer(async (req, res) => {
               }
               return
             }
+            if (su.usage && typeof su.usage.input_tokens === 'number') lastStepInput = Math.max(lastStepInput, su.usage.input_tokens)
             if (su.step_type === 'agent_response' && su.text_delta) {
               sendContent(su.text_delta)
               return
@@ -351,7 +357,7 @@ const server = createServer(async (req, res) => {
 
         proc.on('close', code => {
           clearInterval(heartbeat)
-          const tokens = usage ? ` in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0}` : ''
+          const tokens = usage ? ` in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} context=${lastStepInput}` : ''
           console.log(`[AGY proc closed] code=${code} emittedText=${emittedText} tools=${toolSteps.length}${tokens}${toolSteps.length ? ` [${toolSteps.join(' ')}]` : ''}`)
           const finalChunk = {
             id,
@@ -365,9 +371,9 @@ const server = createServer(async (req, res) => {
             }],
             ...(usage ? {
               usage: {
-                prompt_tokens: usage.input_tokens || 0,
+                prompt_tokens: lastStepInput || usage.input_tokens || 0,
                 completion_tokens: usage.output_tokens || 0,
-                total_tokens: usage.total_tokens || 0,
+                total_tokens: (lastStepInput || usage.input_tokens || 0) + (usage.output_tokens || 0),
               },
             } : {}),
           }

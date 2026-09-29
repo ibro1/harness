@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -77,6 +77,18 @@ function saveBase64Image(dataUrl) {
   }
 }
 
+/**
+ * How opencode should work inside the harness, appended after the harness's
+ * own system prompt. Measured on a local run: without it, a Lead that spawned
+ * a teammate spent a dozen shell steps searching for the reply, because a
+ * teammate's message reaches the Lead only when the harness starts its next
+ * step, which for opencode is after this reply ends.
+ */
+const BRIDGE_NOTES = `[Bridge Notes]
+You are running inside DeepSeek Harness through a bridge. The harness's tools are MCP tools whose names start with "dsh-" (for example dsh-agent-tools_spawn_teammate); call them directly. Do not inspect the harness itself (its source, logs, session files or processes) to find or work around a tool.
+Messages from teammates are delivered by the harness after you finish this reply. When wait_agent reports a mailbox change, or you are waiting for a teammate's answer, end your reply with a one-line status; the message arrives as your next input.
+`
+
 function formatPrompt(messages, system) {
   let promptParts = []
   let attachedFiles = []
@@ -84,6 +96,7 @@ function formatPrompt(messages, system) {
   if (system) {
     promptParts.push(`[System Instructions]\n${system}\n`)
   }
+  if (process.env.OPENCODE_BRIDGE_NOTES !== '0') promptParts.push(BRIDGE_NOTES)
 
   for (const msg of messages) {
     const role = msg.role || 'user'
@@ -125,9 +138,25 @@ function formatPrompt(messages, system) {
   return { prompt: promptParts.join('\n'), attachedFiles }
 }
 
-/** A short, human-readable summary of a tool call's input for the progress
- *  line. Prefers a salient field over the raw JSON. opencode's exact tool-event
- *  shape is unverified here (no local auth to spike), so this reads defensively. */
+/**
+ * opencode's step tokens as an OpenAI usage block. The harness reads
+ * `prompt_tokens` as the size of the context the model was given and checks it
+ * against the model's window, so it carries the latest call's input, with its
+ * cached share in `prompt_tokens_details`; a run's internal steps summed would
+ * report a context several times larger than any the model saw.
+ * `completion_tokens` sums the output of every step.
+ */
+function openAiUsage(usage) {
+  const prompt = usage?.lastPrompt ?? 0
+  const completion = usage?.output ?? 0
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    total_tokens: prompt + completion,
+    prompt_tokens_details: { cached_tokens: usage?.lastCached ?? 0 },
+  }
+}
+
 function briefParams(input) {
   if (!input || typeof input !== 'object') return ''
   const salient = input.command ?? input.filePath ?? input.file_path ?? input.path
@@ -238,7 +267,6 @@ const server = createServer(async (req, res) => {
         let usage = null
         let emittedText = false
         let lastActivity = Date.now()
-        const seenToolStart = new Set()
         const seenToolDone = new Set()
 
         const send = (delta) => {
@@ -261,8 +289,18 @@ const server = createServer(async (req, res) => {
           if (!res.writableEnded && Date.now() - lastActivity >= HEARTBEAT_MS) sendProgress('·')
         }, 10000)
 
+        // opencode reports a failed run (a refused key, a locked state
+        // database) as an `error` event or on stderr, and exits non-zero. Kept
+        // here so a run that produced no text ends the stream with that error
+        // instead of an empty answer the harness cannot tell from a real one.
+        let failure = ''
+        let stderrTail = ''
+        const toolSteps = []
+
         proc.stderr.on('data', d => {
-          console.error('[OpenCode stderr]', d.toString())
+          const text = d.toString()
+          stderrTail = `${stderrTail}${text}`.slice(-2000)
+          console.error('[OpenCode stderr]', text)
         })
 
         const rl = createInterface({ input: proc.stdout })
@@ -276,33 +314,52 @@ const server = createServer(async (req, res) => {
             sendContent(parsed.part.text)
             return
           }
-          if (parsed.type === 'step_finish' && parsed.part?.tokens) {
-            usage = parsed.part.tokens
+          if (parsed.type === 'error') {
+            failure = parsed.error?.data?.message ?? parsed.error?.message ?? parsed.error?.name ?? 'opencode reported an error'
             return
           }
-          // Tool activity → live progress. opencode's exact tool-event shape is
-          // unverified here (no local auth to spike), so read it defensively;
-          // an unmatched shape simply shows no progress — the heartbeat above
-          // still keeps the stream alive.
-          if (parsed.type === 'tool' && parsed.part) {
-            const p = parsed.part
-            const callId = String(p.callID ?? p.id ?? p.tool ?? '')
-            const toolName = p.tool ?? p.name ?? 'tool'
-            const status = p.state?.status ?? p.status
-            if ((status === 'running' || status === 'pending' || status === undefined) && !seenToolStart.has(callId)) {
-              seenToolStart.add(callId)
-              const brief = briefParams(p.state?.input ?? p.input)
-              sendProgress(`\n🔧 ${toolName}${brief ? ` — ${brief}` : ''}`)
-            } else if ((status === 'completed' || status === 'error') && !seenToolDone.has(callId)) {
-              seenToolDone.add(callId)
-              sendProgress(status === 'error' ? ' ✗' : ' ✓')
+          // One step_finish per model call; a run with tool calls has several.
+          if (parsed.type === 'step_finish' && parsed.part?.tokens) {
+            const t = parsed.part.tokens
+            usage = {
+              input: (usage?.input ?? 0) + (t.input ?? 0),
+              output: (usage?.output ?? 0) + (t.output ?? 0),
+              total: (usage?.total ?? 0) + (t.total ?? 0),
+              cacheRead: (usage?.cacheRead ?? 0) + (t.cache?.read ?? 0),
+              cacheWrite: (usage?.cacheWrite ?? 0) + (t.cache?.write ?? 0),
+              // The context the model saw on its latest call, which is what the
+              // harness reads prompt_tokens as; the sums above are cost.
+              lastPrompt: (t.input ?? 0) + (t.cache?.read ?? 0) + (t.cache?.write ?? 0),
+              lastCached: t.cache?.read ?? 0,
             }
+            return
+          }
+          // Tool activity → live progress. opencode emits one `tool_use` event
+          // per call, when it has finished, with the arguments in
+          // part.state.input and the outcome in part.state.status.
+          if (parsed.type === 'tool_use' && parsed.part) {
+            const p = parsed.part
+            const callId = String(p.callID ?? p.id ?? '')
+            if (seenToolDone.has(callId)) return
+            seenToolDone.add(callId)
+            const toolName = p.tool ?? 'tool'
+            toolSteps.push(toolName)
+            const brief = briefParams(p.state?.input)
+            sendProgress(`\n🔧 ${toolName}${brief ? ` — ${brief}` : ''}${p.state?.status === 'error' ? ' ✗' : ' ✓'}`)
           }
         })
 
         proc.on('close', code => {
           clearInterval(heartbeat)
-          console.log(`[OpenCode proc closed] code=${code} emittedText=${emittedText}`)
+          const tokens = usage ? ` in=${usage.input + usage.cacheRead + usage.cacheWrite} cached=${usage.cacheRead} out=${usage.output} context=${usage.lastPrompt}` : ''
+          console.log(`[OpenCode proc closed] code=${code} emittedText=${emittedText} tools=${toolSteps.length}${tokens}${toolSteps.length ? ` [${toolSteps.join(' ')}]` : ''}${failure ? ` error=${JSON.stringify(failure)}` : ''}`)
+          if (!emittedText && (failure !== '' || code !== 0)) {
+            const reason = failure !== '' ? failure : stderrTail.replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').filter(Boolean).slice(-2).join(' ') || `opencode exited with code ${String(code)}`
+            res.write(`data: ${JSON.stringify({ error: { message: `opencode: ${reason}` } })}\n\n`)
+            res.end()
+            cleanupFiles()
+            return
+          }
           const finalChunk = {
             id,
             object: 'chat.completion.chunk',
@@ -313,13 +370,7 @@ const server = createServer(async (req, res) => {
               delta: {},
               finish_reason: 'stop',
             }],
-            ...(usage ? {
-              usage: {
-                prompt_tokens: usage.input || 0,
-                completion_tokens: usage.output || 0,
-                total_tokens: usage.total || 0,
-              },
-            } : {}),
+            ...(usage ? { usage: openAiUsage(usage) } : {}),
           }
           res.write(`data: ${JSON.stringify(finalChunk)}\n\n`)
           res.write('data: [DONE]\n\n')
@@ -350,6 +401,7 @@ const server = createServer(async (req, res) => {
 
         let fullResponse = ''
         let usage = null
+        let failure = ''
 
         const rl = createInterface({ input: proc.stdout })
         rl.on('line', line => {
@@ -359,13 +411,33 @@ const server = createServer(async (req, res) => {
             if (parsed.type === 'text' && parsed.part?.text) {
               fullResponse += parsed.part.text
             }
+            if (parsed.type === 'error') {
+              failure = parsed.error?.data?.message ?? parsed.error?.message ?? parsed.error?.name ?? 'opencode reported an error'
+            }
             if (parsed.type === 'step_finish' && parsed.part?.tokens) {
-              usage = parsed.part.tokens
+              const t = parsed.part.tokens
+              usage = {
+                input: (usage?.input ?? 0) + (t.input ?? 0),
+                output: (usage?.output ?? 0) + (t.output ?? 0),
+                total: (usage?.total ?? 0) + (t.total ?? 0),
+                cacheRead: (usage?.cacheRead ?? 0) + (t.cache?.read ?? 0),
+                cacheWrite: (usage?.cacheWrite ?? 0) + (t.cache?.write ?? 0),
+                // The context the model saw on its latest call, which is what the
+                // harness reads prompt_tokens as; the sums above are cost.
+                lastPrompt: (t.input ?? 0) + (t.cache?.read ?? 0) + (t.cache?.write ?? 0),
+                lastCached: t.cache?.read ?? 0,
+              }
             }
           } catch (e) {}
         })
 
         proc.on('close', code => {
+          if (fullResponse === '' && (failure !== '' || code !== 0)) {
+            res.writeHead(502, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: { message: `opencode: ${failure !== '' ? failure : `exited with code ${String(code)}`}` } }))
+            cleanupFiles()
+            return
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({
             id,
@@ -377,11 +449,7 @@ const server = createServer(async (req, res) => {
               message: { role: 'assistant', content: fullResponse },
               finish_reason: 'stop',
             }],
-            usage: {
-              prompt_tokens: usage?.input || 0,
-              completion_tokens: usage?.output || 0,
-              total_tokens: usage?.total || 0,
-            },
+            usage: openAiUsage(usage),
           }))
           cleanupFiles()
         })
@@ -393,6 +461,16 @@ const server = createServer(async (req, res) => {
   res.writeHead(404, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ error: { message: 'Not found' } }))
 })
+
+// opencode creates its state database on first use, and two runs starting
+// together on a fresh home both fail with "database is locked" while it does.
+// One listing run before the first request creates it; the boot-time model
+// sync does the same, but the bridge does not rely on that ordering.
+try {
+  spawnSync('opencode', ['models'], { env: ENV, stdio: 'ignore', timeout: 60_000 })
+} catch (error) {
+  console.error('[OpenCode] warm-up failed:', error)
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`OpenCode OpenAI-compatible bridge listening on http://${HOST}:${PORT}`)
