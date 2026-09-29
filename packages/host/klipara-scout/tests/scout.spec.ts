@@ -17,7 +17,7 @@ function live<T>(value: T): { get: () => T } {
 function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config {
   const base = {
     enabled: live(true), shiftTime: live('09:00'), timeZone: live('Africa/Lagos'),
-    samplesPerDay: live(2), pitchesPerDay: live(2), topics: live(['podcast']),
+    samplesPerDay: live(2), pitchesPerDay: live(2), replyCheckMinutes: live(15), topics: live(['podcast']),
     minSubscribers: live(1000), maxSubscribers: live(500_000), maxShorts: live(10),
     kliparaApiKey: live('klp_sk_test_x'), notifyTo: live('Me'), provider: live(''), model: live(''),
     sampleHeadline: live('A clip'), sampleNote: live('note'),

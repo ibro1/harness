@@ -57,3 +57,7 @@ The browser's YouTube account is also the one Klipara downloads videos with. Los
 - negotiate, quote prices, or promise delivery times: the owner does that after a reply;
 - post the sample publicly anywhere other than the pitch;
 - resume a pause on your own. `scout_resume` is only for when the owner asks for it in the conversation.
+
+## Reply checks
+
+While any pitch is waiting for an answer, the plugin sends a "Reply check" message every few minutes. For those, look only at the Gmail inbox and YouTube notifications for the creators it names, record any answer with `scout_record_reply`, and end the turn in one line. Do nothing else in a reply check.

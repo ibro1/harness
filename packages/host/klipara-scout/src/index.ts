@@ -53,6 +53,8 @@ export interface Config {
   samplesPerDay: Volatile<number>
   /** Pitches (emails and comments together) per local day. */
   pitchesPerDay: Volatile<number>
+  /** Minutes between reply checks while a pitch awaits an answer; 0 leaves replies to the daily shift. */
+  replyCheckMinutes: Volatile<number>
   /** Search phrases the shift rotates through. */
   topics: Volatile<string[]>
   minSubscribers: Volatile<number>
@@ -99,6 +101,7 @@ export const Config = z.object({
   timeZone: z.string().default('Africa/Lagos').volatile(),
   samplesPerDay: z.natural().default(3).volatile(),
   pitchesPerDay: z.natural().default(5).volatile(),
+  replyCheckMinutes: z.natural().default(15).volatile(),
   topics: z.array(z.string()).default(['nigerian podcast', 'african business podcast', 'nigerian interview']).volatile(),
   minSubscribers: z.natural().default(2000).volatile(),
   maxSubscribers: z.natural().default(300_000).volatile(),
@@ -725,4 +728,51 @@ export function apply(ctx: Context, config: Config): void {
   }
   const watcher = setInterval(() => { void watch() }, config.sampleCheckMs)
   ctx.effect(() => () => { clearInterval(watcher) })
+
+  // Reply checks: while any pitch awaits an answer, ask the shift to look at the
+  // Gmail inbox and YouTube notifications every few minutes. Each check is a
+  // model turn driving the browser, so none runs with nothing pitched, while
+  // the shift is busy, or while outreach is paused. With the day's shift no
+  // longer live, one reply Session is started for the day and reused.
+  let lastReplyCheck = Date.now()
+  let startingReplies = false
+  const checkReplies = async (): Promise<void> => {
+    const every = config.replyCheckMinutes.get()
+    if (!config.enabled.get() || every <= 0 || startingReplies || Date.now() - lastReplyCheck < every * 60_000) return
+    const state = await store.read()
+    const awaiting = state.leads.filter(l => l.stage === 'pitched')
+    if (state.paused !== null || awaiting.length === 0) return
+    lastReplyCheck = Date.now()
+    const prompt = `Reply check. Open the Gmail inbox and YouTube notifications in the DeerFlow browser and look only for answers from these pitched creators: ${awaiting.map(l => `${l.channelName} (${l.pitch?.via ?? ''} to ${l.pitch?.to ?? ''})`).join('; ')}. Record each answer with scout_record_reply. Do nothing else: no searches, samples or pitches. Then end your turn with one line.`
+    const live = state.lastShiftSession === undefined ? undefined : ctx.agents.get(brandString<SessionId>(state.lastShiftSession))
+    if (live !== undefined) {
+      if (live.status === 'running') return
+      live.followup(createUserMessage({
+        content: [{ type: 'text', text: prompt }],
+        source: { kind: 'klipara-scout', form: 'notice', summary: boundContextSummary('Klipara Scout reply check') },
+      }))
+      return
+    }
+    startingReplies = true
+    try {
+      const date = localTime(new Date(), config.timeZone.get()).date
+      await mkdir(config.workspacePath, { recursive: true })
+      const sessionId = await startShift(ctx, {
+        workspacePath: config.workspacePath,
+        title: `Klipara Scout replies ${date}`,
+        prompt: `${prompt}\nYour instructions are the klipara-scout skill at ${join(process.env['DSH_HOME'] ?? join(homedir(), '.dsh'), 'skills', 'klipara-scout', 'SKILL.md')}.`,
+        agentPreset: config.agentPreset,
+        permissionPreset: config.permissionPreset,
+        provider: config.provider.get(),
+        model: config.model.get(),
+      }, AbortSignal.timeout(120_000))
+      await store.update((s) => { s.lastShiftSession = sessionId })
+    } catch (error) {
+      process.stderr.write(`klipara-scout: the reply check did not start: ${error instanceof Error ? error.message : String(error)}\n`)
+    } finally {
+      startingReplies = false
+    }
+  }
+  const replyTimer = setInterval(() => { void checkReplies() }, 60_000)
+  ctx.effect(() => () => { clearInterval(replyTimer) })
 }

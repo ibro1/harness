@@ -4,7 +4,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** The Klipara Scout fields that carry a label and a hint. */
 export type ScoutFieldKey =
-  | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'topics'
+  | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
   | 'provider' | 'model' | 'sampleHeadline' | 'sampleNote'
 
@@ -75,6 +75,8 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.samplesPerDay.hint': 'Free sample clips started per day. Each finished sample spends one Klip of your Klipara balance.',
   'scout.pitchesPerDay': 'Pitches per day',
   'scout.pitchesPerDay.hint': 'Emails and comments sent per day, together. Keep this low: repeated comments get YouTube accounts restricted.',
+  'scout.replyCheckMinutes': 'Reply check every (minutes)',
+  'scout.replyCheckMinutes.hint': 'While a pitch is waiting for an answer, the scout checks Gmail and YouTube notifications this often and messages you on WhatsApp when a creator replies. Each check is a short model run; 0 checks only at the daily shift.',
   'scout.topics': 'Search topics',
   'scout.topics.hint': 'One per line. Each shift searches YouTube for long videos from this month on these topics.',
   'scout.minSubscribers': 'Fewest subscribers',
@@ -157,6 +159,8 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.samplesPerDay.hint': '每天开始制作的免费样片数。每完成一段样片会消耗 Klipara 余额中的一个 Klip。',
   'scout.pitchesPerDay': '每日推介数',
   'scout.pitchesPerDay.hint': '每天发送的邮件与评论总数。请保持较低：重复评论会导致 YouTube 账号受限。',
+  'scout.replyCheckMinutes': '回复检查间隔（分钟）',
+  'scout.replyCheckMinutes.hint': '有推介等待回复时，Scout 按此间隔检查 Gmail 与 YouTube 通知，创作者回复时通过 WhatsApp 通知你。每次检查是一次简短的模型运行；0 表示只在每日班次时检查。',
   'scout.topics': '搜索主题',
   'scout.topics.hint': '每行一个。每个班次在 YouTube 上按这些主题搜索本月的长视频。',
   'scout.minSubscribers': '最少订阅数',
