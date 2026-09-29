@@ -446,33 +446,30 @@ if [[ -n "${DEERFLOW_BROWSER_MCP_TOKEN:-}" ]]; then
   deer_url="${DEERFLOW_BROWSER_MCP_URL:-https://deer.linkfa.de/mcp/browser}"
   echo "[entrypoint] DeerFlow browser MCP enabled at $deer_url (native tools: mcp__deerflow__*)"
 
-  # The direct-provider agents get those native tools; the agy and opencode CLIs
-  # run their own loop and drop them, so — like the browser bridge — the CLIs
-  # get DeerFlow only by registering it with them directly. It already speaks
-  # MCP over HTTP, so no stdio bridge is needed: agy and opencode connect to the
-  # endpoint themselves. Set DEERFLOW_BROWSER_MCP=0 to withhold it from the CLIs
-  # (and, for agy, the --dangerously-skip-permissions grant that admits it).
+  # The outreach browser: a separate Chromium in the same sandbox, signed in to
+  # the outreach Google account, behind the same token (tools mcp__outreach__*).
+  # Klipara Scout sends and reads replies with it and never with DeerFlow.
+  if [[ "${DSH_OUTREACH_BROWSER:-1}" != "0" ]]; then
+    patch_args+=(--patch "$APP_DIR/deploy/plugins/outreach-browser.cordis.yml")
+    echo "[entrypoint] Outreach browser MCP enabled at ${DEERFLOW_OUTREACH_MCP_URL:-https://deer.linkfa.de/mcp/outreach} (native tools: mcp__outreach__*)"
+  fi
+
+  # The agy and opencode CLIs drop the harness's tools, so they reach both
+  # browsers as MCP servers of their own. Each goes through a local stdio relay
+  # (deploy/mcp/remote-relay-mcp.mjs) rather than a direct URL: the relay sees
+  # the run's DSH_SESSION_ID, so it shows Klipara Scout Sessions no DeerFlow
+  # tools at all. Set DEERFLOW_BROWSER_MCP=0 to withhold both from the CLIs
+  # (and, for agy, the --dangerously-skip-permissions grant that admits them).
   if [[ "${DEERFLOW_BROWSER_MCP:-1}" != "0" ]]; then
-    if command -v agy >/dev/null 2>&1; then
-      # Flags before the name; http is auto-detected from the URL. Idempotent.
-      if agy mcp add --header "Authorization: Bearer $DEERFLOW_BROWSER_MCP_TOKEN" \
-        deerflow "$deer_url" >/dev/null 2>&1
-      then
-        echo "[entrypoint] Registered the DeerFlow browser with agy as the MCP server 'deerflow'"
-        echo "[entrypoint] NOTE: agy runs with --dangerously-skip-permissions while these tools are enabled."
-      else
-        echo "[entrypoint] WARNING: could not register the DeerFlow MCP server with agy." >&2
-      fi
+    export DEERFLOW_BROWSER_MCP_URL="$deer_url"
+    export DEERFLOW_OUTREACH_MCP_URL="${DEERFLOW_OUTREACH_MCP_URL:-https://deer.linkfa.de/mcp/outreach}"
+    command -v agy >/dev/null 2>&1 && agy mcp remove deerflow >/dev/null 2>&1 || true
+    register_cli_mcp deerflow deerflow-browser-mcp.mjs DEERFLOW_BROWSER_MCP_TOKEN DEERFLOW_BROWSER_MCP_URL "$deer_url" "DeerFlow browser"
+    if [[ "${DSH_OUTREACH_BROWSER:-1}" != "0" ]]; then
+      register_cli_mcp outreach outreach-browser-mcp.mjs DEERFLOW_BROWSER_MCP_TOKEN DEERFLOW_OUTREACH_MCP_URL \
+        "$DEERFLOW_OUTREACH_MCP_URL" "outreach browser"
     fi
-    if command -v opencode >/dev/null 2>&1; then
-      if node "$APP_DIR/deploy/mcp/register-opencode-remote.mjs" \
-        deerflow DEERFLOW_BROWSER_MCP_URL DEERFLOW_BROWSER_MCP_TOKEN "$deer_url" >/dev/null 2>&1
-      then
-        echo "[entrypoint] Registered the DeerFlow browser with opencode as the MCP server 'deerflow'"
-      else
-        echo "[entrypoint] WARNING: could not register the DeerFlow MCP server with opencode." >&2
-      fi
-    fi
+    echo "[entrypoint] NOTE: agy runs with --dangerously-skip-permissions while these tools are enabled."
   fi
 else
   echo "[entrypoint] NOTE: set DEERFLOW_BROWSER_MCP_TOKEN to attach the DeerFlow remote browser tools."

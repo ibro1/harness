@@ -77,6 +77,8 @@ services:
       DSH_AGENT_TOOLS_MCP: ${DSH_AGENT_TOOLS_MCP:-}
       DSH_KLIPARA_SCOUT: ${DSH_KLIPARA_SCOUT:-}
       DSH_SCOUT_MCP: ${DSH_SCOUT_MCP:-}
+      DSH_OUTREACH_BROWSER: ${DSH_OUTREACH_BROWSER:-}
+      DEERFLOW_OUTREACH_MCP_URL: ${DEERFLOW_OUTREACH_MCP_URL:-}
       # Social posting. 1 mounts it; it is the one capability that speaks
       # publicly under the operator's name, so it is off unless asked for.
       DSH_SOCIAL: ${DSH_SOCIAL:-}

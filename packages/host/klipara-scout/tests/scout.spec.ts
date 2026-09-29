@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { bestCandidate, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
+import { apply, bestCandidate, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 
@@ -23,7 +23,7 @@ function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config 
     sampleHeadline: live('A clip'), sampleNote: live('note'),
     dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '',
     workspacePath: '/tmp/ws', agentPreset: 'standard', permissionPreset: 'workspace-write', shiftPrompt: 'go',
-    ytDlp: 'yt-dlp', timeoutMs: 5000, sampleCheckMs: 120_000, whatsappUrl: '', whatsappToken: '',
+    ytDlp: 'yt-dlp', timeoutMs: 5000, sampleCheckMs: 120_000, whatsappUrl: '', whatsappToken: '', forbiddenBrowser: 'deerflow',
   }
   return { ...base, ...overrides } as Config
 }
@@ -234,5 +234,22 @@ describe('klipara scout', () => {
     expect(shiftDue(lagos, 540, null)).toBe(true)
     expect(shiftDue(lagos, 540, '2026-09-29')).toBe(false)
     expect(shiftDue(lagos, 600, '2026-09-28')).toBe(false)
+  })
+
+  it('refuses the DeerFlow browser in scout Sessions and leaves other Sessions alone', async () => {
+    const hooks = new Map<string, (exec: unknown, next: () => Promise<unknown>) => Promise<unknown>>()
+    const ctx = {
+      agents: { list: () => [] },
+      on(name: string, fn: (exec: unknown, next: () => Promise<unknown>) => Promise<unknown>) { hooks.set(name, fn) },
+      effect() {},
+      webServer: { register: () => () => {} },
+    }
+    apply(ctx as never, config({ dataDir: mkdtempSync(join(tmpdir(), 'scout-apply-')), enabled: live(false) }))
+    const gate = hooks.get('tools/pre-execute')!
+    const allow = () => Promise.resolve({ kind: 'allow' })
+    const agent = (id: string) => ({ session: { id } })
+    expect(await gate({ name: 'mcp__deerflow__browser_click', agent: agent('scout-1') }, allow)).toMatchObject({ kind: 'deny' })
+    expect(await gate({ name: 'mcp__outreach__browser_click', agent: agent('scout-1') }, allow)).toEqual({ kind: 'allow' })
+    expect(await gate({ name: 'mcp__deerflow__browser_click', agent: agent('session-9') }, allow)).toEqual({ kind: 'allow' })
   })
 })

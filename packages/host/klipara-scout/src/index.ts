@@ -20,7 +20,7 @@ import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { ParameterSchemaSpec, ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
+import type { ParameterSchemaSpec, PreToolDecision, ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { bestCandidate, kliparaClient, type KliparaApi } from './klipara.ts'
 import { serveSample, storeSample } from './samples.ts'
@@ -102,6 +102,8 @@ export interface Config {
   /** The WhatsApp plugin's command route and token, for owner alerts. */
   whatsappUrl: string
   whatsappToken: string
+  /** MCP server name of the browser scout Sessions must never use. */
+  forbiddenBrowser: string
 }
 
 /** Composition config. */
@@ -139,6 +141,7 @@ export const Config = z.object({
   sampleCheckMs: z.natural().min(30_000).default(120_000),
   whatsappUrl: z.string().default(''),
   whatsappToken: z.string().default(''),
+  forbiddenBrowser: z.string().default('deerflow'),
 })
 
 const OUTPUT_SCHEMA = {
@@ -523,6 +526,15 @@ function corsOrigin(base: string): string {
   }
 }
 
+/**
+ * Whether an agent drives a scout shift or reply-check Session.
+ * @param agent - the agent.
+ * @returns true for a Session this plugin started.
+ */
+function isScoutSession(agent: Agent): boolean {
+  return String(agent.session.id).startsWith('scout-')
+}
+
 /** Compare two secrets in constant time, whatever their lengths. */
 function secretEquals(a: string, b: string): boolean {
   const digest = (value: string): Buffer => createHash('sha256').update(value).digest()
@@ -679,10 +691,20 @@ export function apply(ctx: Context, config: Config): void {
     }), `klipara-scout: ${prefix}/command`)
   }
 
+  // Scout Sessions never drive the DeerFlow browser: its Google account is the
+  // one Klipara downloads YouTube videos with, and outreach from it risks that
+  // account. Refused where the call runs, so no prompt or tool list bypasses it.
+  ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+    if (exec.agent !== undefined && isScoutSession(exec.agent) && exec.name.startsWith(`mcp__${config.forbiddenBrowser}__`)) {
+      return { kind: 'deny', reason: `Scout sessions may not use the ${config.forbiddenBrowser} browser: its Google account is the one Klipara downloads with. Use the ${config.outreachBrowser.get() || 'outreach'} browser tools.` }
+    }
+    return next()
+  })
+
   // Tools only on shift Sessions: they would otherwise ride every chat's prompt.
   const installed = new Map<Agent, { dispose: () => Promise<void> }>()
   const install = (agent: Agent): void => {
-    if (installed.has(agent) || !String(agent.session.id).startsWith('scout-')) return
+    if (installed.has(agent) || !isScoutSession(agent)) return
     installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
       for (const definition of tools) scope.effect(() => scope.tools.register(definition), `klipara-scout: ${definition.name}`)
     }))

@@ -66,6 +66,7 @@ The tool definitions join a shift Session's prompt prefix once and stay stable a
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **The download browser is refused.** Calls to `mcp__<forbiddenBrowser>__*` (default `deerflow`) from a scout Session are denied at `tools/pre-execute`; the CLIs are kept off it by the deploy's relay.
 - **Outreach needs its own account.** Nothing is pitched and no reply check runs until `outreachBrowser` names a browser tool server signed in to a dedicated outreach Google account: the DeerFlow browser's Google account is the one Klipara downloads YouTube videos with. The plugin refuses pitches without it, but which browser the model drives is only instructed, not enforced.
 - **Sending is the model's job.** Emails go through Gmail and comments through YouTube in the DeerFlow browser, driven by the shift; the plugin reserves and records each pitch but cannot see the send itself.
 - **Samples accumulate.** Hosted samples are kept until deleted by hand.

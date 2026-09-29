@@ -797,6 +797,18 @@ before two runs can race to create it.
 
 ## Klipara Scout
 
+**Two browsers, never mixed.** The DeerFlow sandbox runs two Chromiums: the
+download browser (`/mnt/shared/chromium-profile`, DevTools 9222,
+`/mcp/browser`), whose YouTube cookies Klipara downloads with, and the outreach
+browser (`/mnt/shared/chromium-profile-outreach`, DevTools 9223,
+`/mcp/outreach`, set up by `/mnt/shared/outreach-browser/install.sh`), signed in
+to the outreach Google account. The harness attaches the second as
+`mcp__outreach__*` (`DSH_OUTREACH_BROWSER=0` leaves it out); set **Outreach
+browser** to `outreach` on the Klipara Scout page. Scout Sessions cannot use
+the download browser: the plugin refuses `mcp__deerflow__*` calls from them,
+and agy and opencode reach both browsers through a local relay
+(`deploy/mcp/remote-relay-mcp.mjs`) that shows scout Sessions no DeerFlow tools.
+
 An outreach employee for Klipara (`packages/host/klipara-scout`), inserted by
 the web-app bundle and off until switched on at **Plugins → Klipara Scout**.
 Each day at the configured time it starts a shift Session that finds YouTube

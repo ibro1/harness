@@ -1,0 +1,15 @@
+# The outreach browser: a Chromium in the DeerFlow sandbox separate from the
+# download browser, signed in to the outreach Google account. Its tools register
+# as mcp__outreach__*; Klipara Scout sends pitches and reads replies with them.
+# Same bearer token as the DeerFlow browser route.
+- insert:
+    - id: outreach-browser
+      name: '../../packages/mcp/mcp-client/lib/index.js'
+      config:
+        serverName: outreach
+        transport: streamable-http
+        url: !!js process.env.DEERFLOW_OUTREACH_MCP_URL || 'https://deer.linkfa.de/mcp/outreach'
+        headers:
+          Authorization: !!js '`Bearer ${process.env.DEERFLOW_BROWSER_MCP_TOKEN || ""}`'
+        toolCallTimeoutMs: 45000
+        failOnStartupError: false
