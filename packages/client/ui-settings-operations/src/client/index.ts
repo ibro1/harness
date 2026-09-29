@@ -1,5 +1,5 @@
 /**
- * The Dokploy, Cloudflare and Postgres settings pages, browser half: the
+ * The Dokploy, Cloudflare, Postgres and Klipara Scout settings pages, browser half: the
  * servers, zones, accounts and databases an agent may act on. Each page
  * registers into the Plugins page's `plugins.item` slot while the Host serves
  * its namespace, so a deployment that leaves a plugin out shows no trace of it.
@@ -17,14 +17,17 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { CloudflareCard } from './CloudflareCard.tsx'
 import { DokployCard } from './DokployCard.tsx'
 import { PostgresCard } from './PostgresCard.tsx'
+import { ScoutCard } from './ScoutCard.tsx'
 import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-controller.ts'
 import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
 import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
+import { SCOUT_NS, ScoutCardController } from './scout-card-controller.ts'
 import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
 
 export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from './cloudflare-card-controller.ts'
 export type { DokployCardFace, DokployCardState, DokploySettings } from './dokploy-card-controller.ts'
 export type { PostgresCardFace, PostgresCardState, PostgresSettings } from './postgres-card-controller.ts'
+export type { ScoutCardFace, ScoutCardState, ScoutSettings } from './scout-card-controller.ts'
 export type { OperationsSettingsLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -51,10 +54,12 @@ export function apply(ctx: ClientContext): void {
   const dokploy = new DokployCardController(ctx.configForms.get(DOKPLOY_NS))
   const postgres = new PostgresCardController(ctx.configForms.get(POSTGRES_NS))
   const cloudflare = new CloudflareCardController(ctx.configForms.get(CLOUDFLARE_NS))
+  const scout = new ScoutCardController(ctx.configForms.get(SCOUT_NS))
   ctx.effect(() => () => {
     dokploy.dispose()
     postgres.dispose()
     cloudflare.dispose()
+    scout.dispose()
   }, 'ui-settings-operations: form subscriptions')
 
   ctx.effect(() => ctx.configForms.whileServed([DOKPLOY_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
@@ -66,4 +71,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([CLOUDFLARE_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'cloudflare', order: 70, label: () => t('cloudflareTitle'), locale: NS, inject: () => cloudflare.inject(),
   }, CloudflareCard))), 'ui-settings-operations: Cloudflare page')
+  ctx.effect(() => ctx.configForms.whileServed([SCOUT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'klipara-scout', order: 80, label: () => t('scoutTitle'), locale: NS, inject: () => scout.inject(),
+  }, ScoutCard))), 'ui-settings-operations: Klipara Scout page')
 }

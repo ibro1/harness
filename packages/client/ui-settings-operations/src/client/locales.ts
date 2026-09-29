@@ -2,12 +2,20 @@
 
 import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 
+/** The Klipara Scout fields that carry a label and a hint. */
+export type ScoutFieldKey =
+  | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'topics'
+  | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
+  | 'provider' | 'model' | 'sampleHeadline' | 'sampleNote'
+
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
   | 'dokployTitle' | 'dokployDescription' | 'dokployServers' | 'dokployServersHint' | 'dokployInvalid' | 'dokployServersPlaceholder'
   | 'postgresTitle' | 'postgresDescription' | 'postgresDatabases' | 'postgresDatabasesHint' | 'postgresInvalid' | 'postgresDatabasesPlaceholder'
   | 'cloudflareTitle' | 'cloudflareDescription' | 'cloudflareZones' | 'cloudflareZonesHint' | 'cloudflareInvalid' | 'cloudflareZonesPlaceholder'
   | 'cloudflareAccounts' | 'cloudflareAccountsHint' | 'cloudflareAccountsInvalid' | 'cloudflareAccountsPlaceholder'
+  | 'scoutTitle' | 'scoutDescription' | 'scoutLeads' | 'scoutInvalid'
+  | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint`
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed'
 
@@ -35,6 +43,40 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   postgresDatabasesHint: 'A JSON array of databases, each with a name and either dsnEnv (the name of an environment variable holding the connection string — kept out of settings) or dsn (the connection string itself, stored here). Optional per database: readOnly (defaults to true; set it to false to allow writes) and statementTimeoutMs (defaults to 15000).',
   postgresInvalid: 'Not a valid databases list: a JSON array of objects, each with a string name, either dsnEnv or dsn, an optional boolean readOnly, and an optional positive statementTimeoutMs.',
   postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
+  'scoutTitle': 'Klipara Scout',
+  'scoutDescription': 'An outreach employee for Klipara: a daily shift that finds creators, makes each a free sample clip, pitches it, and records replies.',
+  'scoutLeads': 'Open the leads page',
+  'scoutInvalid': 'Not a value this setting accepts.',
+  'scout.enabled': 'Run the daily shift',
+  'scout.enabled.hint': 'Off until you turn it on. Outreach also stops by itself when YouTube or Gmail shows a warning; you get a WhatsApp message and resume it by asking in a Klipara Scout session.',
+  'scout.shiftTime': 'Shift start time',
+  'scout.shiftTime.hint': 'Local time the daily shift starts, as HH:MM (24-hour).',
+  'scout.timeZone': 'Time zone',
+  'scout.timeZone.hint': 'The time zone the start time and the daily caps count in, for example Africa/Lagos.',
+  'scout.samplesPerDay': 'Samples per day',
+  'scout.samplesPerDay.hint': 'Free sample clips started per day. Each finished sample spends one Klip of your Klipara balance.',
+  'scout.pitchesPerDay': 'Pitches per day',
+  'scout.pitchesPerDay.hint': 'Emails and comments sent per day, together. Keep this low: repeated comments get YouTube accounts restricted.',
+  'scout.topics': 'Search topics',
+  'scout.topics.hint': 'One per line. Each shift searches YouTube for long videos from this month on these topics.',
+  'scout.minSubscribers': 'Fewest subscribers',
+  'scout.minSubscribers.hint': 'Skip smaller channels; they rarely pay.',
+  'scout.maxSubscribers': 'Most subscribers',
+  'scout.maxSubscribers.hint': 'Skip bigger channels; they usually have an editor.',
+  'scout.maxShorts': 'Most Shorts already posted',
+  'scout.maxShorts.hint': 'Skip channels already posting more Shorts than this; they already clip.',
+  'scout.kliparaApiKey': 'Klipara API key',
+  'scout.kliparaApiKey.hint': "Create one on the API keys page in Klipara (klp_sk_live_…). It is stored in this deployment's settings and shown here.",
+  'scout.notifyTo': 'WhatsApp alerts to',
+  'scout.notifyTo.hint': 'A WhatsApp chat name or number that hears about replies and pauses.',
+  'scout.provider': 'Shift model provider',
+  'scout.provider.hint': 'For example deepseek or opencode. Leave it empty, with the model, to use your default model.',
+  'scout.model': 'Shift model',
+  'scout.model.hint': 'The model id for the shift, for example big-pickle. Leave it empty to use your default model.',
+  'scout.sampleHeadline': 'Sample page headline',
+  'scout.sampleHeadline.hint': 'The line above the clip on the page a creator opens.',
+  'scout.sampleNote': 'Sample page note',
+  'scout.sampleNote.hint': 'The line below the clip.',
   overridden: 'Overridden',
   reset: 'Reset to default',
   readOnly: 'This deployment stores settings read-only.',
@@ -68,6 +110,40 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   postgresDatabasesHint: '数据库的 JSON 数组，每项包含 name，以及 dsnEnv（保存连接串的环境变量名，连接串不写入设置）或 dsn（直接填写连接串，将保存在此处）。每项可选：readOnly（默认为 true；设为 false 才允许写入）和 statementTimeoutMs（默认 15000）。',
   postgresInvalid: '不是有效的数据库列表：应为对象的 JSON 数组，每项需包含字符串 name，以及 dsnEnv 或 dsn 之一；readOnly 可选且为布尔值，statementTimeoutMs 可选且为正数。',
   postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
+  'scoutTitle': 'Klipara Scout',
+  'scoutDescription': 'Klipara 的外联员工：每日班次寻找创作者，为每位制作一段免费样片，发出推介，并记录回复。',
+  'scoutLeads': '打开线索页面',
+  'scoutInvalid': '该设置不接受此值。',
+  'scout.enabled': '运行每日班次',
+  'scout.enabled.hint': '默认关闭，需手动开启。YouTube 或 Gmail 出现警告时外联会自动暂停；你会收到 WhatsApp 消息，并在 Klipara Scout 会话中要求恢复。',
+  'scout.shiftTime': '班次开始时间',
+  'scout.shiftTime.hint': '每日班次开始的本地时间，格式 HH:MM（24 小时制）。',
+  'scout.timeZone': '时区',
+  'scout.timeZone.hint': '开始时间与每日上限所用的时区，例如 Africa/Lagos。',
+  'scout.samplesPerDay': '每日样片数',
+  'scout.samplesPerDay.hint': '每天开始制作的免费样片数。每完成一段样片会消耗 Klipara 余额中的一个 Klip。',
+  'scout.pitchesPerDay': '每日推介数',
+  'scout.pitchesPerDay.hint': '每天发送的邮件与评论总数。请保持较低：重复评论会导致 YouTube 账号受限。',
+  'scout.topics': '搜索主题',
+  'scout.topics.hint': '每行一个。每个班次在 YouTube 上按这些主题搜索本月的长视频。',
+  'scout.minSubscribers': '最少订阅数',
+  'scout.minSubscribers.hint': '跳过更小的频道；它们很少付费。',
+  'scout.maxSubscribers': '最多订阅数',
+  'scout.maxSubscribers.hint': '跳过更大的频道；它们通常已有剪辑师。',
+  'scout.maxShorts': '已发布 Shorts 上限',
+  'scout.maxShorts.hint': '跳过已发布超过此数量 Shorts 的频道；它们已在做剪辑。',
+  'scout.kliparaApiKey': 'Klipara API 密钥',
+  'scout.kliparaApiKey.hint': '在 Klipara 的 API 密钥页面创建（klp_sk_live_…）。保存在本部署的设置中并在此显示。',
+  'scout.notifyTo': 'WhatsApp 提醒对象',
+  'scout.notifyTo.hint': '接收回复与暂停通知的 WhatsApp 聊天名称或号码。',
+  'scout.provider': '班次模型提供方',
+  'scout.provider.hint': '例如 deepseek 或 opencode。与模型一同留空则使用默认模型。',
+  'scout.model': '班次模型',
+  'scout.model.hint': '班次使用的模型 id，例如 big-pickle。留空则使用默认模型。',
+  'scout.sampleHeadline': '样片页标题',
+  'scout.sampleHeadline.hint': '创作者打开的页面上、视频上方的一行文字。',
+  'scout.sampleNote': '样片页说明',
+  'scout.sampleNote.hint': '视频下方的一行文字。',
   overridden: '已覆盖',
   reset: '恢复默认',
   readOnly: '本部署的设置为只读。',

@@ -26,6 +26,7 @@ const MCP_SOURCES = [
   ['DSH_POSTGRES_TOKEN', 'DSH_POSTGRES_MCP'],
   ['DSH_SESSION_TOOLS_TOKEN', 'DSH_SESSION_TOOLS_MCP'],
   ['DSH_AGENT_TOOLS_TOKEN', 'DSH_AGENT_TOOLS_MCP'],
+  ['DSH_SCOUT_TOKEN', 'DSH_SCOUT_MCP'],
 ]
 const SKIP_PERMISSIONS = MCP_SOURCES.some(([token, off]) =>
   (process.env[token] ?? '') !== '' && (off === undefined || (process.env[off] || '1') !== '0'))

@@ -183,6 +183,7 @@
     "@deepseek-ai/dsh-client-ui-whatsapp": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-operations": "workspace:*",
     "@deepseek-ai/dsh-host-cloudflare": "workspace:*",
+    "@deepseek-ai/dsh-host-klipara-scout": "workspace:*",
     "@deepseek-ai/dsh-host-postgres": "workspace:*",
     "@deepseek-ai/dsh-host-dokploy": "workspace:*",
     "@deepseek-ai/dsh-social": "workspace:*",

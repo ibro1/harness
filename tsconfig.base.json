@@ -316,6 +316,7 @@
       "@deepseek-ai/dsh-host-browser-bridge": ["./packages/host/browser-bridge/src"],
       "@deepseek-ai/dsh-host-capture": ["./packages/host/capture/src"],
       "@deepseek-ai/dsh-host-cloudflare": ["./packages/host/cloudflare/src"],
+      "@deepseek-ai/dsh-host-klipara-scout": ["./packages/host/klipara-scout/src"],
       "@deepseek-ai/dsh-host-dokploy": ["./packages/host/dokploy/src"],
       "@deepseek-ai/dsh-host-outputs": ["./packages/host/outputs/src"],
       "@deepseek-ai/dsh-host-postgres": ["./packages/host/postgres/src"],

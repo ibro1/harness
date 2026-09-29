@@ -262,6 +262,16 @@
         path: !!js process.env.DSH_CLOUDFLARE_PATH || '/cloudflare'
         token: !!js process.env.DSH_CLOUDFLARE_TOKEN || ''
 
+    - id: klipara-scout
+      name: '@deepseek-ai/dsh-host-klipara-scout'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_KLIPARA_SCOUT === '0'
+      config:
+        publicBaseUrl: !!js "process.env.DSH_PUBLIC_HOST ? 'https://' + process.env.DSH_PUBLIC_HOST : ''"
+        token: !!js process.env.DSH_SCOUT_TOKEN || ''
+        workspacePath: !!js process.env.DSH_SCOUT_WORKSPACE || '/workspace/klipara-scout'
+        whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
+        whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
+
     - id: postgres
       name: '@deepseek-ai/dsh-host-postgres'
       disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_POSTGRES === '0'

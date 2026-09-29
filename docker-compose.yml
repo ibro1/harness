@@ -75,6 +75,8 @@ services:
       DSH_POSTGRES_MCP: ${DSH_POSTGRES_MCP:-}
       DSH_SESSION_TOOLS_MCP: ${DSH_SESSION_TOOLS_MCP:-}
       DSH_AGENT_TOOLS_MCP: ${DSH_AGENT_TOOLS_MCP:-}
+      DSH_KLIPARA_SCOUT: ${DSH_KLIPARA_SCOUT:-}
+      DSH_SCOUT_MCP: ${DSH_SCOUT_MCP:-}
       # Social posting. 1 mounts it; it is the one capability that speaks
       # publicly under the operator's name, so it is off unless asked for.
       DSH_SOCIAL: ${DSH_SOCIAL:-}

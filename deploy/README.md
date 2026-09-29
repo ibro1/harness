@@ -785,6 +785,21 @@ error (a refused key, a locked state database) rather than an empty answer,
 and runs `opencode models` once at start so opencode's state database exists
 before two runs can race to create it.
 
+## Klipara Scout
+
+An outreach employee for Klipara (`packages/host/klipara-scout`), inserted by
+the web-app bundle and off until switched on at **Plugins → Klipara Scout**.
+Each day at the configured time it starts a shift Session that finds YouTube
+creators posting long videos, has Klipara cut each a free sample (one Klip per
+sample), pitches it by email through Gmail or a comment on YouTube in the
+DeerFlow browser, and records replies, alerting the WhatsApp recipient set on
+the page. The daily caps, duplicate-pitch refusal and the pause switch are
+enforced by the plugin, not the model; the shift pauses itself and alerts you
+on any YouTube or Gmail warning, because the browser's YouTube account is the
+one Klipara's ingest downloads with. Leads are at `/scout/leads` (signed in);
+samples are public at `/scout/s/<random id>`. `DSH_KLIPARA_SCOUT=0` leaves it
+out; `DSH_SCOUT_MCP=0` keeps its tools from agy and opencode.
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

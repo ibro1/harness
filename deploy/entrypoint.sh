@@ -90,6 +90,9 @@ fi
 if [[ "${DSH_AGENT_TOOLS_MCP:-1}" != "0" ]]; then
   export DSH_AGENT_TOOLS_TOKEN="${DSH_AGENT_TOOLS_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_KLIPARA_SCOUT:-1}" != "0" && "${DSH_SCOUT_MCP:-1}" != "0" ]]; then
+  export DSH_SCOUT_TOKEN="${DSH_SCOUT_TOKEN:-$(random_token)}"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -345,6 +348,20 @@ if [[ -n "${DSH_AGENT_TOOLS_TOKEN:-}" && "${DSH_AGENT_TOOLS_MCP:-1}" != "0" ]]; 
   patch_args+=(--patch "$APP_DIR/deploy/plugins/agent-tools.cordis.yml")
   register_cli_mcp dsh-agent-tools agent-tools-mcp.mjs DSH_AGENT_TOOLS_TOKEN DSH_AGENT_TOOLS_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT${DSH_AGENT_TOOLS_PATH:-/agent-tools}/command" "Agent Teams"
+fi
+
+# Klipara Scout: the outreach employee (packages/host/klipara-scout), inserted
+# by the web-app bundle and configured on the Plugins page; it does nothing
+# until turned on there. The shift reads its instructions from the
+# klipara-scout skill, and CLI models reach its tools over MCP.
+if [[ "${DSH_KLIPARA_SCOUT:-1}" != "0" ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/klipara-scout" "$HOME/.dsh/skills/klipara-scout"
+  echo "[entrypoint] Klipara Scout available (Settings -> Plugins -> Klipara Scout; leads at /scout/leads)"
+  if [[ -n "${DSH_SCOUT_TOKEN:-}" ]]; then
+    register_cli_mcp dsh-scout scout-mcp.mjs DSH_SCOUT_TOKEN DSH_SCOUT_COMMAND_URL \
+      "http://127.0.0.1:$INTERNAL_PORT/scout/command" "Klipara Scout"
+  fi
 fi
 
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in

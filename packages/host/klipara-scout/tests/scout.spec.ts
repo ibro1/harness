@@ -1,0 +1,208 @@
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { createServer, type Server } from 'node:http'
+import { once } from 'node:events'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { bestCandidate, buildScoutTools, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
+
+const exec = { signal: new AbortController().signal } as ToolRunContext
+
+/** A live-settings stand-in: each field reads its value. */
+function live<T>(value: T): { get: () => T } {
+  return { get: () => value }
+}
+
+function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config {
+  const base = {
+    enabled: live(true), shiftTime: live('09:00'), timeZone: live('Africa/Lagos'),
+    samplesPerDay: live(2), pitchesPerDay: live(2), topics: live(['podcast']),
+    minSubscribers: live(1000), maxSubscribers: live(500_000), maxShorts: live(10),
+    kliparaApiKey: live('klp_sk_test_x'), notifyTo: live('Me'), provider: live(''), model: live(''),
+    sampleHeadline: live('A clip'), sampleNote: live('note'),
+    dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '',
+    workspacePath: '/tmp/ws', agentPreset: 'standard', permissionPreset: 'workspace-write', shiftPrompt: 'go',
+    ytDlp: 'yt-dlp', timeoutMs: 5000, whatsappUrl: '', whatsappToken: '',
+  }
+  return { ...base, ...overrides } as Config
+}
+
+/** A fake yt-dlp: search results, then one channel page per channel. */
+const ytDlp: YtDlpRunner = (args) => {
+  const url = args[0] ?? ''
+  if (url.includes('/results?')) {
+    return Promise.resolve(JSON.stringify({ entries: [
+      { id: 'v1', title: 'Episode one', duration: 3600, channel: 'Small Pod', channel_id: 'UC_small' },
+      { id: 'v2', title: 'Episode two', duration: 5400, channel: 'Big Pod', channel_id: 'UC_big' },
+      { id: 'v3', title: 'Shorts heavy', duration: 4000, channel: 'Shorty', channel_id: 'UC_shorts' },
+    ] }))
+  }
+  if (url.includes('UC_small')) return Promise.resolve(JSON.stringify({ channel: 'Small Pod', channel_follower_count: 12_000, description: 'Business: hi@small.pod', entries: [] }))
+  if (url.includes('UC_big')) return Promise.resolve(JSON.stringify({ channel: 'Big Pod', channel_follower_count: 2_000_000, entries: [] }))
+  return Promise.resolve(JSON.stringify({ channel: 'Shorty', channel_follower_count: 50_000, entries: Array.from({ length: 11 }, (_, i) => ({ id: `s${String(i)}` })) }))
+}
+
+let server: Server | undefined
+afterEach(async () => {
+  if (server !== undefined) {
+    await new Promise<void>(resolve => server?.close(() => { resolve() }))
+    server = undefined
+  }
+})
+
+/** Serve a fake clip file and return its URL. */
+async function clipServer(): Promise<string> {
+  server = createServer((_req, res) => { res.writeHead(200, { 'Content-Type': 'video/mp4' }); res.end(Buffer.from('fake-mp4')) })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('no port')
+  return `http://127.0.0.1:${String(address.port)}/clip.mp4`
+}
+
+function klipara(downloadUrl: string, state = 'succeeded'): KliparaApi & { exports: string[] } {
+  const exports: string[] = []
+  return {
+    exports,
+    startJob: () => Promise.resolve({ id: 'job_1', state: 'queued' }),
+    getJob: () => Promise.resolve({ id: 'job_1', state }),
+    candidates: () => Promise.resolve([
+      { clipId: 'clp_gated', rank: 1, totalScore: 0.9, gatedOut: true, startMs: 0, endMs: 30_000 },
+      { clipId: 'clp_good', rank: 2, totalScore: 0.8, gatedOut: false, startMs: 60_000, endMs: 105_000 },
+    ]),
+    exportClip: (clipId) => { exports.push(clipId); return Promise.resolve({ downloadUrl, charged: '1' }) },
+  }
+}
+
+function setup(overrides: Partial<ScoutDeps> = {}, cfg = config()) {
+  const dir = mkdtempSync(join(tmpdir(), 'scout-'))
+  const notes: string[] = []
+  const deps: ScoutDeps = {
+    store: new ScoutStore(join(dir, 'leads.json')),
+    config: cfg,
+    ytDlp,
+    klipara: klipara('http://127.0.0.1:1/none'),
+    samplesDir: join(dir, 'samples'),
+    sampleBase: () => 'https://h.test/scout/s',
+    notify: (text) => { notes.push(text); return Promise.resolve('sent') },
+    now: () => new Date('2026-09-29T10:00:00Z'),
+    ...overrides,
+  }
+  const tools = new Map(buildScoutTools(deps).map((t: ToolDefinition) => [t.name, t]))
+  const run = async (name: string, args: Record<string, unknown> = {}): Promise<string> =>
+    ((await tools.get(name)!.execute(args, exec)) as { text: string }).text
+  return { deps, run, notes, dir }
+}
+
+describe('klipara scout', () => {
+  it('saves only channels inside the size and Shorts limits, with any public email', async () => {
+    const { run, deps } = setup()
+    const text = await run('scout_search', { topic: 'nigerian podcast' })
+    expect(text).toContain('1 saved as leads')
+    expect(text).toContain('Big Pod: 2000000 subscribers')
+    expect(text).toContain('Shorty: already posts 11+ Shorts')
+    const state = await deps.store.read()
+    expect(state.leads.map(l => [l.channelId, l.stage, l.email])).toEqual([
+      ['UC_small', 'found', 'hi@small.pod'], ['UC_big', 'skipped', undefined], ['UC_shorts', 'skipped', undefined],
+    ])
+    expect(await run('scout_search', { topic: 'nigerian podcast' })).toContain('0 new channels')
+  })
+
+  it('makes a sample from the best standalone clip, hosts it, and counts the cap', async () => {
+    const url = await clipServer()
+    const api = klipara(url)
+    const { run, deps } = setup({ klipara: api })
+    await run('scout_search')
+    expect(await run('scout_make_sample', { channel_id: 'UC_small' })).toContain('job job_1')
+    const ready = await run('scout_check_sample', { channel_id: 'UC_small' })
+    expect(api.exports).toEqual(['clp_good'])
+    const lead = (await deps.store.read()).leads.find(l => l.channelId === 'UC_small')!
+    expect(lead.stage).toBe('sampled')
+    expect(ready).toContain(lead.samplePageUrl)
+    expect(readFileSync(join(deps.samplesDir, `${lead.sampleId ?? ''}.mp4`), 'utf8')).toBe('fake-mp4')
+    expect((await deps.store.read()).days['2026-09-29']).toEqual({ samples: 1, pitches: 0 })
+  })
+
+  it('refuses a sample past the daily cap', async () => {
+    const { run, deps } = setup({}, config({ samplesPerDay: live(0) }))
+    await run('scout_search')
+    await expect(run('scout_make_sample', { channel_id: 'UC_small' })).rejects.toThrow('sample cap (0) is reached')
+    expect((await deps.store.read()).leads[0]!.stage).toBe('found')
+  })
+
+  it('skips a lead whose job failed', async () => {
+    const { run, deps } = setup({ klipara: klipara('x', 'failed') })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    expect(await run('scout_check_sample', { channel_id: 'UC_small' })).toContain('is skipped')
+    expect((await deps.store.read()).leads[0]!.stage).toBe('skipped')
+  })
+
+  it('reserves a pitch only with the sample link, within the cap, and not a near-copy', async () => {
+    const url = await clipServer()
+    const { run, deps } = setup({ klipara: klipara(url) })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    await run('scout_check_sample', { channel_id: 'UC_small' })
+    const link = (await deps.store.read()).leads[0]!.samplePageUrl ?? ''
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: 'no link here' })).rejects.toThrow('must contain the sample link')
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'not-an-address', text: link })).rejects.toThrow('needs an email address')
+    expect(await run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: `Loved the episode about Lagos rent — I clipped the landlord story: ${link}` })).toContain('Pitch 1/2 reserved')
+    const state = await deps.store.read()
+    expect(state.leads[0]!.stage).toBe('pitched')
+    await deps.store.update((s) => {
+      s.leads.push({ ...s.leads[0]!, channelId: 'UC_two', stage: 'sampled', samplePageUrl: 'https://h.test/scout/s/two' })
+    })
+    await expect(run('scout_pitch', { channel_id: 'UC_two', via: 'comment', to: 'https://www.youtube.com/watch?v=v9', text: 'Loved the episode about Lagos rent — I clipped the landlord story: https://h.test/scout/s/two' }))
+      .rejects.toThrow('same words as an earlier one')
+  })
+
+  it('pauses outreach, alerts the owner, and refuses samples and pitches until resumed', async () => {
+    const { run, notes } = setup()
+    await run('scout_search')
+    expect(await run('scout_pause', { reason: 'captcha on YouTube' })).toContain('Outreach paused')
+    expect(notes[0]).toContain('captcha on YouTube')
+    await expect(run('scout_make_sample', { channel_id: 'UC_small' })).rejects.toThrow('Outreach is paused (captcha on YouTube)')
+    expect(await run('scout_status')).toContain('PAUSED')
+    expect(await run('scout_resume')).toContain('resumed')
+    expect(await run('scout_make_sample', { channel_id: 'UC_small' })).toContain('job job_1')
+  })
+
+  it('records a reply, moves the lead to replied, and tells the owner', async () => {
+    const { run, deps, notes } = setup()
+    await run('scout_search')
+    await deps.store.update((s) => { s.leads[0]!.stage = 'pitched'; s.leads[0]!.pitch = { via: 'comment', to: 'x', text: 't', at: 'a' } })
+    expect(await run('scout_record_reply', { channel_id: 'UC_small', where: 'comment', text: 'How much for 10 clips?' })).toContain('now replied')
+    expect(notes[0]).toContain('Small Pod replied')
+    expect(notes[0]).toContain('How much for 10 clips?')
+  })
+
+  it('renders the leads page with stage and escaped text', async () => {
+    const { run, deps } = setup()
+    await run('scout_search')
+    await deps.store.update((s) => { s.leads[0]!.channelName = '<b>Pod</b>' })
+    const page = leadsPage(await deps.store.read(), '2026-09-29', config())
+    expect(page).toContain('&lt;b&gt;Pod&lt;/b&gt;')
+    expect(page).toContain('samples 0/2')
+  })
+
+  it('picks the best-ranked clip that stands alone', () => {
+    expect(bestCandidate([
+      { clipId: 'a', rank: 1, totalScore: 1, gatedOut: true, startMs: 0, endMs: 1 },
+      { clipId: 'b', rank: 3, totalScore: 0.5, gatedOut: false, startMs: 0, endMs: 1 },
+      { clipId: 'c', rank: 2, totalScore: 0.6, gatedOut: false, startMs: 0, endMs: 1 },
+    ])?.clipId).toBe('c')
+    expect(bestCandidate([{ clipId: 'a', rank: 1, totalScore: 1, gatedOut: true, startMs: 0, endMs: 1 }])).toBeUndefined()
+  })
+
+  it('runs the shift once per local day, after the start time, in the configured zone', () => {
+    const lagos = localTime(new Date('2026-09-29T08:30:00Z'), 'Africa/Lagos')
+    expect(lagos).toEqual({ date: '2026-09-29', minutes: 9 * 60 + 30 })
+    expect(parseShiftTime('09:00')).toBe(540)
+    expect(parseShiftTime('25:00')).toBeUndefined()
+    expect(shiftDue(lagos, 540, null)).toBe(true)
+    expect(shiftDue(lagos, 540, '2026-09-29')).toBe(false)
+    expect(shiftDue(lagos, 600, '2026-09-28')).toBe(false)
+  })
+})
