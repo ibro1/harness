@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { spawn, spawnSync } from 'node:child_process'
 import { createInterface } from 'node:readline'
+import { watchRun } from './bridge-watchdog.mjs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { writeFileSync, unlinkSync, readFileSync } from 'node:fs'
@@ -296,6 +297,13 @@ const server = createServer(async (req, res) => {
         let failure = ''
         let stderrTail = ''
         const toolSteps = []
+        const guard = watchRun(proc, 'opencode', () => toolSteps.at(-1), (reason) => {
+          if (res.writableEnded) return
+          clearInterval(heartbeat)
+          res.write(`data: ${JSON.stringify({ error: { message: reason } })}\n\n`)
+          res.end()
+          cleanupFiles()
+        })
 
         proc.stderr.on('data', d => {
           const text = d.toString()
@@ -307,6 +315,7 @@ const server = createServer(async (req, res) => {
         rl.on('line', line => {
           if (!line.trim()) return
           lastActivity = Date.now()
+          guard.touch()
           let parsed
           try { parsed = JSON.parse(line) } catch { return }
 
@@ -351,8 +360,10 @@ const server = createServer(async (req, res) => {
 
         proc.on('close', code => {
           clearInterval(heartbeat)
+          guard.stop()
           const tokens = usage ? ` in=${usage.input + usage.cacheRead + usage.cacheWrite} cached=${usage.cacheRead} out=${usage.output} context=${usage.lastPrompt}` : ''
           console.log(`[OpenCode proc closed] code=${code} emittedText=${emittedText} tools=${toolSteps.length}${tokens}${toolSteps.length ? ` [${toolSteps.join(' ')}]` : ''}${failure ? ` error=${JSON.stringify(failure)}` : ''}`)
+          if (guard.reason() !== undefined) return
           if (!emittedText && (failure !== '' || code !== 0)) {
             const reason = failure !== '' ? failure : stderrTail.replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').filter(Boolean).slice(-2).join(' ') || `opencode exited with code ${String(code)}`
             res.write(`data: ${JSON.stringify({ error: { message: `opencode: ${reason}` } })}\n\n`)
@@ -380,6 +391,7 @@ const server = createServer(async (req, res) => {
 
         proc.on('error', err => {
           clearInterval(heartbeat)
+          guard.stop()
           console.error('OpenCode process error:', err)
           res.write(`data: {"error": {"message": ${JSON.stringify(String(err))}}}\n\n`)
           res.end()
@@ -388,6 +400,7 @@ const server = createServer(async (req, res) => {
 
         res.on('close', () => {
           clearInterval(heartbeat)
+          guard.stop()
           if (!res.writableEnded && !proc.killed) {
             console.log('[OpenCode] Client disconnected, killing process')
             proc.kill()
@@ -402,10 +415,17 @@ const server = createServer(async (req, res) => {
         let fullResponse = ''
         let usage = null
         let failure = ''
+        const guard = watchRun(proc, 'opencode', () => undefined, (reason) => {
+          if (res.headersSent) return
+          res.writeHead(504, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: { message: reason } }))
+          cleanupFiles()
+        })
 
         const rl = createInterface({ input: proc.stdout })
         rl.on('line', line => {
           if (!line.trim()) return
+          guard.touch()
           try {
             const parsed = JSON.parse(line)
             if (parsed.type === 'text' && parsed.part?.text) {
@@ -432,6 +452,8 @@ const server = createServer(async (req, res) => {
         })
 
         proc.on('close', code => {
+          guard.stop()
+          if (guard.reason() !== undefined) return
           if (fullResponse === '' && (failure !== '' || code !== 0)) {
             res.writeHead(502, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: { message: `opencode: ${failure !== '' ? failure : `exited with code ${String(code)}`}` } }))

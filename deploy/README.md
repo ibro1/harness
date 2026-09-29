@@ -780,6 +780,16 @@ CLI's internal steps (cost); `context` is the largest single call, which is
 what the bridges report to the harness as the prompt size, since the harness
 checks it against the model's context window.
 
+**A hung run is stopped.** The bridges keep the harness's stream alive with
+heartbeats so a long, busy run is never cut off, which would also let a hung
+run (a browser call that never returns, a page waiting on a captcha) spin
+forever. `bridge-watchdog.mjs` watches the CLI's own output instead: no event
+for `BRIDGE_STALL_MINUTES` (default 10), or a run past `BRIDGE_MAX_RUN_MINUTES`
+(default 45), kills the CLI and ends the turn with an error naming the last
+action, for example *agy made no progress for 10 minutes (last action:
+browser_click)*. That error is not one the harness retries on its own, so the
+turn stops and waits for you. `0` turns either check off.
+
 The opencode bridge also passes opencode's own failures through as a stream
 error (a refused key, a locked state database) rather than an empty answer,
 and runs `opencode models` once at start so opencode's state database exists

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
+import { watchRun } from './bridge-watchdog.mjs'
 import { writeFileSync, unlinkSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -290,6 +291,13 @@ const server = createServer(async (req, res) => {
         let lastActivity = Date.now()
         // Tool steps agy took inside this one request, for the close line.
         const toolSteps = []
+        const guard = watchRun(proc, 'agy', () => toolSteps.at(-1), (reason) => {
+          if (res.writableEnded) return
+          clearInterval(heartbeat)
+          res.write(`data: ${JSON.stringify({ error: { message: reason } })}\n\n`)
+          res.end()
+          cleanupImages()
+        })
         // The largest model-call input in this run, from the per-step usage agy
         // reports: the context only grows, and the last step can be a small
         // one. agy's final usage sums every internal step, which the harness
@@ -326,6 +334,7 @@ const server = createServer(async (req, res) => {
         rl.on('line', line => {
           if (!line.trim()) return
           lastActivity = Date.now()
+          guard.touch()
           let parsed
           try { parsed = JSON.parse(line) } catch { return }
 
@@ -358,8 +367,10 @@ const server = createServer(async (req, res) => {
 
         proc.on('close', code => {
           clearInterval(heartbeat)
+          guard.stop()
           const tokens = usage ? ` in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} context=${lastStepInput}` : ''
           console.log(`[AGY proc closed] code=${code} emittedText=${emittedText} tools=${toolSteps.length}${tokens}${toolSteps.length ? ` [${toolSteps.join(' ')}]` : ''}`)
+          if (guard.reason() !== undefined) return
           const finalChunk = {
             id,
             object: 'chat.completion.chunk',
@@ -386,6 +397,7 @@ const server = createServer(async (req, res) => {
 
         proc.on('error', err => {
           clearInterval(heartbeat)
+          guard.stop()
           console.error('agy process error:', err)
           res.write(`data: {"error": {"message": ${JSON.stringify(String(err))}}}\n\n`)
           res.end()
@@ -399,6 +411,7 @@ const server = createServer(async (req, res) => {
 
         res.on('close', () => {
           clearInterval(heartbeat)
+          guard.stop()
           if (!res.writableEnded && !proc.killed) {
             console.log('[AGY] Client disconnected, killing process')
             proc.kill()
@@ -412,10 +425,17 @@ const server = createServer(async (req, res) => {
 
         let fullResponse = ''
         let usage = null
+        const guard = watchRun(proc, 'agy', () => undefined, (reason) => {
+          if (res.headersSent) return
+          res.writeHead(504, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: { message: reason } }))
+          cleanupImages()
+        })
 
         const rl = createInterface({ input: proc.stdout })
         rl.on('line', line => {
           if (!line.trim()) return
+          guard.touch()
           try {
             const parsed = JSON.parse(line)
             if (parsed.event === 'step_update' && parsed.step_update?.text_delta) {
@@ -429,6 +449,8 @@ const server = createServer(async (req, res) => {
         })
 
         proc.on('close', code => {
+          guard.stop()
+          if (guard.reason() !== undefined) return
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({
             id,
