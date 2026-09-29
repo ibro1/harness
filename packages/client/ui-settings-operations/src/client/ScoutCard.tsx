@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { SettingsForm, SettingsValueField, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { formLabels } from './locales.ts'
+import { ScoutLeads } from './ScoutLeads.tsx'
 import { SCOUT_NUMBER_FIELDS, SCOUT_TEXT_FIELDS, type ScoutCardFace } from './scout-card-controller.ts'
 
 /** Props the renderer binds for the Klipara Scout card. */
@@ -14,7 +15,7 @@ export type ScoutCardProps =
 
 /**
  * Render the Klipara Scout card: the on/off switch, then the shift, caps,
- * targets and credentials, and a link to the leads page.
+ * targets and credentials, under the live leads table.
  * @param props - locale copy, the card snapshot, and its form actions.
  * @returns the card.
  */
@@ -33,7 +34,7 @@ export function ScoutCard(props: ScoutCardProps) {
   })
   return (
     <SettingsForm labels={formLabels(t)} state={state} onSave={props.save} onDiscard={props.discard}>
-      <p><a href="/scout/leads" target="_blank" rel="noreferrer">{t('scoutLeads')}</a></p>
+      <ScoutLeads t={t} />
       <p><strong>{t('scout.enabled')}</strong></p>
       <Switch
         label={t('scout.enabled')}

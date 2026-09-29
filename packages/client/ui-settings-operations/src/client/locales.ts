@@ -14,7 +14,10 @@ export type OperationsSettingsLocaleKey =
   | 'postgresTitle' | 'postgresDescription' | 'postgresDatabases' | 'postgresDatabasesHint' | 'postgresInvalid' | 'postgresDatabasesPlaceholder'
   | 'cloudflareTitle' | 'cloudflareDescription' | 'cloudflareZones' | 'cloudflareZonesHint' | 'cloudflareInvalid' | 'cloudflareZonesPlaceholder'
   | 'cloudflareAccounts' | 'cloudflareAccountsHint' | 'cloudflareAccountsInvalid' | 'cloudflareAccountsPlaceholder'
-  | 'scoutTitle' | 'scoutDescription' | 'scoutLeads' | 'scoutInvalid'
+  | 'scoutTitle' | 'scoutDescription' | 'scoutInvalid'
+  | 'scoutLeadsTitle' | 'scoutLeadsEmpty' | 'scoutLeadsToday' | 'scoutLeadsPaused' | 'scoutLeadsFailed'
+  | 'scoutColStage' | 'scoutColChannel' | 'scoutColVideo' | 'scoutColSample' | 'scoutColPitch' | 'scoutColReplies' | 'scoutColUpdated'
+  | 'scoutSampleLink'
   | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint`
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed'
@@ -45,7 +48,19 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
   'scoutTitle': 'Klipara Scout',
   'scoutDescription': 'An outreach employee for Klipara: a daily shift that finds creators, makes each a free sample clip, pitches it, and records replies.',
-  'scoutLeads': 'Open the leads page',
+  scoutLeadsTitle: 'Leads',
+  scoutLeadsEmpty: 'No leads yet. They appear here as the shift finds creators.',
+  scoutLeadsToday: 'Today {date}: samples {samples}/{samplesCap}, pitches {pitches}/{pitchesCap}.',
+  scoutLeadsPaused: 'Outreach is paused: {reason}',
+  scoutLeadsFailed: 'The leads could not be loaded.',
+  scoutColStage: 'Stage',
+  scoutColChannel: 'Channel',
+  scoutColVideo: 'Video',
+  scoutColSample: 'Sample',
+  scoutColPitch: 'Pitch',
+  scoutColReplies: 'Replies',
+  scoutColUpdated: 'Updated',
+  scoutSampleLink: 'Open',
   'scoutInvalid': 'Not a value this setting accepts.',
   'scout.enabled': 'Run the daily shift',
   'scout.enabled.hint': 'Off until you turn it on. Outreach also stops by itself when YouTube or Gmail shows a warning; you get a WhatsApp message and resume it by asking in a Klipara Scout session.',
@@ -112,7 +127,19 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   postgresDatabasesPlaceholder: '[\n  { "name": "main", "dsnEnv": "PG_DSN_MAIN", "readOnly": true }\n]',
   'scoutTitle': 'Klipara Scout',
   'scoutDescription': 'Klipara 的外联员工：每日班次寻找创作者，为每位制作一段免费样片，发出推介，并记录回复。',
-  'scoutLeads': '打开线索页面',
+  scoutLeadsTitle: '线索',
+  scoutLeadsEmpty: '暂无线索。班次找到创作者后会显示在这里。',
+  scoutLeadsToday: '今天 {date}：样片 {samples}/{samplesCap}，推介 {pitches}/{pitchesCap}。',
+  scoutLeadsPaused: '外联已暂停：{reason}',
+  scoutLeadsFailed: '无法加载线索。',
+  scoutColStage: '阶段',
+  scoutColChannel: '频道',
+  scoutColVideo: '视频',
+  scoutColSample: '样片',
+  scoutColPitch: '推介',
+  scoutColReplies: '回复',
+  scoutColUpdated: '更新时间',
+  scoutSampleLink: '打开',
   'scoutInvalid': '该设置不接受此值。',
   'scout.enabled': '运行每日班次',
   'scout.enabled.hint': '默认关闭，需手动开启。YouTube 或 Gmail 出现警告时外联会自动暂停；你会收到 WhatsApp 消息，并在 Klipara Scout 会话中要求恢复。',

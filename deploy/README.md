@@ -806,7 +806,7 @@ DeerFlow browser, and records replies, alerting the WhatsApp recipient set on
 the page. The daily caps, duplicate-pitch refusal and the pause switch are
 enforced by the plugin, not the model; the shift pauses itself and alerts you
 on any YouTube or Gmail warning, because the browser's YouTube account is the
-one Klipara's ingest downloads with. Leads are at `/scout/leads` (signed in);
+one Klipara's ingest downloads with. Leads are listed on the same page, refreshed every 15 s;
 samples are public at `/scout/s/<random id>`. `DSH_KLIPARA_SCOUT=0` leaves it
 out; `DSH_SCOUT_MCP=0` keeps its tools from agy and opencode.
 

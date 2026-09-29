@@ -357,7 +357,7 @@ fi
 if [[ "${DSH_KLIPARA_SCOUT:-1}" != "0" ]]; then
   mkdir -p "$HOME/.dsh/skills"
   ln -sfn "$APP_DIR/deploy/skills/klipara-scout" "$HOME/.dsh/skills/klipara-scout"
-  echo "[entrypoint] Klipara Scout available (Settings -> Plugins -> Klipara Scout; leads at /scout/leads)"
+  echo "[entrypoint] Klipara Scout available (Plugins -> Klipara Scout: settings and leads)"
   if [[ -n "${DSH_SCOUT_TOKEN:-}" ]]; then
     register_cli_mcp dsh-scout scout-mcp.mjs DSH_SCOUT_TOKEN DSH_SCOUT_COMMAND_URL \
       "http://127.0.0.1:$INTERNAL_PORT/scout/command" "Klipara Scout"

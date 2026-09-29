@@ -545,6 +545,25 @@ export function apply(ctx: Context, config: Config): void {
     },
   }), `klipara-scout: ${prefix}/leads`)
 
+  // The leads as JSON, for the table on the Klipara Scout settings page.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: `${prefix}/leads.json`,
+    handler: async (_req: IncomingMessage, res: ServerResponse) => {
+      const state = await store.read()
+      const date = localTime(new Date(), config.timeZone.get()).date
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({
+        date,
+        today: state.days[date] ?? { samples: 0, pitches: 0 },
+        caps: { samples: config.samplesPerDay.get(), pitches: config.pitchesPerDay.get() },
+        paused: state.paused,
+        // Newest first, with skipped channels after every lead still in play.
+        leads: [...state.leads].reverse().sort((a, b) => Number(a.stage === 'skipped') - Number(b.stage === 'skipped')),
+      }))
+    },
+  }), `klipara-scout: ${prefix}/leads.json`)
+
   if (config.token !== '') {
     ctx.effect(() => ctx.webServer.register({
       kind: 'exact',
