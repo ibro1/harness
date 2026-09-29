@@ -68,6 +68,16 @@ export interface Config {
   /** Model route for the shift; empty uses the harness default model. */
   provider: Volatile<string>
   model: Volatile<string>
+  /** Public link base a pitch gives for a sample; the link is `<base>/<id>`. Its origin may read the sample JSON. */
+  sampleBaseUrl: Volatile<string>
+  /** Days a sample stays served; 0 keeps samples for good. */
+  sampleTtlDays: Volatile<number>
+  /**
+   * The browser MCP server signed in to the dedicated outreach Google account.
+   * Empty: no pitch is reserved and no reply check runs, because the only other
+   * browser is the DeerFlow one whose YouTube account Klipara downloads with.
+   */
+  outreachBrowser: Volatile<string>
   /** Headline and note on a sample's public page. */
   sampleHeadline: Volatile<string>
   sampleNote: Volatile<string>
@@ -110,6 +120,9 @@ export const Config = z.object({
   notifyTo: z.string().default('').volatile(),
   provider: z.string().default('').volatile(),
   model: z.string().default('').volatile(),
+  sampleBaseUrl: z.string().default('https://klipara.linkfa.de/s').volatile(),
+  sampleTtlDays: z.natural().default(30).volatile(),
+  outreachBrowser: z.string().default('').volatile(),
   sampleHeadline: z.string().default('A clip from your latest video').volatile(),
   sampleNote: z.string().default('Cut by Klipara from your full episode. If you want more like this, just reply to the message it came with.').volatile(),
   dataDir: z.string().default(''),
@@ -222,7 +235,11 @@ export async function finishSample(deps: ScoutDeps, channelId: string, signal: A
     return { outcome: 'skipped', text: `Klipara found no clip that stands alone in that video; ${lead.channelName} is skipped.` }
   }
   const exported = await deps.klipara.exportClip(best.clipId, signal)
-  const sampleId = await storeSample(deps.samplesDir, exported.downloadUrl, signal)
+  const sampleId = await storeSample(deps.samplesDir, exported.downloadUrl, {
+    title: lead.videoTitle ?? '',
+    creatorName: lead.channelName,
+    sourceVideoUrl: lead.videoUrl ?? '',
+  }, signal)
   const samplePageUrl = `${deps.sampleBase()}/${sampleId}`
   await deps.store.update((s) => {
     const l = find(s)
@@ -396,12 +413,12 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
     }),
     tool({
       name: 'scout_pitch',
-      description: 'Reserve one pitch for a `sampled` lead and record exactly what will be sent. Call it BEFORE sending, then send exactly this text: by email to the lead\'s address through Gmail, or as a comment on the lead\'s video. It refuses when outreach is paused, today\'s pitch cap is used, the text lacks the sample link, or the text is too close to an earlier pitch.',
+      description: 'Reserve one pitch for a `sampled` lead and record exactly what will be sent. Call it BEFORE sending, then send exactly this text from the outreach account: by email to the lead\'s address, or as a comment on the lead\'s video. An email must contain the sample link; a comment must contain no link at all (say what you clipped and ask them to reply). It refuses when no outreach account is configured, outreach is paused, today\'s pitch cap is used, the link rule is broken, or the text is too close to an earlier pitch.',
       parameters: {
         channel_id: channelParameter,
         via: { type: 'string', required: true, enum: ['email', 'comment'], description: 'email when the lead has an address, otherwise comment.' },
         to: { type: 'string', required: true, description: 'The email address, or the URL of the video the comment goes on.' },
-        text: { type: 'string', required: true, description: 'The whole message, written for this creator and this video, containing the sample link.' },
+        text: { type: 'string', required: true, description: 'The whole message, written for this creator and this video: with the sample link in an email, with no link in a comment.' },
       },
       run: async (args) => {
         const channelId = String(args['channel_id'])
@@ -409,10 +426,16 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
         const to = String(args['to']).trim()
         const text = String(args['text']).trim()
         return await store.update((s) => {
+          if (config.outreachBrowser.get().trim() === '') {
+            throw new Error('No outreach account is configured, so nothing may be sent: the only browser is the DeerFlow one, whose YouTube account Klipara downloads with. Stop pitching and tell the owner.')
+          }
           refuseWhilePaused(s)
           const lead = findLead(s, channelId)
           if (lead.stage !== 'sampled' || lead.samplePageUrl === undefined) throw new Error(`${lead.channelName} is at stage ${lead.stage}; only a sampled lead is pitched.`)
-          if (!text.includes(lead.samplePageUrl)) throw new Error(`The pitch must contain the sample link ${lead.samplePageUrl}.`)
+          if (via === 'email' && !text.includes(lead.samplePageUrl)) throw new Error(`An email pitch must contain the sample link ${lead.samplePageUrl}.`)
+          if (via === 'comment' && /https?:\/\/|www\.|\b[\w-]+\.(?:de|com|net|org|io|tv|ly|co)\b/iu.test(text)) {
+            throw new Error('A comment pitch must contain no link: YouTube hides comments with links. Say what you clipped and ask them to reply for it.')
+          }
           if (via === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(to)) throw new Error('An email pitch needs an email address in `to`.')
           if (via === 'comment' && !/youtube\.com|youtu\.be/u.test(to)) throw new Error('A comment pitch needs the video URL in `to`.')
           const earlier = s.leads.flatMap(l => l.pitch === undefined ? [] : [l.pitch.text]).slice(-30)
@@ -423,7 +446,7 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           day.pitches++
           lead.pitch = { via, to, text, at: iso() }
           advance(lead, 'pitched', iso(), `${via} to ${to}`)
-          return `Pitch ${String(day.pitches)}/${String(config.pitchesPerDay.get())} reserved. Now send exactly this ${via === 'email' ? `email to ${to}` : `comment on ${to}`}. If sending fails or YouTube or Gmail shows any warning, captcha or restriction, call scout_pause immediately.`
+          return `Pitch ${String(day.pitches)}/${String(config.pitchesPerDay.get())} reserved. Now send exactly this ${via === 'email' ? `email to ${to}` : `comment on ${to}`} using only the "${config.outreachBrowser.get().trim()}" browser tools, never the deerflow browser. If sending fails or YouTube or Gmail shows any warning, captcha or restriction, call scout_pause immediately.`
         })
       },
     }),
@@ -484,6 +507,20 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
       },
     }),
   ]
+}
+
+/**
+ * The origin allowed to read sample JSON and files: the sample link base's own.
+ * @param base - the configured sample link base.
+ * @returns its origin, or `null` (no cross-origin reads) when it is not a URL.
+ */
+function corsOrigin(base: string): string {
+  try {
+    return new URL(base).origin
+  } catch {
+    // An unparsable base allows no page to read the JSON.
+    return 'null'
+  }
 }
 
 /** Compare two secrets in constant time, whatever their lengths. */
@@ -560,7 +597,7 @@ export function apply(ctx: Context, config: Config): void {
     ytDlp: execYtDlp(config.ytDlp, config.timeoutMs),
     klipara: kliparaClient(config.kliparaApi, () => config.kliparaApiKey.get(), config.timeoutMs),
     samplesDir,
-    sampleBase: () => `${config.publicBaseUrl.replace(/\/+$/u, '')}${prefix}/s`,
+    sampleBase: () => config.sampleBaseUrl.get().replace(/\/+$/u, ''),
     notify,
     now: () => new Date(),
   }
@@ -570,7 +607,13 @@ export function apply(ctx: Context, config: Config): void {
     kind: 'prefix',
     path: `${prefix}/s`,
     authenticate: false,
-    handler: (req: IncomingMessage, res: ServerResponse) => serveSample(req, res, samplesDir, `${prefix}/s`, config.sampleHeadline.get(), config.sampleNote.get()),
+    handler: (req: IncomingMessage, res: ServerResponse) => serveSample(req, res, samplesDir, `${prefix}/s`, {
+      fileBase: `${config.publicBaseUrl.replace(/\/+$/u, '')}${prefix}/s`,
+      corsOrigin: corsOrigin(config.sampleBaseUrl.get()),
+      ttlDays: config.sampleTtlDays.get(),
+      headline: config.sampleHeadline.get(),
+      note: config.sampleNote.get(),
+    }),
   }), `klipara-scout: ${prefix}/s`)
 
   ctx.effect(() => ctx.webServer.register({
@@ -741,9 +784,10 @@ export function apply(ctx: Context, config: Config): void {
     if (!config.enabled.get() || every <= 0 || startingReplies || Date.now() - lastReplyCheck < every * 60_000) return
     const state = await store.read()
     const awaiting = state.leads.filter(l => l.stage === 'pitched')
-    if (state.paused !== null || awaiting.length === 0) return
+    const outreach = config.outreachBrowser.get().trim()
+    if (state.paused !== null || awaiting.length === 0 || outreach === '') return
     lastReplyCheck = Date.now()
-    const prompt = `Reply check. Open the Gmail inbox and YouTube notifications in the DeerFlow browser and look only for answers from these pitched creators: ${awaiting.map(l => `${l.channelName} (${l.pitch?.via ?? ''} to ${l.pitch?.to ?? ''})`).join('; ')}. Record each answer with scout_record_reply. Do nothing else: no searches, samples or pitches. Then end your turn with one line.`
+    const prompt = `Reply check. Using only the "${outreach}" browser tools (never the deerflow browser), open the outreach account's Gmail inbox and YouTube notifications and look only for answers from these pitched creators: ${awaiting.map(l => `${l.channelName} (${l.pitch?.via ?? ''} to ${l.pitch?.to ?? ''})`).join('; ')}. Record each answer with scout_record_reply. Do nothing else: no searches, samples or pitches. Then end your turn with one line.`
     const live = state.lastShiftSession === undefined ? undefined : ctx.agents.get(brandString<SessionId>(state.lastShiftSession))
     if (live !== undefined) {
       if (live.status === 'running') return

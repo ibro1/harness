@@ -19,7 +19,7 @@ function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config 
     enabled: live(true), shiftTime: live('09:00'), timeZone: live('Africa/Lagos'),
     samplesPerDay: live(2), pitchesPerDay: live(2), replyCheckMinutes: live(15), topics: live(['podcast']),
     minSubscribers: live(1000), maxSubscribers: live(500_000), maxShorts: live(10),
-    kliparaApiKey: live('klp_sk_test_x'), notifyTo: live('Me'), provider: live(''), model: live(''),
+    kliparaApiKey: live('klp_sk_test_x'), sampleBaseUrl: live('https://klipara.test/s'), sampleTtlDays: live(30), outreachBrowser: live('outreach'), notifyTo: live('Me'), provider: live(''), model: live(''),
     sampleHeadline: live('A clip'), sampleNote: live('note'),
     dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '',
     workspacePath: '/tmp/ws', agentPreset: 'standard', permissionPreset: 'workspace-write', shiftPrompt: 'go',
@@ -158,7 +158,9 @@ describe('klipara scout', () => {
     await run('scout_make_sample', { channel_id: 'UC_small' })
     await run('scout_check_sample', { channel_id: 'UC_small' })
     const link = (await deps.store.read()).leads[0]!.samplePageUrl ?? ''
-    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: 'no link here' })).rejects.toThrow('must contain the sample link')
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: 'no link here' })).rejects.toThrow('email pitch must contain the sample link')
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: `Clipped your landlord story: ${link}` }))
+      .rejects.toThrow('must contain no link')
     await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'not-an-address', text: link })).rejects.toThrow('needs an email address')
     expect(await run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: `Loved the episode about Lagos rent — I clipped the landlord story: ${link}` })).toContain('Pitch 1/2 reserved')
     const state = await deps.store.read()
@@ -166,8 +168,24 @@ describe('klipara scout', () => {
     await deps.store.update((s) => {
       s.leads.push({ ...s.leads[0]!, channelId: 'UC_two', stage: 'sampled', samplePageUrl: 'https://h.test/scout/s/two' })
     })
-    await expect(run('scout_pitch', { channel_id: 'UC_two', via: 'comment', to: 'https://www.youtube.com/watch?v=v9', text: 'Loved the episode about Lagos rent — I clipped the landlord story: https://h.test/scout/s/two' }))
+    await expect(run('scout_pitch', { channel_id: 'UC_two', via: 'email', to: 'two@pod.test', text: 'Loved the episode about Lagos rent — I clipped the landlord story: https://h.test/scout/s/two' }))
       .rejects.toThrow('same words as an earlier one')
+  })
+
+  it('sends nothing while no outreach browser is configured', async () => {
+    const { run, deps } = setup({}, config({ outreachBrowser: live('') }))
+    await run('scout_search')
+    await deps.store.update((s) => { s.leads[0]!.stage = 'sampled'; s.leads[0]!.samplePageUrl = 'https://klipara.test/s/abc' })
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'I clipped the landlord story, reply if you want it' }))
+      .rejects.toThrow('No outreach account is configured')
+  })
+
+  it('accepts a link-free comment pitch', async () => {
+    const { run, deps } = setup()
+    await run('scout_search')
+    await deps.store.update((s) => { s.leads[0]!.stage = 'sampled'; s.leads[0]!.samplePageUrl = 'https://klipara.test/s/abc' })
+    expect(await run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'The bit where he explains Lagos rent deposits is gold. I cut it into a vertical clip; reply and I will send it over.' }))
+      .toContain('using only the "outreach" browser tools')
   })
 
   it('pauses outreach, alerts the owner, and refuses samples and pitches until resumed', async () => {

@@ -13,7 +13,7 @@ The `scout_*` tools own the lead list, the daily caps and the pause switch. They
 ## Order of work
 
 1. **`scout_status`.** If outreach is paused, say so in one line and stop.
-2. **Replies first.** Open the Gmail inbox in the DeerFlow browser and look for answers to pitches; open YouTube notifications for replies to your comments. For each reply from a pitched creator, call `scout_record_reply` with the reply verbatim. Do not answer the creator: the owner takes over from a reply.
+2. **Replies first.** In the outreach browser, open the Gmail inbox and look for answers to pitches; open YouTube notifications for replies to your comments. Skip this when no outreach account is configured. For each reply from a pitched creator, call `scout_record_reply` with the reply verbatim. Do not answer the creator: the owner takes over from a reply.
 3. **Finish samples.** For each `sampling` lead (`scout_leads` with stage `sampling`), call `scout_check_sample`. A job still running needs nothing from you: the plugin checks it every few minutes and sends you a message when samples are ready to pitch.
 4. **Pitch.** For each `sampled` lead, while the pitch cap allows, write and send one pitch (below).
 5. **New samples.** While the sample cap allows: take `found` leads (`scout_leads`, stage `found`), or `scout_search` when there are too few. Pick the leads most likely to pay, then `scout_make_sample` each.
@@ -28,17 +28,17 @@ Prefer channels with clear speech, a steady upload habit, and a recent episode w
 
 Every pitch is written for this creator and this episode. Mention something specific from the video's title or topic. Never reuse another pitch's wording: `scout_pitch` refuses text too close to an earlier one.
 
-- **Email** (when the lead has an address): a subject naming their episode, then 4–6 short lines. Say you clipped one moment from the episode, give the sample link, and offer to cut more like it from every episode. Sign as "Klipara". No attachments, no pricing.
-- **Comment** (no email): 2–3 sentences, conversational, as a viewer who clipped a moment worth sharing: what the moment is, the sample link, and a light offer. No hashtags, no "check out my channel", no capital-letter hype.
-
-Always include the sample link exactly as `scout_check_sample` gave it.
+- **Email** (when the lead has an address): a subject naming their episode, then 4–6 short lines. Say you clipped one moment from the episode, give the sample link exactly as `scout_check_sample` gave it, and offer to cut more like it from every episode. Sign as "Klipara". No attachments, no pricing.
+- **Comment** (no email): 2–3 sentences, conversational. Say which moment you clipped (the topic or the line said) and that you made it into a vertical clip, and ask them to reply if they want it. **No link of any kind**: YouTube hides comments with links, and `scout_pitch` refuses one. When they reply, the owner sends the link. No hashtags, no "check out my channel", no capital-letter hype.
 
 ## Sending
 
+All sending and reply reading uses **only the outreach browser** (the browser MCP server `scout_pitch` names), signed in to the dedicated outreach Google account. **Never use the `deerflow` browser for Gmail, YouTube comments or notifications**: its Google account is the one Klipara downloads YouTube videos with, and a spam flag on it stops Klipara. If `scout_pitch` says no outreach account is configured, send nothing and say so in your summary.
+
 Call `scout_pitch` **before** sending, with the exact text. It reserves the pitch and checks the rules. Then send exactly that text:
 
-- **Email:** in the DeerFlow browser, open Gmail, compose to the address, paste the subject and body, send, and confirm it appears in Sent.
-- **Comment:** in the DeerFlow browser, open the video URL, scroll to the comments, add the comment, post it, and confirm it appears under the video.
+- **Email:** open Gmail, compose to the address, paste the subject and body, send, and confirm it appears in Sent.
+- **Comment:** open the video URL, scroll to the comments, add the comment, post it, and confirm it appears under the video.
 
 ## Stop immediately — `scout_pause`
 
@@ -49,7 +49,7 @@ Call `scout_pause` with what you saw, then end the shift, when any of these happ
 - Gmail reporting a sending limit, a bounce storm, or a blocked message;
 - any send that fails for a reason you do not understand.
 
-The browser's YouTube account is also the one Klipara downloads videos with. Losing it would stop Klipara itself, so when unsure, pause.
+The outreach account is new and closely watched by Google; when unsure, pause.
 
 ## Never
 

@@ -13,9 +13,11 @@ import {
 export const SCOUT_NS = 'klipara-scout'
 
 /** Text fields, in the order the card shows them. */
-export const SCOUT_TEXT_FIELDS = ['shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'provider', 'model', 'sampleHeadline', 'sampleNote'] as const
+export const SCOUT_TEXT_FIELDS = [
+  'shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'outreachBrowser', 'provider', 'model', 'sampleBaseUrl', 'sampleHeadline', 'sampleNote',
+] as const
 /** Whole-number fields, in the order the card shows them. */
-export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyCheckMinutes', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
+export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyCheckMinutes', 'sampleTtlDays', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
 
 type ScoutTextField = typeof SCOUT_TEXT_FIELDS[number]
 type ScoutNumberField = typeof SCOUT_NUMBER_FIELDS[number]

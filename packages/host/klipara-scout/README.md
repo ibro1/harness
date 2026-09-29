@@ -34,7 +34,7 @@ The shift reads its instructions from the `klipara-scout` skill (`deploy/skills/
 | `scout_leads` | lists leads, optionally one stage |
 | `scout_make_sample` | starts a Klipara analysis job for a `found` lead (free); counts against the sample cap |
 | `scout_check_sample` | when the job is done, exports the best standalone clip (one Klip), hosts it and records the public link |
-| `scout_pitch` | reserves one pitch and records the exact text; refused when paused, over the cap, without the sample link, or at 60% word overlap with an earlier pitch |
+| `scout_pitch` | reserves one pitch and records the exact text; refused without an outreach browser, when paused, over the cap, for an email without the sample link or a comment with any link, or at 60% word overlap with an earlier pitch |
 | `scout_record_reply` | records a reply and alerts the owner on WhatsApp |
 | `scout_update_lead` | closes a lead as won, lost or skipped |
 | `scout_pause` / `scout_resume` | stops all outreach and alerts the owner / resumes it when the owner asks |
@@ -47,7 +47,7 @@ The shift reads its instructions from the `klipara-scout` skill (`deploy/skills/
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-State is one JSON file under `<DSH home>/klipara-scout`, replaced atomically with writes serialized; samples sit beside it. Discovery runs `yt-dlp` on listing pages only (a search results page filtered to long videos from this month, and a channel's Shorts tab), which load from a server address without cookies, so it never uses the cookie jar Klipara's ingest depends on. Klipara's export link expires within the hour, so each exported clip is copied at once and served from `/scout/s/<id>` (a page) and `/scout/s/<id>.mp4`, where the id is 128 random bits. A one-minute timer starts at most one shift per local day, after the configured time and while outreach is not paused, as a root Session with id prefix `scout-`, the same sequence the webhook ingress uses; a start that fails is retried after 30 minutes and reported on stderr and WhatsApp. The tools are registered only on `scout-` Sessions and served to the agy and opencode CLIs over the token-guarded `/scout/command` route.
+State is one JSON file under `<DSH home>/klipara-scout`, replaced atomically with writes serialized; samples sit beside it. Discovery runs `yt-dlp` on listing pages only (a search results page filtered to long videos from this month, and a channel's Shorts tab), which load from a server address without cookies, so it never uses the cookie jar Klipara's ingest depends on. Klipara's export link expires within the hour, so each exported clip is copied at once, with a poster frame cut by `ffmpeg` and a small record, and served under `/scout/s/<id>`: the page, `.mp4` (range requests), `.jpg`, and `.json`, a public read-only record `{ id, title, creatorName, sourceVideoUrl, videoUrl, posterUrl, createdAt }` for the page Klipara serves at the sample link base (`sampleBaseUrl`, default `https://klipara.linkfa.de/s`), readable cross-origin from that base's origin. An id is 11 base64url characters, 64 random bits; a sample past `sampleTtlDays` (default 30) answers 404 like an unknown id. A one-minute timer starts at most one shift per local day, after the configured time and while outreach is not paused, as a root Session with id prefix `scout-`, the same sequence the webhook ingress uses; a start that fails is retried after 30 minutes and reported on stderr and WhatsApp. The tools are registered only on `scout-` Sessions and served to the agy and opencode CLIs over the token-guarded `/scout/command` route.
 
 </details>
 
@@ -66,6 +66,7 @@ The tool definitions join a shift Session's prompt prefix once and stay stable a
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **Outreach needs its own account.** Nothing is pitched and no reply check runs until `outreachBrowser` names a browser tool server signed in to a dedicated outreach Google account: the DeerFlow browser's Google account is the one Klipara downloads YouTube videos with. The plugin refuses pitches without it, but which browser the model drives is only instructed, not enforced.
 - **Sending is the model's job.** Emails go through Gmail and comments through YouTube in the DeerFlow browser, driven by the shift; the plugin reserves and records each pitch but cannot see the send itself.
 - **Samples accumulate.** Hosted samples are kept until deleted by hand.
 - **Runtime invariant:** No companion is published; the lead file is the only record and nothing else observes it independently.

@@ -6,7 +6,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'sampleHeadline' | 'sampleNote'
+  | 'provider' | 'model' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -77,6 +77,12 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.pitchesPerDay.hint': 'Emails and comments sent per day, together. Keep this low: repeated comments get YouTube accounts restricted.',
   'scout.replyCheckMinutes': 'Reply check every (minutes)',
   'scout.replyCheckMinutes.hint': 'While a pitch is waiting for an answer, the scout checks Gmail and YouTube notifications this often and messages you on WhatsApp when a creator replies. Each check is a short model run; 0 checks only at the daily shift.',
+  'scout.outreachBrowser': 'Outreach browser',
+  'scout.outreachBrowser.hint': 'The browser tool server signed in to the dedicated outreach Google account. Leave empty and nothing is sent and no reply is checked: the DeerFlow browser is never used for outreach, because Klipara downloads YouTube videos with its account.',
+  'scout.sampleBaseUrl': 'Sample link base',
+  'scout.sampleBaseUrl.hint': 'Pitch emails link to <this>/<id>, for example https://klipara.linkfa.de/s. That site reads the sample from this harness at /scout/s/<id>.json.',
+  'scout.sampleTtlDays': 'Keep samples for (days)',
+  'scout.sampleTtlDays.hint': 'After this many days a sample link stops working. 0 keeps samples for good.',
   'scout.topics': 'Search topics',
   'scout.topics.hint': 'One per line. Each shift searches YouTube for long videos from this month on these topics.',
   'scout.minSubscribers': 'Fewest subscribers',
@@ -161,6 +167,12 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.pitchesPerDay.hint': '每天发送的邮件与评论总数。请保持较低：重复评论会导致 YouTube 账号受限。',
   'scout.replyCheckMinutes': '回复检查间隔（分钟）',
   'scout.replyCheckMinutes.hint': '有推介等待回复时，Scout 按此间隔检查 Gmail 与 YouTube 通知，创作者回复时通过 WhatsApp 通知你。每次检查是一次简短的模型运行；0 表示只在每日班次时检查。',
+  'scout.outreachBrowser': '外联浏览器',
+  'scout.outreachBrowser.hint': '已登录专用外联 Google 账号的浏览器工具服务器。留空则不发送任何内容，也不检查回复：DeerFlow 浏览器永不用于外联，因为 Klipara 用其账号下载 YouTube 视频。',
+  'scout.sampleBaseUrl': '样片链接前缀',
+  'scout.sampleBaseUrl.hint': '推介邮件链接到 <此处>/<id>，例如 https://klipara.linkfa.de/s。该网站从本 harness 的 /scout/s/<id>.json 读取样片。',
+  'scout.sampleTtlDays': '样片保留天数',
+  'scout.sampleTtlDays.hint': '超过此天数后样片链接失效。0 表示永久保留。',
   'scout.topics': '搜索主题',
   'scout.topics.hint': '每行一个。每个班次在 YouTube 上按这些主题搜索本月的长视频。',
   'scout.minSubscribers': '最少订阅数',

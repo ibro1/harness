@@ -1,42 +1,107 @@
 /**
- * Sample hosting. Klipara's export link expires within the hour, which is
- * shorter than a creator takes to open a pitch, so each exported clip is
- * copied into the scout's directory at once and served from the harness under
- * an unguessable id: `/scout/s/<id>` is a page that plays it, `/scout/s/<id>.mp4`
- * the file. The id is 128 random bits and the only thing that grants access.
+ * Sample hosting. Klipara's export link expires within the hour, shorter than
+ * a creator takes to open a pitch, so each exported clip is copied into the
+ * scout's directory at once with a poster frame and a small metadata record,
+ * and served from the harness under an unguessable id:
+ *
+ * - `<prefix>/<id>`       an HTML page that plays the clip
+ * - `<prefix>/<id>.mp4`   the clip, with range requests
+ * - `<prefix>/<id>.jpg`   the poster frame
+ * - `<prefix>/<id>.json`  public, read-only metadata for the page Klipara serves
+ *
+ * An id is 11 base64url characters, 64 random bits, and is the only thing that
+ * grants access. Ids from before the short form (32 hex characters) still
+ * resolve. A sample older than the retention period answers 404 like an
+ * unknown one.
  */
 
+import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 
 /** Largest sample accepted, so one bad link cannot fill the volume. */
 const MAX_SAMPLE_BYTES = 200 * 1024 * 1024
 
-/** An id: 32 lower-case hex characters. */
-const SAMPLE_ID = /^[0-9a-f]{32}$/u
+/** A short id (11 base64url characters) or a legacy one (32 hex characters). */
+const SAMPLE_ID = /^(?:[A-Za-z0-9_-]{11}|[0-9a-f]{32})$/u
+
+/** What a sample's public record says about it. */
+export interface SampleMeta {
+  title: string
+  creatorName: string
+  sourceVideoUrl: string
+}
+
+/** The stored record: the public fields plus when the sample was made. */
+interface StoredMeta extends SampleMeta {
+  id: string
+  createdAt: string
+}
+
+/** How sample requests are answered. */
+export interface SampleServing {
+  /** Absolute origin plus prefix the file URLs in the JSON are built on, for example `https://harness.example.com/scout/s`. */
+  fileBase: string
+  /** Origin allowed to read the JSON and files from a browser. */
+  corsOrigin: string
+  /** Days a sample stays served; 0 keeps it for good. */
+  ttlDays: number
+  /** The HTML page's headline and note. */
+  headline: string
+  note: string
+}
 
 /**
- * Download one exported clip into the samples directory.
+ * A new sample id: 8 random bytes as base64url, 11 characters, 64 bits.
+ * @returns the id.
+ */
+export function newSampleId(): string {
+  return randomBytes(8).toString('base64url')
+}
+
+/**
+ * Cut the poster frame one second in, or the first frame of a shorter clip.
+ * A failure leaves the sample without a poster rather than failing it.
+ * @param video - the clip.
+ * @param poster - where the JPEG goes.
+ * @returns whether a poster was written.
+ */
+function cutPoster(video: string, poster: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile('ffmpeg', ['-y', '-loglevel', 'error', '-ss', '1', '-i', video, '-frames:v', '1', '-q:v', '3', poster], { timeout: 60_000 }, (error) => {
+      if (error === null) { resolve(true); return }
+      execFile('ffmpeg', ['-y', '-loglevel', 'error', '-i', video, '-frames:v', '1', '-q:v', '3', poster], { timeout: 60_000 }, (second) => { resolve(second === null) })
+    })
+  })
+}
+
+/**
+ * Download one exported clip into the samples directory, with its poster and record.
  * @param dir - the samples directory.
  * @param url - Klipara's signed download link.
+ * @param meta - the public fields of the record.
  * @param signal - cancels the download.
+ * @param now - the creation time.
  * @returns the new sample's id.
  */
-export async function storeSample(dir: string, url: string, signal: AbortSignal): Promise<string> {
+export async function storeSample(dir: string, url: string, meta: SampleMeta, signal: AbortSignal, now = new Date()): Promise<string> {
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`Downloading the exported clip failed with HTTP ${String(response.status)}.`)
   const declared = Number(response.headers.get('content-length') ?? '0')
   if (declared > MAX_SAMPLE_BYTES) throw new Error(`The exported clip is ${String(declared)} bytes, over the ${String(MAX_SAMPLE_BYTES)}-byte limit.`)
   const bytes = Buffer.from(await response.arrayBuffer())
   if (bytes.length > MAX_SAMPLE_BYTES) throw new Error(`The exported clip is over the ${String(MAX_SAMPLE_BYTES)}-byte limit.`)
-  const id = randomBytes(16).toString('hex')
+  const id = newSampleId()
   await mkdir(dir, { recursive: true, mode: 0o700 })
   const partial = join(dir, `${id}.mp4.part`)
   await writeFile(partial, bytes, { mode: 0o600 })
   await rename(partial, join(dir, `${id}.mp4`))
+  await cutPoster(join(dir, `${id}.mp4`), join(dir, `${id}.jpg`))
+  const record: StoredMeta = { id, ...meta, createdAt: now.toISOString() }
+  await writeFile(join(dir, `${id}.meta.json`), `${JSON.stringify(record)}\n`, { mode: 0o600 })
   return id
 }
 
@@ -46,7 +111,7 @@ function html(value: string): string {
 }
 
 /**
- * The page a creator opens: the clip, and one line saying what it is.
+ * The page a creator opens on the harness: the clip, and one line saying what it is.
  * @param id - the sample id.
  * @param headline - the line above the video.
  * @param note - the line below it.
@@ -66,59 +131,117 @@ video{width:100%;border-radius:12px;background:#000;aspect-ratio:9/16}
 p{color:var(--muted);margin:16px 0 0}
 </style></head>
 <body><main><h1>${html(headline)}</h1>
-<video src="${id}.mp4" controls playsinline preload="metadata"></video>
+<video src="${id}.mp4" poster="${id}.jpg" controls playsinline preload="metadata"></video>
 <p>${html(note)}</p></main></body></html>
 `
 }
 
+/** Whether a file exists; its size when it does. */
+async function sizeOf(path: string): Promise<number | undefined> {
+  try {
+    return (await stat(path)).size
+  } catch {
+    // Absent is the answer; the caller turns it into a 404.
+    return undefined
+  }
+}
+
 /**
- * Serve one request under the samples prefix: the page or the file.
+ * A sample's stored record, when the sample exists and has not expired.
+ * @param dir - the samples directory.
+ * @param id - the sample id.
+ * @param ttlDays - retention in days; 0 keeps samples for good.
+ * @param now - the current time.
+ * @returns the record, or undefined for an unknown or expired id.
+ */
+export async function readSample(dir: string, id: string, ttlDays: number, now = new Date()): Promise<StoredMeta | undefined> {
+  if (!SAMPLE_ID.test(id)) return undefined
+  const video = join(dir, `${id}.mp4`)
+  let created: Date
+  let record: StoredMeta
+  try {
+    record = JSON.parse(await readFile(join(dir, `${id}.meta.json`), 'utf8')) as StoredMeta
+    created = new Date(record.createdAt)
+  } catch {
+    // A sample stored before records existed: its file's time stands in.
+    const info = await stat(video).catch(() => undefined)
+    if (info === undefined) return undefined
+    created = info.mtime
+    record = { id, title: '', creatorName: '', sourceVideoUrl: '', createdAt: info.mtime.toISOString() }
+  }
+  if (await sizeOf(video) === undefined) return undefined
+  if (ttlDays > 0 && now.getTime() - created.getTime() > ttlDays * 86_400_000) return undefined
+  return record
+}
+
+/**
+ * Serve one request under the samples prefix.
  * @param req - the request.
  * @param res - the response.
  * @param dir - the samples directory.
  * @param prefix - the route prefix, for example `/scout/s`.
- * @param headline - the page's headline.
- * @param note - the page's note.
+ * @param serving - URLs, CORS origin, retention and page copy.
  */
 export async function serveSample(
-  req: IncomingMessage, res: ServerResponse, dir: string, prefix: string, headline: string, note: string,
+  req: IncomingMessage, res: ServerResponse, dir: string, prefix: string, serving: SampleServing,
 ): Promise<void> {
+  const cors = { 'Access-Control-Allow-Origin': serving.corsOrigin, 'Vary': 'Origin' }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      ...cors, 'Access-Control-Allow-Methods': 'GET, HEAD', 'Access-Control-Allow-Headers': 'Range', 'Access-Control-Max-Age': '86400',
+    })
+    res.end()
+    return
+  }
   const rest = new URL(req.url ?? '/', 'http://x').pathname.slice(prefix.length).replace(/^\/+/u, '')
-  const isFile = rest.endsWith('.mp4')
-  const id = isFile ? rest.slice(0, -'.mp4'.length) : rest
-  if (!SAMPLE_ID.test(id) || (req.method !== 'GET' && req.method !== 'HEAD')) {
-    res.writeHead(404)
-    res.end()
+  const match = /^([^./]+)(?:\.(mp4|jpg|json))?$/u.exec(rest)
+  const notFound = (): void => { res.writeHead(404, cors); res.end() }
+  if (match === null || (req.method !== 'GET' && req.method !== 'HEAD')) { notFound(); return }
+  const id = match[1] ?? ''
+  const kind = match[2]
+  const record = await readSample(dir, id, serving.ttlDays)
+  if (record === undefined) { notFound(); return }
+
+  if (kind === 'json') {
+    const hasPoster = await sizeOf(join(dir, `${id}.jpg`)) !== undefined
+    const base = serving.fileBase.replace(/\/+$/u, '')
+    const body = JSON.stringify({
+      id: record.id,
+      title: record.title,
+      creatorName: record.creatorName,
+      sourceVideoUrl: record.sourceVideoUrl,
+      videoUrl: `${base}/${id}.mp4`,
+      posterUrl: hasPoster ? `${base}/${id}.jpg` : null,
+      createdAt: record.createdAt,
+    })
+    res.writeHead(200, { ...cors, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Robots-Tag': 'noindex' })
+    res.end(req.method === 'HEAD' ? undefined : body)
     return
   }
-  const path = join(dir, `${id}.mp4`)
-  let size: number
-  try {
-    size = (await stat(path)).size
-  } catch {
-    // An unknown id reads exactly like a removed sample.
-    res.writeHead(404)
-    res.end()
-    return
-  }
-  if (!isFile) {
+  if (kind === undefined) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' })
-    res.end(req.method === 'HEAD' ? undefined : samplePage(id, headline, note))
+    res.end(req.method === 'HEAD' ? undefined : samplePage(id, serving.headline, serving.note))
     return
   }
+  const path = join(dir, `${id}.${kind}`)
+  const size = await sizeOf(path)
+  if (size === undefined) { notFound(); return }
+  const type = kind === 'mp4' ? 'video/mp4' : 'image/jpeg'
   const range = /^bytes=(\d*)-(\d*)$/u.exec(req.headers.range ?? '')
   const start = range?.[1] ? Number(range[1]) : 0
   const end = range?.[2] ? Math.min(Number(range[2]), size - 1) : size - 1
   if (range !== null && (start > end || start >= size)) {
-    res.writeHead(416, { 'Content-Range': `bytes */${String(size)}` })
+    res.writeHead(416, { ...cors, 'Content-Range': `bytes */${String(size)}` })
     res.end()
     return
   }
   res.writeHead(range === null ? 200 : 206, {
-    'Content-Type': 'video/mp4',
+    ...cors,
+    'Content-Type': type,
     'Content-Length': String(end - start + 1),
     'Accept-Ranges': 'bytes',
-    'Cache-Control': 'private, max-age=3600',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+    'Cache-Control': 'public, max-age=3600',
     ...range === null ? {} : { 'Content-Range': `bytes ${String(start)}-${String(end)}/${String(size)}` },
   })
   if (req.method === 'HEAD') {
