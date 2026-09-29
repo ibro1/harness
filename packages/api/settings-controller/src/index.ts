@@ -201,6 +201,10 @@ export class SettingsController extends TypertRemoteService {
       else if (mode === 'replace') await settings.replace(namespace, input, expectedRevision)
       else await settings.mutate(namespace, input as SettingsPathOp[], expectedRevision)
     } catch (error: unknown) {
+      // Fork: the Web form reports only that a save was refused, and the
+      // harness logger's warnings do not reach the container log, so the
+      // reason is written to stderr where the operator reads it.
+      process.stderr.write(`settings: ${mode} of "${ns}" refused: ${messageOf(error)}\n`)
       throw rejected(ns, error)
     }
     const descriptor = settings.describe({ redactSecrets: true }).find(candidate => candidate.ns === namespace)
