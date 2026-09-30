@@ -296,7 +296,12 @@ export async function backfillCovers(deps: ScoutDeps, signal: AbortSignal): Prom
     }
     for (const { sampleId, clipId } of samples) {
       const cover = candidates.find(c => c.clipId === clipId)?.thumbnailUrl
-      if (cover && await setSampleCover(deps.samplesDir, sampleId, cover, signal)) covered++
+      try {
+        if (cover && await setSampleCover(deps.samplesDir, sampleId, cover, signal)) covered++
+      } catch (error) {
+        // One unreadable sample must not stop the others.
+        process.stderr.write(`klipara-scout: no cover for sample ${sampleId}: ${error instanceof Error ? error.message : String(error)}\n`)
+      }
     }
   }
   return covered

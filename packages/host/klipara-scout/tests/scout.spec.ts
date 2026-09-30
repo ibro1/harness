@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { once } from 'node:events'
 import { tmpdir } from 'node:os'
@@ -174,6 +174,20 @@ describe('klipara scout', () => {
     expect(await backfillCovers(deps, exec.signal)).toBe(1)
     expect(readFileSync(join(deps.samplesDir, `${id}.jpg`))).toEqual(COVER)
     expect(await backfillCovers(deps, exec.signal)).toBe(0)
+  })
+
+  it('backfills a sample stored before samples had a record', async () => {
+    const url = await clipServer()
+    const { run, deps } = setup({ klipara: klipara(url) })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    await run('scout_check_sample', { channel_id: 'UC_small' })
+    const id = (await deps.store.read()).leads[0]!.sampleId ?? ''
+    rmSync(join(deps.samplesDir, `${id}.meta.json`))
+    deps.klipara = klipara(url, 'succeeded', url.replace('clip.mp4', 'cover.jpg'))
+    expect(await backfillCovers(deps, exec.signal)).toBe(1)
+    expect(readFileSync(join(deps.samplesDir, `${id}.jpg`))).toEqual(COVER)
+    expect(JSON.parse(readFileSync(join(deps.samplesDir, `${id}.meta.json`), 'utf8'))).toMatchObject({ id, poster: 'cover' })
   })
 
   it('refuses a sample past the daily cap', async () => {

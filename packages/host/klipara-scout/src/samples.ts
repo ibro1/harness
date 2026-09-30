@@ -141,7 +141,9 @@ export async function fetchCover(url: string, poster: string, signal: AbortSigna
 export async function setSampleCover(dir: string, id: string, coverUrl: string, signal: AbortSignal): Promise<boolean> {
   if (!SAMPLE_ID.test(id)) return false
   const recordPath = join(dir, `${id}.meta.json`)
-  const record = JSON.parse(await readFile(recordPath, 'utf8')) as StoredMeta
+  // A sample stored before records existed gets one now, as readSample would describe it.
+  const record = await readSample(dir, id, 0)
+  if (record === undefined) return false
   if (!await fetchCover(coverUrl, join(dir, `${id}.jpg`), signal)) return false
   record.poster = 'cover'
   await writeFile(`${recordPath}.part`, `${JSON.stringify(record)}\n`, { mode: 0o600 })
