@@ -28,10 +28,11 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { FallbackRouter, installFallback } from './fallback.ts'
+import { readFeed, sameShow, searchPodcasts } from './podcasts.ts'
 import { styleProblems } from './style.ts'
 import { localTime, parseShiftTime, shiftDue, startShift } from './shift.ts'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
-import { channelFacts, execYtDlp, searchLongVideos, type YtDlpRunner } from './youtube.ts'
+import { channelFacts, execYtDlp, searchLongVideos, type ChannelFacts, type FoundVideo, type YtDlpRunner } from './youtube.ts'
 
 export { bestCandidate, KliparaError, kliparaClient } from './klipara.ts'
 export type { KliparaApi, KliparaCandidate, KliparaJob } from './klipara.ts'
@@ -92,6 +93,10 @@ export interface Config {
   maxSubscribers: Volatile<number>
   /** Skip channels already posting more Shorts than this. */
   maxShorts: Volatile<number>
+  /** Two-letter podcast store country `scout_search_podcasts` searches, for example `ng`. */
+  podcastCountry: Volatile<string>
+  /** Skip shows whose newest episode is older than this many days. */
+  podcastActiveDays: Volatile<number>
   /** The Klipara workspace API key (`klp_sk_live_…`). */
   kliparaApiKey: Volatile<string>
   /** WhatsApp chat name or number that hears about replies and pauses. */
@@ -156,6 +161,8 @@ export const Config = z.object({
   minSubscribers: z.natural().default(2000).volatile(),
   maxSubscribers: z.natural().default(300_000).volatile(),
   maxShorts: z.natural().default(10).volatile(),
+  podcastCountry: z.string().default('ng').volatile(),
+  podcastActiveDays: z.natural().default(60).volatile(),
   kliparaApiKey: z.string().default('').volatile(),
   notifyTo: z.string().default('').volatile(),
   provider: z.string().default('').volatile(),
@@ -208,6 +215,8 @@ export interface ScoutDeps {
   now: () => Date
   /** Hand an unexpected failure to error reporting, when it is loaded. */
   reportFailure?: (failure: ScoutFailure) => void
+  /** HTTP for the podcast directory and feeds; the global fetch when omitted. */
+  fetch?: typeof fetch
 }
 
 /** Words of a pitch, for the near-duplicate check. */
@@ -226,6 +235,56 @@ function overlap(a: string, b: string): number {
 }
 
 /** One line per lead, for listings. */
+/**
+ * Why a channel is outside the scout's limits.
+ * @param facts - the channel.
+ * @param config - the limits.
+ * @returns the reason, or undefined when the channel fits.
+ */
+function unfitReason(facts: ChannelFacts, config: Config): string | undefined {
+  const subs = facts.subscribers
+  if (subs !== undefined && (subs < config.minSubscribers.get() || subs > config.maxSubscribers.get())) return `${String(subs)} subscribers`
+  return facts.shortsCount > config.maxShorts.get() ? `already posts ${String(facts.shortsCount)}+ Shorts` : undefined
+}
+
+/**
+ * A lead for a channel and one of its long videos. A channel outside the
+ * limits is kept as a skipped lead, so no later search spends another
+ * channel read on it.
+ * @param video - the video a sample would be cut from.
+ * @param facts - the channel.
+ * @param reason - why it is skipped, if it is.
+ * @param note - how it was found, for its history.
+ * @param at - now.
+ * @param extra - fields the source adds (a feed's email, the podcast).
+ * @returns the lead.
+ */
+function channelLead(
+  video: FoundVideo, facts: ChannelFacts, reason: string | undefined, note: string, at: string, extra: Partial<Lead> = {},
+): Lead {
+  const stage = reason === undefined ? 'found' : 'skipped'
+  const email = extra.email ?? facts.email
+  return {
+    channelId: video.channelId,
+    channelName: facts.channelName || video.channelName,
+    channelUrl: facts.channelUrl,
+    ...facts.subscribers === undefined ? {} : { subscribers: facts.subscribers },
+    shortsCount: facts.shortsCount,
+    ...extra,
+    ...email === undefined ? {} : { email },
+    videoId: video.videoId,
+    videoUrl: video.videoUrl,
+    videoTitle: video.title,
+    durationMinutes: video.durationMinutes,
+    stage,
+    source: extra.source ?? 'scout',
+    replies: [],
+    history: [{ at, stage, note: reason === undefined ? note : `${note}; ${reason}` }],
+    createdAt: at,
+    updatedAt: at,
+  }
+}
+
 function describe(lead: Lead): string {
   const facts = [
     lead.subscribers === undefined ? undefined : `${String(lead.subscribers)} subs`,
@@ -436,33 +495,9 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
         const skipped: string[] = []
         for (const video of fresh) {
           const facts = await channelFacts(deps.ytDlp, video.channelId, config.maxShorts.get() + 1, exec.signal)
-          const subs = facts.subscribers
-          // A channel outside the limits is kept as a skipped lead, so no later
-          // search spends another channel read on it.
-          const reason = subs !== undefined && (subs < config.minSubscribers.get() || subs > config.maxSubscribers.get())
-            ? `${String(subs)} subscribers`
-            : facts.shortsCount > config.maxShorts.get() ? `already posts ${String(facts.shortsCount)}+ Shorts` : undefined
+          const reason = unfitReason(facts, config)
           if (reason !== undefined) skipped.push(`${video.channelName}: ${reason}`)
-          const at = iso()
-          const stage = reason === undefined ? 'found' : 'skipped'
-          kept.push({
-            channelId: video.channelId,
-            channelName: facts.channelName || video.channelName,
-            channelUrl: facts.channelUrl,
-            ...subs === undefined ? {} : { subscribers: subs },
-            shortsCount: facts.shortsCount,
-            ...facts.email === undefined ? {} : { email: facts.email },
-            videoId: video.videoId,
-            videoUrl: video.videoUrl,
-            videoTitle: video.title,
-            durationMinutes: video.durationMinutes,
-            stage,
-            source: 'scout',
-            replies: [],
-            history: [{ at, stage, note: reason === undefined ? `search: ${topic}` : `search: ${topic}; ${reason}` }],
-            createdAt: at,
-            updatedAt: at,
-          })
+          kept.push(channelLead(video, facts, reason, `search: ${topic}`, iso()))
         }
         await store.update((s) => {
           const have = new Set(s.leads.map(l => l.channelId))
@@ -472,6 +507,98 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           `Searched "${topic}": ${String(videos.length)} long videos, ${String(fresh.length)} new channels, ${String(kept.length - skipped.length)} saved as leads.`,
           ...kept.filter(l => l.stage === 'found').map(describe),
           ...skipped.length === 0 ? [] : [`Skipped: ${skipped.join('; ')}.`],
+        ].join('\n')
+      },
+    }),
+    tool({
+      name: 'scout_search_podcasts',
+      description: 'Search the podcast directory for active shows on a topic, read each new show\'s feed for the owner\'s contact email, find the show\'s long videos on YouTube, and save the ones that fit as `found` leads with that email, so they are pitched by email rather than by comment. Shows without an email or a video version on YouTube are skipped. When a show\'s channel is already a lead without an email, the email is added to it. Returns the new leads.',
+      parameters: {
+        topic: { type: 'string', description: 'Search words. Omit to use the next configured topic.' },
+        limit: { type: 'integer', description: 'Shows to read from the directory, 1 to 30. Defaults to 15.' },
+      },
+      run: async (args, exec) => {
+        const fetcher = deps.fetch ?? fetch
+        const state = await store.read()
+        const topics = config.topics.get()
+        const topic = typeof args['topic'] === 'string' && args['topic'].trim() !== ''
+          ? args['topic'].trim()
+          : topics[state.leads.length % Math.max(topics.length, 1)] ?? 'podcast'
+        const limit = Math.min(Math.max(typeof args['limit'] === 'number' ? args['limit'] : 15, 1), 30)
+        let shows: Awaited<ReturnType<typeof searchPodcasts>>
+        try {
+          shows = await searchPodcasts(fetcher, topic, config.podcastCountry.get().trim().toLowerCase() || 'ng', limit, exec.signal)
+        } catch (error) {
+          deps.reportFailure?.({ stage: 'discover', error, redact: [topic] })
+          throw error
+        }
+        const seen = new Set(state.podcastsSeen ?? [])
+        const activeSince = deps.now().getTime() - config.podcastActiveDays.get() * 86_400_000
+        const fresh = shows.filter(show => !seen.has(show.feedUrl))
+        const kept: Lead[] = []
+        const emailed: string[] = []
+        const passed: string[] = []
+        const read: string[] = []
+        for (const show of fresh) {
+          read.push(show.feedUrl)
+          if (show.lastRelease !== undefined && new Date(show.lastRelease).getTime() < activeSince) {
+            passed.push(`${show.title}: no episode in ${String(config.podcastActiveDays.get())} days`)
+            continue
+          }
+          let feed: Awaited<ReturnType<typeof readFeed>>
+          try {
+            feed = await readFeed(fetcher, show.feedUrl, exec.signal)
+          } catch (error) {
+            passed.push(`${show.title}: feed unreadable (${error instanceof Error ? error.message : String(error)})`)
+            continue
+          }
+          if (feed.email === undefined) {
+            passed.push(`${show.title}: no contact email in its feed`)
+            continue
+          }
+          // The show's video version: its newest long uploads whose channel carries the show's name.
+          const videos = await searchLongVideos(deps.ytDlp, show.title, 5, exec.signal)
+          const video = videos.find(v => feed.youtubeChannelIds.includes(v.channelId)) ?? videos.find(v => sameShow(show, v.channelName))
+          if (video === undefined) {
+            passed.push(`${show.title}: no recent long video on YouTube`)
+            continue
+          }
+          const sameChannel = (lead: Lead): boolean => lead.channelId === video.channelId
+          const existing = (await store.read()).leads.find(sameChannel) ?? kept.find(sameChannel)
+          if (existing !== undefined) {
+            if (existing.email === undefined) {
+              const address = feed.email
+              await store.update((s) => {
+                const lead = s.leads.find(l => l.channelId === video.channelId)
+                if (lead !== undefined && lead.email === undefined) {
+                  lead.email = address
+                  lead.updatedAt = iso()
+                }
+              })
+              emailed.push(`${existing.channelName}: email ${address} from its podcast feed`)
+            }
+            continue
+          }
+          const facts = await channelFacts(deps.ytDlp, video.channelId, config.maxShorts.get() + 1, exec.signal)
+          const reason = unfitReason(facts, config)
+          if (reason !== undefined) passed.push(`${show.title}: ${reason}`)
+          kept.push(channelLead(video, facts, reason, `podcast search: ${topic}`, iso(), {
+            email: feed.email,
+            source: 'podcast',
+            podcast: { title: show.title, feedUrl: show.feedUrl, directoryUrl: show.directoryUrl },
+          }))
+        }
+        await store.update((s) => {
+          const have = new Set(s.leads.map(l => l.channelId))
+          s.leads.push(...kept.filter(l => !have.has(l.channelId)))
+          s.podcastsSeen = [...s.podcastsSeen ?? [], ...read].slice(-5000)
+        })
+        const found = kept.filter(l => l.stage === 'found')
+        return [
+          `Searched podcasts for "${topic}": ${String(shows.length)} shows, ${String(fresh.length)} not read before, ${String(found.length)} saved as leads with an email.`,
+          ...found.map(describe),
+          ...emailed.length === 0 ? [] : [`Email added to existing leads: ${emailed.join('; ')}.`],
+          ...passed.length === 0 ? [] : [`Passed over: ${passed.join('; ')}.`],
         ].join('\n')
       },
     }),

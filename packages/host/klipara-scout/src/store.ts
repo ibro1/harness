@@ -33,6 +33,8 @@ export interface Lead {
   stage: LeadStage
   /** Who brought the lead in, for splitting what it earns. */
   source: string
+  /** The podcast the lead was found through, when it came from a podcast feed. */
+  podcast?: { title: string; feedUrl: string; directoryUrl: string }
   /** Klipara analysis job for the sample. */
   jobId?: string
   /** The hosted sample's id and public page. */
@@ -61,6 +63,8 @@ export interface ScoutState {
   lastShiftDate: string | null
   /** Session id of the latest shift, woken when its samples finish. */
   lastShiftSession?: string
+  /** Podcast feeds already read, so no later search reads one again. Newest last, capped. */
+  podcastsSeen?: string[]
 }
 
 /** A state with nothing in it. */

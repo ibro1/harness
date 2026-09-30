@@ -15,10 +15,10 @@ export const SCOUT_NS = 'klipara-scout'
 
 /** Text fields, in the order the card shows them. */
 export const SCOUT_TEXT_FIELDS = [
-  'shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'outreachBrowser', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'sampleBaseUrl', 'sampleHeadline', 'sampleNote',
+  'shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'outreachBrowser', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'podcastCountry', 'sampleBaseUrl', 'sampleHeadline', 'sampleNote',
 ] as const
 /** Whole-number fields, in the order the card shows them. */
-export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyCheckMinutes', 'fallbackCooldownMinutes', 'sampleTtlDays', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
+export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyCheckMinutes', 'fallbackCooldownMinutes', 'podcastActiveDays', 'sampleTtlDays', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
 
 /** On/off fields, in the order the card shows them. */
 export const SCOUT_SWITCH_FIELDS = ['enabled', 'fallbackPitches'] as const

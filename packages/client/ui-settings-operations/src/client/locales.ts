@@ -6,7 +6,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
+  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'podcastCountry' | 'podcastActiveDays' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -159,6 +159,10 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.fallbackCooldownMinutes.hint': 'How long scout turns stay on the fallback after the shift model fails. A spent quota uses its stated reset time instead (for example "Resets in 1h56m"), and skips the retries.',
   'scout.fallbackPitches': 'Pitch on the fallback model',
   'scout.fallbackPitches.hint': 'Off: a turn on the fallback model checks replies and makes samples, and pitches wait for the shift model. On: it pitches too.',
+  'scout.podcastCountry': 'Podcast country',
+  'scout.podcastCountry.hint': 'Two-letter podcast store country the podcast search looks in, for example ng for Nigeria or gh for Ghana. Podcast feeds usually publish a contact email, so these leads get emails, not comments.',
+  'scout.podcastActiveDays': 'Podcast active within (days)',
+  'scout.podcastActiveDays.hint': 'Skip shows whose newest episode is older than this.',
   'scout.sampleHeadline': 'Sample page headline',
   'scout.sampleHeadline.hint': 'The line above the clip on the page a creator opens.',
   'scout.sampleNote': 'Sample page note',
@@ -303,6 +307,10 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.fallbackCooldownMinutes.hint': '班次模型失败后，侦察回合继续使用备用模型的时长。额度用尽时改用其声明的重置时间（例如“Resets in 1h56m”），并跳过重试。',
   'scout.fallbackPitches': '备用模型也可推介',
   'scout.fallbackPitches.hint': '关闭：备用模型的回合只检查回复和制作样片，推介等待班次模型。开启：也发送推介。',
+  'scout.podcastCountry': '播客国家',
+  'scout.podcastCountry.hint': '播客搜索使用的两位字母商店国家代码，例如尼日利亚为 ng、加纳为 gh。播客订阅源通常公开联系邮箱，因此这些线索会收到邮件而不是评论。',
+  'scout.podcastActiveDays': '播客活跃天数',
+  'scout.podcastActiveDays.hint': '最新一集早于此天数的节目将被跳过。',
   'scout.sampleHeadline': '样片页标题',
   'scout.sampleHeadline.hint': '创作者打开的页面上、视频上方的一行文字。',
   'scout.sampleNote': '样片页说明',
