@@ -465,6 +465,7 @@
     { "path": "./packages/host/capture" },
     { "path": "./packages/host/cloudflare" },
     { "path": "./packages/host/klipara-scout" },
+    { "path": "./packages/host/error-reporting" },
     { "path": "./packages/host/dokploy" },
     { "path": "./packages/host/outputs" },
     { "path": "./packages/host/postgres" },

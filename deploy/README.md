@@ -822,6 +822,25 @@ one Klipara's ingest downloads with. Leads are on their own page (**View leads**
 pitch emails link to `https://klipara.linkfa.de/s/<id>`, a page Klipara serves from the harness's public `/scout/s/<id>.json`; comments carry no link. Nothing is sent until an outreach browser, signed in to a Google account of its own, is set on the page: never the DeerFlow browser, whose account Klipara downloads with. `DSH_KLIPARA_SCOUT=0` leaves it
 out; `DSH_SCOUT_MCP=0` keeps its tools from agy and opencode.
 
+## Error reporting (GlitchTip)
+
+Production errors go to the self-hosted GlitchTip at https://bug.linkfa.de
+(organisation `netinko`, project `harness`, platform Node.js) through
+`packages/host/error-reporting`. Set `SENTRY_DSN` in Dokploy's Environment to
+the project's DSN (never commit it); with it unset the plugin is left out and
+the Sentry SDK is never loaded. The boot log says `sentry_enabled` or
+`sentry_disabled`, never the DSN. Browser reports go through the same-origin
+tunnel `/api/monitor`. Reports are scrubbed of lead and pitch data, prompts,
+model output, cookies, headers, bodies, query values and credentials; see the
+package README for what is reported and tagged.
+
+Send a test event (as the signed-in admin, or from the container):
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $DSH_AUTH_API_TOKEN" http://127.0.0.1:3081/api/monitor/test
+# {"eventId":"…","sent":true}  -> the event appears in GlitchTip, tagged test=true
+```
+
 ## Model catalogue
 
 The entrypoint runs `deploy/sync-models.mjs` on every boot: it reads

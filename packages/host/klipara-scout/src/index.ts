@@ -39,6 +39,35 @@ export { ScoutStore, emptyState } from './store.ts'
 export type { Lead, LeadStage, ScoutState } from './store.ts'
 export type { YtDlpRunner } from './youtube.ts'
 
+/** The part of a shift a failure happened in. */
+export type ScoutStage = 'discover' | 'sample' | 'pitch' | 'reply-check'
+
+/**
+ * One unexpected scout failure, for error reporting. It names the stage and
+ * the lead or sample only; `redact` lists this lead's own strings (channel
+ * name, address, video title) that must not leave the process even inside an
+ * error message. Rule refusals (caps, link rules, pauses in force) are not failures.
+ */
+export interface ScoutFailure {
+  stage: ScoutStage
+  leadId?: string
+  sampleId?: string
+  error: unknown
+  redact: string[]
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * An unexpected scout failure: a shift or reply check that did not start,
+     * a search, Klipara call or sample copy that failed, or an outreach pause.
+     * @param failure - the stage, the lead or sample id, the error, and the lead strings to redact.
+     * @mode emit
+     */
+    'klipara-scout/failure'(failure: ScoutFailure): void
+  }
+}
+
 export const name = 'klipara-scout'
 export const inject = ['agents', 'webServer', 'agentDefaultModel', 'agentPresets', 'permissionPresets', 'sessionTitle', 'workspaceRegistry']
 
@@ -176,6 +205,8 @@ export interface ScoutDeps {
   /** Tell the owner something on WhatsApp; failures are reported, never thrown. */
   notify: (text: string) => Promise<string>
   now: () => Date
+  /** Hand an unexpected failure to error reporting, when it is loaded. */
+  reportFailure?: (failure: ScoutFailure) => void
 }
 
 /** Words of a pitch, for the near-duplicate check. */
@@ -215,6 +246,15 @@ function findLead(state: ScoutState, channelId: string): Lead {
   const lead = state.leads.find(l => l.channelId === channelId)
   if (lead === undefined) throw new Error(`No lead with channel id ${channelId}; scout_leads lists them.`)
   return lead
+}
+
+/**
+ * A lead's own strings, which error reports must not carry.
+ * @param lead - the lead.
+ * @returns its channel name, address, video title and URLs.
+ */
+export function leadStrings(lead: Lead): string[] {
+  return [lead.channelName, lead.email, lead.videoTitle, lead.channelUrl, lead.videoUrl].filter((v): v is string => typeof v === 'string' && v !== '')
 }
 
 /** What one sample check found. */
@@ -295,6 +335,7 @@ export async function backfillCovers(deps: ScoutDeps, signal: AbortSignal): Prom
       candidates = await deps.klipara.candidates(jobId, signal)
     } catch (error) {
       process.stderr.write(`klipara-scout: no covers for job ${jobId}: ${error instanceof Error ? error.message : String(error)}\n`)
+      deps.reportFailure?.({ stage: 'sample', error, redact: [] })
       continue
     }
     for (const { sampleId, clipId } of samples) {
@@ -304,6 +345,7 @@ export async function backfillCovers(deps: ScoutDeps, signal: AbortSignal): Prom
       } catch (error) {
         // One unreadable sample must not stop the others.
         process.stderr.write(`klipara-scout: no cover for sample ${sampleId}: ${error instanceof Error ? error.message : String(error)}\n`)
+        deps.reportFailure?.({ stage: 'sample', sampleId, error, redact: [] })
       }
     }
   }
@@ -370,7 +412,13 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           ? args['topic'].trim()
           : topics[state.leads.length % Math.max(topics.length, 1)] ?? 'podcast'
         const limit = Math.min(Math.max(typeof args['limit'] === 'number' ? args['limit'] : 15, 1), 30)
-        const videos = await searchLongVideos(deps.ytDlp, topic, limit, exec.signal)
+        let videos: Awaited<ReturnType<typeof searchLongVideos>>
+        try {
+          videos = await searchLongVideos(deps.ytDlp, topic, limit, exec.signal)
+        } catch (error) {
+          deps.reportFailure?.({ stage: 'discover', error, redact: [topic] })
+          throw error
+        }
         const known = new Set(state.leads.map(l => l.channelId))
         const fresh = [...new Map(videos.filter(v => !known.has(v.channelId)).map(v => [v.channelId, v])).values()]
         const kept: Lead[] = []
@@ -452,6 +500,7 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           job = await deps.klipara.startJob(lead.videoUrl ?? '', exec.signal)
         } catch (error) {
           await store.update((s) => { const d = dayCount(s, today()); d.samples = Math.max(0, d.samples - 1) })
+          deps.reportFailure?.({ stage: 'sample', leadId: lead.channelId, error, redact: leadStrings(lead) })
           throw error
         }
         await store.update((s) => {
@@ -554,6 +603,8 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
       run: async (args) => {
         const reason = String(args['reason']).trim() || 'no reason given'
         await store.update((s) => { s.paused = { reason, at: iso() } })
+        // The reason describes a page the model saw; only that outreach paused is reported.
+        deps.reportFailure?.({ stage: 'pitch', error: new Error('Outreach paused by the shift (a warning, captcha or failed send)'), redact: [reason] })
         const sent = await deps.notify(`Klipara Scout PAUSED: ${reason}\n\nNo outreach runs until you resume it: open a Klipara Scout session and say "resume the scout".`)
         return `Outreach paused. Owner alert: ${sent}. End the shift now.`
       },
@@ -645,6 +696,7 @@ export function apply(ctx: Context, config: Config): void {
   const store = new ScoutStore(join(dataDir, 'leads.json'))
   const samplesDir = join(dataDir, 'samples')
   const prefix = config.path.replace(/\/+$/u, '')
+  const reportFailure = (failure: ScoutFailure): void => { ctx.emit('klipara-scout/failure', failure) }
   const notify = async (text: string): Promise<string> => {
     const to = config.notifyTo.get().trim()
     if (to === '' || config.whatsappUrl === '' || config.whatsappToken === '') return 'not sent (no WhatsApp recipient or route configured)'
@@ -670,6 +722,7 @@ export function apply(ctx: Context, config: Config): void {
     sampleBase: () => config.sampleBaseUrl.get().replace(/\/+$/u, ''),
     notify,
     now: () => new Date(),
+    reportFailure,
   }
   const tools = buildScoutTools(deps)
 
@@ -835,6 +888,7 @@ export function apply(ctx: Context, config: Config): void {
       process.stderr.write(`klipara-scout: started the ${now.date} shift as session ${sessionId}\n`)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
+      reportFailure({ stage: 'discover', error, redact: [] })
       await store.update((s) => { s.lastShiftDate = previous })
       retryAt = Date.now() + 30 * 60_000
       process.stderr.write(`klipara-scout: the ${now.date} shift did not start (retrying in 30 minutes): ${reason}\n`)
@@ -863,6 +917,7 @@ export function apply(ctx: Context, config: Config): void {
           if (check.outcome === 'ready') ready.push(check.text)
         } catch (error) {
           process.stderr.write(`klipara-scout: sample check for ${lead.channelName} failed: ${error instanceof Error ? error.message : String(error)}\n`)
+          reportFailure({ stage: 'sample', leadId: lead.channelId, error, redact: leadStrings(lead) })
         }
       }
       if (ready.length === 0) return
@@ -933,6 +988,7 @@ export function apply(ctx: Context, config: Config): void {
       await store.update((s) => { s.lastShiftSession = sessionId })
     } catch (error) {
       process.stderr.write(`klipara-scout: the reply check did not start: ${error instanceof Error ? error.message : String(error)}\n`)
+      reportFailure({ stage: 'reply-check', error, redact: [] })
     } finally {
       startingReplies = false
     }

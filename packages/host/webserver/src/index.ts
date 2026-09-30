@@ -33,6 +33,13 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'webserver/index-inject'(table: IndexInjection[]): void
+    /**
+     * A route or upgrade handler threw or rejected. The request is already
+     * answered (400) or its socket destroyed; listeners only observe.
+     * @param failure - the request method, its path without the query string, and the error.
+     * @mode emit
+     */
+    'webserver/request-error'(failure: { method: string; path: string; error: unknown }): void
   }
 }
 
@@ -148,6 +155,20 @@ function createGzipMiddleware(config: ResolvedConfig): NodeMiddleware {
  * during startup with 404 until its owner registers. A listen failure rejects
  * initialization, and the boot process reports the failed fiber.
  */
+/**
+ * A request's path without its query string, or `/` when the URL does not parse.
+ * @param req - the request.
+ * @returns the path.
+ */
+function requestPath(req: IncomingMessage): string {
+  try {
+    return new URL(req.url ?? '/', 'http://x').pathname
+  } catch {
+    // An unparsable URL is itself the likely failure; its path is unknown.
+    return '/'
+  }
+}
+
 export class WebServer extends Service {
   static Config: z<Config> = z.object({
     host: z.union([z.const('127.0.0.1'), z.const('0.0.0.0')]).required(),
@@ -325,6 +346,7 @@ export class WebServer extends Service {
       const next = (): void => {
         void handle(req, res).catch((err: unknown) => {
           this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
+          this.ctx.emit('webserver/request-error', { method: req.method ?? 'GET', path: requestPath(req), error: err })
           if (res.headersSent) {
             res.destroy()
             return

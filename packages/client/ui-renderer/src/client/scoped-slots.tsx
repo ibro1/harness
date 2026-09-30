@@ -392,6 +392,23 @@ function sessionGenerationKeyOf(binding: ScopedStandardSourceBinding): number {
 }
 
 /**
+ * Hand a contained crash to the page's error reporter, when the deployment
+ * injected one (`globalThis.__DSH_REPORT_ERROR__`); a boundary that swallows
+ * the error would otherwise hide it from reporting.
+ * @param error - the crash.
+ * @param slot - the slot or factory it happened in.
+ */
+function reportCrash(error: unknown, slot: string): void {
+  const reporter = (globalThis as { __DSH_REPORT_ERROR__?: (error: unknown, tags: Record<string, string>) => void }).__DSH_REPORT_ERROR__
+  try {
+    reporter?.(error, { slot, source: 'error-boundary' })
+  } catch (reportError) {
+    // Reporting must never break the boundary it serves.
+    console.error('error reporter failed:', reportError)
+  }
+}
+
+/**
  * Per-entry isolation: one registrant crashing (component render or inject
  * factory) must not take down siblings. Assembly errors (missing providers)
  * rethrow — a miswired shell must fail loud, not degrade into fallbacks.
@@ -411,6 +428,7 @@ class SlotErrorBoundary extends Component<
   }
   override componentDidCatch(error: unknown): void {
     console.error(`slot entry crashed in '${this.props.slotKey}':`, error)
+    reportCrash(error, this.props.slotKey)
     this.props.onEntryError(error)
   }
   override render(): ReactNode {
@@ -431,6 +449,7 @@ class FactoryErrorBoundary extends Component<
   }
   override componentDidCatch(error: unknown): void {
     console.error(`slot factory occurrence crashed in '${this.props.name}':`, error)
+    reportCrash(error, this.props.name)
     this.props.onEntryError(error)
   }
   override render(): ReactNode {

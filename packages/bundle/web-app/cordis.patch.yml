@@ -262,6 +262,20 @@
         path: !!js process.env.DSH_CLOUDFLARE_PATH || '/cloudflare'
         token: !!js process.env.DSH_CLOUDFLARE_TOKEN || ''
 
+    # Error reporting to GlitchTip (packages/host/error-reporting). Left out,
+    # and the Sentry SDK never loaded, unless SENTRY_DSN is set.
+    - id: error-reporting
+      name: '@deepseek-ai/dsh-host-error-reporting'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || (process.env.SENTRY_DSN || '').trim() === ''
+      config:
+        dsn: !!js process.env.SENTRY_DSN || ''
+        publicDsn: !!js process.env.SENTRY_PUBLIC_DSN || ''
+        environment: !!js process.env.SENTRY_ENVIRONMENT || 'production'
+        release: !!js process.env.SENTRY_RELEASE || ''
+        tracesSampleRate: !!js Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0)
+        trustProxy: !!js process.env.DSH_TRUST_PROXY === '1'
+        account: !!js process.env.DSH_AUTH_USER || 'admin'
+
     - id: klipara-scout
       name: '@deepseek-ai/dsh-host-klipara-scout'
       disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_KLIPARA_SCOUT === '0'
