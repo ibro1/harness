@@ -36,6 +36,19 @@ export interface KliparaApi {
   exportClip(clipId: string, signal: AbortSignal): Promise<{ downloadUrl: string; thumbnailUrl: string | null; charged: string }>
 }
 
+/** A refusal from Klipara's API, with its HTTP status and error code. */
+export class KliparaError extends Error {
+  /**
+   * @param message - the readable refusal.
+   * @param status - the HTTP status.
+   * @param code - Klipara's error code, empty when the body had none.
+   */
+  constructor(message: string, readonly status: number, readonly code: string) {
+    super(message)
+    this.name = 'KliparaError'
+  }
+}
+
 /** Best-effort record read. */
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -80,7 +93,11 @@ export function kliparaClient(base: string, apiKey: () => string, timeoutMs: num
     }
     if (!response.ok) {
       const error = record(record(parsed)['error'])
-      throw new Error(`Klipara refused ${method} ${path} (HTTP ${String(response.status)}): ${text(error['message']) || text(error['code']) || raw.slice(0, 200)}`)
+      throw new KliparaError(
+        `Klipara refused ${method} ${path} (HTTP ${String(response.status)}): ${text(error['message']) || text(error['code']) || raw.slice(0, 200)}`,
+        response.status,
+        text(error['code']),
+      )
     }
     return record(parsed)
   }

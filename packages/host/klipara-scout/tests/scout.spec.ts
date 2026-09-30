@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { apply, backfillCovers, bestCandidate, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
+import { apply, backfillCovers, bestCandidate, KliparaError, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 
@@ -188,6 +188,17 @@ describe('klipara scout', () => {
     expect(await backfillCovers(deps, exec.signal)).toBe(1)
     expect(readFileSync(join(deps.samplesDir, `${id}.jpg`))).toEqual(COVER)
     expect(JSON.parse(readFileSync(join(deps.samplesDir, `${id}.meta.json`), 'utf8'))).toMatchObject({ id, poster: 'cover' })
+  })
+
+  it('waits, without failing, when the same export is already running', async () => {
+    const url = await clipServer()
+    const api = klipara(url)
+    api.exportClip = () => Promise.reject(new KliparaError('Klipara refused POST /clips/clp_good/export (HTTP 409): still running', 409, 'idempotency_in_progress'))
+    const { run, deps } = setup({ klipara: api })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    expect(await finishSample(deps, 'UC_small', exec.signal)).toMatchObject({ outcome: 'waiting' })
+    expect((await deps.store.read()).leads[0]!.stage).toBe('sampling')
   })
 
   it('refuses a sample past the daily cap', async () => {

@@ -22,7 +22,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ParameterSchemaSpec, PreToolDecision, ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { bestCandidate, kliparaClient, type KliparaApi, type KliparaCandidate } from './klipara.ts'
+import { bestCandidate, KliparaError, kliparaClient, type KliparaApi, type KliparaCandidate } from './klipara.ts'
 import { samplePosterSource, serveSample, setSampleCover, storeSample } from './samples.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -33,7 +33,7 @@ import { localTime, parseShiftTime, shiftDue, startShift } from './shift.ts'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
 import { channelFacts, execYtDlp, searchLongVideos, type YtDlpRunner } from './youtube.ts'
 
-export { bestCandidate, kliparaClient } from './klipara.ts'
+export { bestCandidate, KliparaError, kliparaClient } from './klipara.ts'
 export type { KliparaApi, KliparaCandidate, KliparaJob } from './klipara.ts'
 export { localTime, parseShiftTime, shiftDue } from './shift.ts'
 export { ScoutStore, emptyState } from './store.ts'
@@ -290,7 +290,17 @@ export async function finishSample(deps: ScoutDeps, channelId: string, signal: A
     await deps.store.update((s) => { advance(find(s), 'skipped', iso(), 'no clip stands alone') })
     return { outcome: 'skipped', text: `Klipara found no clip that stands alone in that video; ${lead.channelName} is skipped.` }
   }
-  const exported = await deps.klipara.exportClip(best.clipId, signal)
+  let exported: Awaited<ReturnType<KliparaApi['exportClip']>>
+  try {
+    exported = await deps.klipara.exportClip(best.clipId, signal)
+  } catch (error) {
+    // The same export is already running (the watcher and a shift's own check
+    // overlapped); the next check replays its result under the same key.
+    if (error instanceof KliparaError && error.code === 'idempotency_in_progress') {
+      return { outcome: 'waiting', text: 'The export is already running; check again in a minute.' }
+    }
+    throw error
+  }
   const sampleId = await storeSample(deps.samplesDir, exported.downloadUrl, {
     title: lead.videoTitle ?? '',
     creatorName: lead.channelName,
