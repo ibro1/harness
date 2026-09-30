@@ -14,20 +14,24 @@ export const SCOUT_NS = 'klipara-scout'
 
 /** Text fields, in the order the card shows them. */
 export const SCOUT_TEXT_FIELDS = [
-  'shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'outreachBrowser', 'provider', 'model', 'sampleBaseUrl', 'sampleHeadline', 'sampleNote',
+  'shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'outreachBrowser', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'sampleBaseUrl', 'sampleHeadline', 'sampleNote',
 ] as const
 /** Whole-number fields, in the order the card shows them. */
 export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyCheckMinutes', 'sampleTtlDays', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
 
+/** On/off fields, in the order the card shows them. */
+export const SCOUT_SWITCH_FIELDS = ['enabled', 'fallbackPitches'] as const
+
 type ScoutTextField = typeof SCOUT_TEXT_FIELDS[number]
+type ScoutSwitchField = typeof SCOUT_SWITCH_FIELDS[number]
 type ScoutNumberField = typeof SCOUT_NUMBER_FIELDS[number]
 
 /** The Klipara Scout fields this card edits. */
-export type ScoutSettings = Partial<Record<ScoutTextField | ScoutNumberField | 'enabled' | 'topics', unknown>>
+export type ScoutSettings = Partial<Record<ScoutTextField | ScoutNumberField | ScoutSwitchField | 'topics', unknown>>
 
 /** What the Klipara Scout card renders. */
 export interface ScoutCardState extends SettingsFormShell {
-  enabled: SettingsFieldState
+  switches: Record<ScoutSwitchField, SettingsFieldState>
   topics: SettingsFieldState
   text: Record<ScoutTextField, SettingsFieldState>
   numbers: Record<ScoutNumberField, SettingsFieldState>
@@ -44,12 +48,13 @@ export interface ScoutCardFace extends SettingsFormActions {
 }
 
 /**
- * The on/off switch, staged as the text `true` or `false`.
+ * An on/off switch, staged as the text `true` or `false`.
+ * @param field - the setting.
  * @returns the field spec.
  */
-function enabledField(): SettingsFieldSpec {
+function switchField(field: ScoutSwitchField): SettingsFieldSpec {
   return {
-    field: 'enabled',
+    field,
     format: value => value === true ? 'true' : 'false',
     parse: text => text === 'true' ? { kind: 'set', value: true } : text === 'false' ? { kind: 'set', value: false } : undefined,
   }
@@ -78,7 +83,7 @@ export class ScoutCardController {
   /** @param scope - the bound settings scope for the `klipara-scout` namespace. */
   constructor(scope: SettingsFormScope<ScoutSettings>) {
     this.form = new SettingsFormModel(scope, [
-      enabledField(),
+      ...SCOUT_SWITCH_FIELDS.map(field => switchField(field)),
       topicsField(),
       ...SCOUT_TEXT_FIELDS.map(field => settingsTextField(field)),
       ...SCOUT_NUMBER_FIELDS.map(field => settingsNumberField(field)),
@@ -89,7 +94,8 @@ export class ScoutCardController {
   private projection(): ScoutCardState {
     return {
       ...this.form.shell(),
-      enabled: this.form.field('enabled'),
+      switches: Object.fromEntries(SCOUT_SWITCH_FIELDS.map(field => [field, this.form.field(field)])) as
+        Record<ScoutSwitchField, SettingsFieldState>,
       topics: this.form.field('topics'),
       text: Object.fromEntries(SCOUT_TEXT_FIELDS.map(field => [field, this.form.field(field)])) as
         Record<ScoutTextField, SettingsFieldState>,

@@ -27,6 +27,7 @@ import { samplePosterSource, serveSample, setSampleCover, storeSample } from './
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { FallbackRouter, installFallback } from './fallback.ts'
 import { localTime, parseShiftTime, shiftDue, startShift } from './shift.ts'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
 import { channelFacts, execYtDlp, searchLongVideos, type YtDlpRunner } from './youtube.ts'
@@ -68,6 +69,11 @@ export interface Config {
   /** Model route for the shift; empty uses the harness default model. */
   provider: Volatile<string>
   model: Volatile<string>
+  /** Model a turn moves to when the shift's model fails for a provider reason; either empty turns the fallback off. */
+  fallbackProvider: Volatile<string>
+  fallbackModel: Volatile<string>
+  /** Whether a turn on the fallback model may pitch; off holds pitches for the shift's own model. */
+  fallbackPitches: Volatile<boolean>
   /** Public link base a pitch gives for a sample; the link is `<base>/<id>`. Its origin may read the sample JSON. */
   sampleBaseUrl: Volatile<string>
   /** Days a sample stays served; 0 keeps samples for good. */
@@ -122,6 +128,9 @@ export const Config = z.object({
   notifyTo: z.string().default('').volatile(),
   provider: z.string().default('').volatile(),
   model: z.string().default('').volatile(),
+  fallbackProvider: z.string().default('opencode').volatile(),
+  fallbackModel: z.string().default('big-pickle').volatile(),
+  fallbackPitches: z.boolean().default(false).volatile(),
   sampleBaseUrl: z.string().default('https://klipara.linkfa.de/s').volatile(),
   sampleTtlDays: z.natural().default(30).volatile(),
   outreachBrowser: z.string().default('').volatile(),
@@ -652,6 +661,25 @@ export function apply(ctx: Context, config: Config): void {
   }
   const tools = buildScoutTools(deps)
 
+  // The fallback model: a scout turn whose model fails for a provider reason,
+  // after the harness's own retries, retries on the fallback and finishes the
+  // turn there.
+  const router = new FallbackRouter(() => {
+    const provider = config.fallbackProvider.get().trim()
+    const model = config.fallbackModel.get().trim()
+    return provider === '' || model === '' ? undefined : { provider, model }
+  }, (change) => {
+    const from = `${change.from.provider}/${change.from.model}`
+    const to = `${change.to.provider}/${change.to.model}`
+    process.stderr.write(`klipara-scout: ${from} failed in ${change.sessionId} turn ${String(change.turn)} (${change.failure.code}: ${change.failure.message.slice(0, 300)}); retrying on ${to}\n`)
+    void notify(`Klipara Scout: ${from} failed (${change.failure.message.slice(0, 160)}). This turn continues on ${to}${config.fallbackPitches.get() ? '' : '; pitches wait for the main model'}.`)
+  })
+  const pitchHeld = (sessionId: string, tool: string): string | undefined =>
+    tool === 'scout_pitch' && !config.fallbackPitches.get() && router.onFallback(sessionId)
+      ? `Pitching is held while this turn runs on the fallback model (${config.fallbackModel.get()}): leave sampled leads for the shift's own model, and do the rest of the work.`
+      : undefined
+  installFallback(ctx, router, isScoutSession)
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: `${prefix}/s`,
@@ -707,15 +735,17 @@ export function apply(ctx: Context, config: Config): void {
         if (req.method === 'GET') { json(200, { tools: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }); return }
         const body = await readBody(req, 64 * 1024)
         if (body === undefined) { json(413, { error: 'the command body is too large' }); return }
-        let request: { name?: unknown; args?: unknown }
+        let request: { name?: unknown; args?: unknown; session?: unknown }
         try {
-          request = JSON.parse(body) as { name?: unknown; args?: unknown }
+          request = JSON.parse(body) as { name?: unknown; args?: unknown; session?: unknown }
         } catch {
           json(400, { error: 'the command body is not JSON' })
           return
         }
         const found = tools.find(t => t.name === request.name)
         if (found === undefined) { json(400, { error: `no such tool: ${String(request.name)}` }); return }
+        const held = pitchHeld(typeof request.session === 'string' ? request.session : '', found.name)
+        if (held !== undefined) { json(200, { error: held }); return }
         const abort = new AbortController()
         res.on('close', () => { if (!res.writableEnded) abort.abort() })
         try {
@@ -735,6 +765,8 @@ export function apply(ctx: Context, config: Config): void {
     if (exec.agent !== undefined && isScoutSession(exec.agent) && exec.name.startsWith(`mcp__${config.forbiddenBrowser}__`)) {
       return { kind: 'deny', reason: `Scout sessions may not use the ${config.forbiddenBrowser} browser: its Google account is the one Klipara downloads with. Use the ${config.outreachBrowser.get() || 'outreach'} browser tools.` }
     }
+    const held = exec.agent === undefined ? undefined : pitchHeld(String(exec.agent.session.id), exec.name)
+    if (held !== undefined) return { kind: 'deny', reason: held }
     return next()
   })
 

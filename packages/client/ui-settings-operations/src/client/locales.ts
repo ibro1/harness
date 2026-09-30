@@ -6,7 +6,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
+  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -99,6 +99,12 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.provider.hint': 'For example deepseek or opencode. Leave it empty, with the model, to use your default model.',
   'scout.model': 'Shift model',
   'scout.model.hint': 'The model id for the shift, for example big-pickle. Leave it empty to use your default model.',
+  'scout.fallbackProvider': 'Fallback model provider',
+  'scout.fallbackProvider.hint': 'When the shift model fails (quota, rate limit, server error), the turn retries on this provider and model. Leave either empty to turn the fallback off.',
+  'scout.fallbackModel': 'Fallback model',
+  'scout.fallbackModel.hint': 'The model id for the fallback, for example big-pickle. The next turn tries the shift model again.',
+  'scout.fallbackPitches': 'Pitch on the fallback model',
+  'scout.fallbackPitches.hint': 'Off: a turn on the fallback model checks replies and makes samples, and pitches wait for the shift model. On: it pitches too.',
   'scout.sampleHeadline': 'Sample page headline',
   'scout.sampleHeadline.hint': 'The line above the clip on the page a creator opens.',
   'scout.sampleNote': 'Sample page note',
@@ -189,6 +195,12 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.provider.hint': '例如 deepseek 或 opencode。与模型一同留空则使用默认模型。',
   'scout.model': '班次模型',
   'scout.model.hint': '班次使用的模型 id，例如 big-pickle。留空则使用默认模型。',
+  'scout.fallbackProvider': '备用模型提供方',
+  'scout.fallbackProvider.hint': '班次模型失败（额度、限流、服务器错误）时，本轮改用此提供方和模型重试。任一留空则关闭备用。',
+  'scout.fallbackModel': '备用模型',
+  'scout.fallbackModel.hint': '备用模型 id，例如 big-pickle。下一轮会重新尝试班次模型。',
+  'scout.fallbackPitches': '备用模型也可推介',
+  'scout.fallbackPitches.hint': '关闭：备用模型的回合只检查回复和制作样片，推介等待班次模型。开启：也发送推介。',
   'scout.sampleHeadline': '样片页标题',
   'scout.sampleHeadline.hint': '创作者打开的页面上、视频上方的一行文字。',
   'scout.sampleNote': '样片页说明',

@@ -15,7 +15,7 @@ The `scout_*` tools own the lead list, the daily caps and the pause switch. They
 1. **`scout_status`.** If outreach is paused, say so in one line and stop.
 2. **Replies first.** In the outreach browser, open the Gmail inbox and look for answers to pitches; open YouTube notifications for replies to your comments. Skip this when no outreach account is configured. For each reply from a pitched creator, call `scout_record_reply` with the reply verbatim. Do not answer the creator: the owner takes over from a reply.
 3. **Finish samples.** For each `sampling` lead (`scout_leads` with stage `sampling`), call `scout_check_sample`. A job still running needs nothing from you: the plugin checks it every few minutes and sends you a message when samples are ready to pitch.
-4. **Pitch.** For each `sampled` lead, while the pitch cap allows, write and send one pitch (below).
+4. **Pitch.** For each `sampled` lead, while the pitch cap allows, write and send one pitch (below). If `scout_pitch` answers that pitching is held on the fallback model, pitch nothing this turn: leave the `sampled` leads for the next turn and carry on with the other steps.
 5. **New samples.** While the sample cap allows: take `found` leads (`scout_leads`, stage `found`), or `scout_search` when there are too few. Pick the leads most likely to pay, then `scout_make_sample` each.
 6. **End the turn** once new samples are started. Do not wait or poll for them: when they finish, a message arrives in this conversation listing them, and you pitch them then.
 7. **End** with a short summary: replies recorded, samples made, pitches sent, anything unusual.
