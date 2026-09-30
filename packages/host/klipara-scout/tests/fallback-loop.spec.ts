@@ -1,30 +1,18 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import Include from '@deepseek-ai/cordis-plugin-include'
-import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import LlmRuntime, { createUserMessage, LlmAdapter, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { createUserMessage, LlmAdapter, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, ResolvedRetryPolicy, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as retry from '@deepseek-ai/dsh-llm-retry'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { FallbackRouter, installFallback, type FallbackSwitch } from '../src/fallback.ts'
 
-let root: string | undefined
 let context: Context | undefined
 
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
-  if (root !== undefined) await rm(root, { recursive: true, force: true })
-  root = undefined
 })
 
 /** A provider that answers with its own name, or fails every request with a quota error while `down`. */
@@ -55,40 +43,14 @@ class NamedAdapter extends LlmAdapter {
 }
 
 async function load(): Promise<Context> {
-  root = await mkdtemp(join(tmpdir(), 'dsh-scout-fallback-'))
-  const configPath = join(root, 'cordis.yml')
-  const names = [
-    '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-session-projection', '@deepseek-ai/dsh-system-prompt',
-    '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-llm-retry', '@deepseek-ai/dsh-agent-loop',
-  ]
-  await writeFile(configPath, `${names.map(name => `- name: '${name}'`).join('\n')}\n`)
   context = new Context()
-  context.baseUrl = `${pathToFileURL(root).href}/`
-  await context.plugin(Loader)
-  context.loader.builtins.include = Include
-  const modules = new Map<string, unknown>([
-    ['@deepseek-ai/dsh-llm', LlmRuntime],
-    ['@deepseek-ai/dsh-session', SessionStore],
-    ['@deepseek-ai/dsh-session-projection', SessionProjectionRegistry],
-    ['@deepseek-ai/dsh-system-prompt', SystemPrompt],
-    ['@deepseek-ai/dsh-tools', ToolRuntime],
-    ['@deepseek-ai/dsh-agent', AgentRegistry],
-    ['@deepseek-ai/dsh-llm-retry', retry],
-    ['@deepseek-ai/dsh-agent-loop', AgentLoop],
-  ])
-  context.loader.internal = {
-    version: 'v2',
-    import(specifier: string) {
-      if (!modules.has(specifier)) return Promise.reject(new Error(`unexpected Loader import: ${specifier}`))
-      return Promise.resolve(modules.get(specifier))
-    },
-  } as NonNullable<typeof context.loader.internal>
-  await context.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
-  await context.loader.await()
+  await mountAgentLoopTestDependencies(context)
+  await context.plugin(retry)
+  await context.plugin(AgentLoop)
   return context
 }
 
-describe('scout fallback in the shipping loop', () => {
+describe('scout fallback in the agent loop', () => {
   it('finishes a scout turn on the fallback after the harness retries give up, and returns to the shift model next turn', { timeout: 60_000 }, async () => {
     const loaded = await load()
     const agy = new NamedAdapter('from agy')

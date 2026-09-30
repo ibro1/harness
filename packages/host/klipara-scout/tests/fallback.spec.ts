@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { FallbackRouter, providerFailure, type FallbackSwitch, type Route } from '../src/fallback.ts'
 
-const agy = { provider: 'agy', model: 'gemini-3.8-flash-medium', reasoningEffort: 'medium' as const }
+const agy = { provider: 'agy', model: 'gemini-3.8-flash-medium', reasoningEffort: ReasoningEffortId('medium') }
 const pickle: Route = { provider: 'opencode', model: 'big-pickle' }
 const quota = { code: 'QUOTA', message: 'Resource exhausted' }
 
