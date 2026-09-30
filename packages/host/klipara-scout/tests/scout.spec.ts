@@ -259,11 +259,11 @@ describe('klipara scout', () => {
 
   it('picks the best-ranked clip that stands alone', () => {
     expect(bestCandidate([
-      { clipId: 'a', rank: 1, totalScore: 1, gatedOut: true, startMs: 0, endMs: 1 },
-      { clipId: 'b', rank: 3, totalScore: 0.5, gatedOut: false, startMs: 0, endMs: 1 },
-      { clipId: 'c', rank: 2, totalScore: 0.6, gatedOut: false, startMs: 0, endMs: 1 },
+      { clipId: 'a', rank: 1, totalScore: 1, gatedOut: true, startMs: 0, endMs: 1, thumbnailUrl: null },
+      { clipId: 'b', rank: 3, totalScore: 0.5, gatedOut: false, startMs: 0, endMs: 1, thumbnailUrl: null },
+      { clipId: 'c', rank: 2, totalScore: 0.6, gatedOut: false, startMs: 0, endMs: 1, thumbnailUrl: null },
     ])?.clipId).toBe('c')
-    expect(bestCandidate([{ clipId: 'a', rank: 1, totalScore: 1, gatedOut: true, startMs: 0, endMs: 1 }])).toBeUndefined()
+    expect(bestCandidate([{ clipId: 'a', rank: 1, totalScore: 1, gatedOut: true, startMs: 0, endMs: 1, thumbnailUrl: null }])).toBeUndefined()
   })
 
   it('runs the shift once per local day, after the start time, in the configured zone', () => {
