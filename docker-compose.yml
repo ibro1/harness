@@ -76,14 +76,15 @@ services:
       DSH_SESSION_TOOLS_MCP: ${DSH_SESSION_TOOLS_MCP:-}
       DSH_AGENT_TOOLS_MCP: ${DSH_AGENT_TOOLS_MCP:-}
       DSH_KLIPARA_SCOUT: ${DSH_KLIPARA_SCOUT:-}
-      # Error reporting to GlitchTip. Empty SENTRY_DSN reports nothing and
-      # loads no SDK. SENTRY_PUBLIC_DSN is the DSN the browser is given
-      # (defaults to SENTRY_DSN); tracing stays off at rate 0.
+      # Error reporting to GlitchTip. Usually set on Plugins -> Error reporting;
+      # any of these set here wins over that page. With no DSN in either place
+      # nothing is reported and no SDK is loaded. Tracing stays off at rate 0.
+      DSH_ERROR_REPORTING: ${DSH_ERROR_REPORTING:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_PUBLIC_DSN: ${SENTRY_PUBLIC_DSN:-}
-      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
       DSH_SCOUT_MCP: ${DSH_SCOUT_MCP:-}
       DSH_OUTREACH_BROWSER: ${DSH_OUTREACH_BROWSER:-}
       DEERFLOW_OUTREACH_MCP_URL: ${DEERFLOW_OUTREACH_MCP_URL:-}

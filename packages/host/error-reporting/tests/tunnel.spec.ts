@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createTunnel, envelopeUrl, parseDsn } from '../src/tunnel.ts'
-import { LogRateLimit, logLineError, messageOnly, skippedLogError } from '../src/index.ts'
+import { effectiveSettings, LogRateLimit, logLineError, messageOnly, skippedLogError } from '../src/index.ts'
 
 const DSN = 'https://0123456789abcdef0123456789abcdef@bug.example.test/42'
 
@@ -115,5 +115,22 @@ describe('log-line reports', () => {
     expect(copy.message).toBe('opencode: Unexpected server error')
     expect(JSON.stringify(Object.entries(copy))).not.toContain('prompt text')
     expect(Object.keys(copy)).toEqual(['name'])
+  })
+})
+
+describe('effective settings', () => {
+  const live = <T>(value: T) => ({ get: () => value })
+  const config = (env: Partial<Record<'envDsn' | 'envEnvironment' | 'envTracesSampleRate', string>>, page: { dsn?: string; environment?: string }) => ({
+    dsn: live(page.dsn ?? ''), publicDsn: live(''), environment: live(page.environment ?? 'production'), release: live(''), tracesSampleRate: live(0),
+    envDsn: env.envDsn ?? '', envPublicDsn: '', envEnvironment: env.envEnvironment ?? '', envRelease: '', envTracesSampleRate: env.envTracesSampleRate ?? '',
+    checkEveryMs: 5000, tunnelPath: '/api/monitor', tunnelMaxBytes: 1, tunnelPerMinute: 1, tunnelTimeoutMs: 1, logEveryMinutes: 5, logPerMinute: 30, trustProxy: false, account: 'admin',
+  })
+
+  it('takes the page DSN, lets each SENTRY_* variable win over its field, and reports the source', () => {
+    expect(effectiveSettings(config({}, {}))).toMatchObject({ dsn: '', source: 'none' })
+    expect(effectiveSettings(config({}, { dsn: 'https://k@bug.linkfa.de/3', environment: 'staging' })))
+      .toMatchObject({ dsn: 'https://k@bug.linkfa.de/3', environment: 'staging', source: 'settings' })
+    expect(effectiveSettings(config({ envDsn: 'https://e@bug.linkfa.de/4', envEnvironment: 'production', envTracesSampleRate: '0.2' }, { dsn: 'https://k@bug.linkfa.de/3', environment: 'staging' })))
+      .toMatchObject({ dsn: 'https://e@bug.linkfa.de/4', environment: 'production', tracesSampleRate: 0.2, source: 'environment' })
   })
 })

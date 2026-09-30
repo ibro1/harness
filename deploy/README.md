@@ -825,21 +825,19 @@ out; `DSH_SCOUT_MCP=0` keeps its tools from agy and opencode.
 ## Error reporting (GlitchTip)
 
 Production errors go to the self-hosted GlitchTip at https://bug.linkfa.de
-(organisation `netinko`, project `harness`, platform Node.js) through
-`packages/host/error-reporting`. Set `SENTRY_DSN` in Dokploy's Environment to
-the project's DSN (never commit it); with it unset the plugin is left out and
-the Sentry SDK is never loaded. The boot log says `sentry_enabled` or
-`sentry_disabled`, never the DSN. Browser reports go through the same-origin
-tunnel `/api/monitor`. Reports are scrubbed of lead and pitch data, prompts,
-model output, cookies, headers, bodies, query values and credentials; see the
-package README for what is reported and tagged.
-
-Send a test event (as the signed-in admin, or from the container):
-
-```sh
-curl -s -X POST -H "Authorization: Bearer $DSH_AUTH_API_TOKEN" http://127.0.0.1:3081/api/monitor/test
-# {"eventId":"…","sent":true}  -> the event appears in GlitchTip, tagged test=true
-```
+(organisation `netinko`, project `harness`, platform Node.js) through the
+`error-reporting` plugin (`packages/host/error-reporting`). Set it up on
+**Plugins -> Error reporting**: paste the project's DSN (GlitchTip: project ->
+Settings -> Client Keys; it already holds the server address) and save. The
+status line turns to "On. Reports go to https://bug.linkfa.de · project N", and
+**Send test error** sends one event to confirm. No redeploy is needed, and the
+DSN is write-only on the page. With no DSN the plugin is idle and the Sentry
+SDK is never loaded. `SENTRY_DSN` (and the other `SENTRY_*` variables) in
+Dokploy's Environment still work and win over the page; `DSH_ERROR_REPORTING=0`
+leaves the plugin out. Browser reports go through the same-origin tunnel
+`/api/monitor`. Reports are scrubbed of lead and pitch data, prompts, model
+output, cookies, headers, bodies, query values and credentials; see the package
+README.
 
 ## Model catalogue
 

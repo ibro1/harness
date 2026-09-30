@@ -1,5 +1,5 @@
 /**
- * The Dokploy, Cloudflare, Postgres and Klipara Scout settings pages, browser half: the
+ * The Dokploy, Cloudflare, Postgres, Klipara Scout and Error reporting settings pages, browser half: the
  * servers, zones, accounts and databases an agent may act on. Each page
  * registers into the Plugins page's `plugins.item` slot while the Host serves
  * its namespace, so a deployment that leaves a plugin out shows no trace of it.
@@ -19,11 +19,13 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { CloudflareCard } from './CloudflareCard.tsx'
 import { DokployCard } from './DokployCard.tsx'
 import { PostgresCard } from './PostgresCard.tsx'
+import { ErrorReportingCard } from './ErrorReportingCard.tsx'
 import { ScoutCard } from './ScoutCard.tsx'
 import { ScoutLeadsPage } from './ScoutLeadsPage.tsx'
 import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-controller.ts'
 import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
 import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
+import { ERROR_REPORTING_NS, ErrorReportingCardController } from './error-reporting-card-controller.ts'
 import { SCOUT_NS, ScoutCardController } from './scout-card-controller.ts'
 import { ScoutModelCatalog } from './scout-model-catalog.ts'
 import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
@@ -32,6 +34,7 @@ export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from
 export type { DokployCardFace, DokployCardState, DokploySettings } from './dokploy-card-controller.ts'
 export type { PostgresCardFace, PostgresCardState, PostgresSettings } from './postgres-card-controller.ts'
 export type { ScoutCardFace, ScoutCardState, ScoutSettings } from './scout-card-controller.ts'
+export type { ErrorReportingCardFace, ErrorReportingCardState, ErrorReportingSettings } from './error-reporting-card-controller.ts'
 export type { OperationsSettingsLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -63,6 +66,7 @@ export function apply(ctx: ClientContext): void {
   const cloudflare = new CloudflareCardController(ctx.configForms.get(CLOUDFLARE_NS))
   const scout = new ScoutCardController(ctx.configForms.get(SCOUT_NS))
   const scoutModels = new ScoutModelCatalog(ctx)
+  const errorReporting = new ErrorReportingCardController(ctx.configForms.get(ERROR_REPORTING_NS))
   // Adapters come and go, and a settings commit elsewhere can change the routes.
   ctx.effect(() => ctx.remote.$on('llm/adapters-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model adapters')
   ctx.effect(() => ctx.remote.$on('settings/document-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model settings')
@@ -71,6 +75,7 @@ export function apply(ctx: ClientContext): void {
     postgres.dispose()
     cloudflare.dispose()
     scout.dispose()
+    errorReporting.dispose()
   }, 'ui-settings-operations: form subscriptions')
 
   ctx.effect(() => ctx.configForms.whileServed([DOKPLOY_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
@@ -89,6 +94,9 @@ export function apply(ctx: ClientContext): void {
       return scout.inject(() => { ctx.get('pluginNavigation')?.openItem(SCOUT_LEADS_ID) }, scoutModels.store, () => { scoutModels.refresh() })
     },
   }, ScoutCard))), 'ui-settings-operations: Klipara Scout page')
+  ctx.effect(() => ctx.configForms.whileServed([ERROR_REPORTING_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'error-reporting', order: 90, label: () => t('errorsTitle'), locale: NS, inject: () => errorReporting.inject(),
+  }, ErrorReportingCard))), 'ui-settings-operations: Error reporting page')
   ctx.effect(() => ctx.configForms.whileServed([SCOUT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: SCOUT_LEADS_ID, order: 81, label: () => t('scoutLeadsPageTitle'), locale: NS,
   }, ScoutLeadsPage))), 'ui-settings-operations: Klipara Scout leads page')

@@ -1,11 +1,14 @@
 /**
- * Production error reporting to a Sentry-compatible server (GlitchTip). The
- * deployment inserts this plugin only when `SENTRY_DSN` is set, and the Sentry
- * SDK is imported only inside `apply`, so an unset DSN loads nothing.
+ * Production error reporting to a Sentry-compatible server (GlitchTip), as a
+ * plugin with its own settings page. The DSN is set on **Plugins → Error
+ * reporting** or through `SENTRY_DSN` in the deployment's environment, which
+ * wins when set. Until a DSN exists the plugin is idle and the Sentry SDK is
+ * not loaded; saving, changing or clearing the DSN starts, restarts or stops
+ * reporting within a few seconds, without a redeploy.
  *
  * Reported, each through the privacy scrubber (`scrub.ts`):
- * - error-level log lines, tagged with the logger (a crashed plugin logs under
- *   its own name), rate-limited per logger and overall;
+ * - a plugin that failed to start or crashed, tagged with its name;
+ * - error-level log lines, tagged with the logger, rate-limited;
  * - uncaught exceptions and unhandled rejections, flushed while the harness
  *   shuts down after its own fatal diagnostic;
  * - route handler failures (`webserver/request-error`);
@@ -22,13 +25,13 @@
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Context, Fiber, FiberState } from '@deepseek-ai/cordis'
+import type { Context, Fiber, FiberState, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-host-klipara-scout'
 import { expectedError, scrubEvent } from './scrub.ts'
-import { createTunnel, parseDsn } from './tunnel.ts'
+import { createTunnel, parseDsn, type Dsn } from './tunnel.ts'
 
 export { expectedError, scrubEvent, scrubString, scrubTag, scrubValue } from './scrub.ts'
 export { createTunnel, envelopeUrl, parseDsn, type Dsn, type TunnelOptions } from './tunnel.ts'
@@ -39,17 +42,28 @@ const FIBER_FAILED = 3 as FiberState.FAILED
 export const name = 'error-reporting'
 export const inject = ['webServer']
 
-/** Composition config; the deployment fills it from `SENTRY_*` variables. */
+/**
+ * Composition config. The `Volatile` fields are edited on the Plugins page;
+ * the `env*` fields carry the deployment's `SENTRY_*` variables, which win when set.
+ */
 export interface Config {
-  /** Where server reports go. Empty: nothing is reported and the SDK is not loaded. */
-  dsn: string
-  /** The DSN handed to the Web UI; empty uses `dsn`. */
-  publicDsn: string
-  environment: string
-  release: string
+  /** Where reports go (`https://<key>@<host>/<project>`). Write-only on the page. Empty with no `SENTRY_DSN`: nothing is reported and the SDK is not loaded. */
+  dsn: Volatile<string>
+  /** The DSN handed to the Web UI; empty uses the DSN. */
+  publicDsn: Volatile<string>
+  environment: Volatile<string>
+  release: Volatile<string>
   /** Share of transactions traced; 0 (the default) turns tracing off. */
-  tracesSampleRate: number
-  /** Same-origin path of the browser tunnel; `<path>/sdk.js` serves the browser reporter and `<path>/test` sends a test event. */
+  tracesSampleRate: Volatile<number>
+  envDsn: string
+  envPublicDsn: string
+  envEnvironment: string
+  envRelease: string
+  /** `SENTRY_TRACES_SAMPLE_RATE` as written; empty defers to the page. */
+  envTracesSampleRate: string
+  /** How often the settings are re-read, so a saved DSN applies without a restart. */
+  checkEveryMs: number
+  /** Same-origin path of the browser tunnel; `<path>/sdk.js`, `<path>/status` and `<path>/test` sit under it. */
   tunnelPath: string
   /** Largest browser envelope forwarded, in bytes. */
   tunnelMaxBytes: number
@@ -68,11 +82,17 @@ export interface Config {
 }
 
 export const Config = z.object({
-  dsn: z.string().default(''),
-  publicDsn: z.string().default(''),
-  environment: z.string().default('production'),
-  release: z.string().default(''),
-  tracesSampleRate: z.number().min(0).max(1).default(0),
+  dsn: z.string().role('secret').default('').volatile(),
+  publicDsn: z.string().default('').volatile(),
+  environment: z.string().default('production').volatile(),
+  release: z.string().default('').volatile(),
+  tracesSampleRate: z.number().min(0).max(1).default(0).volatile(),
+  envDsn: z.string().default(''),
+  envPublicDsn: z.string().default(''),
+  envEnvironment: z.string().default(''),
+  envRelease: z.string().default(''),
+  envTracesSampleRate: z.string().default(''),
+  checkEveryMs: z.natural().min(1000).default(5000),
   tunnelPath: z.string().default('/api/monitor'),
   tunnelMaxBytes: z.natural().default(1024 * 1024),
   tunnelPerMinute: z.natural().default(60),
@@ -82,6 +102,49 @@ export const Config = z.object({
   trustProxy: z.boolean().default(false),
   account: z.string().default('admin'),
 })
+
+/** The settings in force: each field from the environment when set there, else from the page. */
+export interface EffectiveSettings {
+  dsn: string
+  publicDsn: string
+  environment: string
+  release: string
+  tracesSampleRate: number
+  /** Where the DSN came from. */
+  source: 'environment' | 'settings' | 'none'
+}
+
+/**
+ * Resolve the settings in force.
+ * @param config - the plugin config.
+ * @returns the effective settings.
+ */
+export function effectiveSettings(config: Config): EffectiveSettings {
+  const pick = (env: string, page: string | undefined): string => env.trim() !== '' ? env.trim() : (page ?? '').trim()
+  const dsn = pick(config.envDsn, config.dsn.get())
+  const rate = config.envTracesSampleRate.trim() !== '' ? Number(config.envTracesSampleRate) : config.tracesSampleRate.get()
+  return {
+    dsn,
+    publicDsn: pick(config.envPublicDsn, config.publicDsn.get()),
+    environment: pick(config.envEnvironment, config.environment.get()) || 'production',
+    release: pick(config.envRelease, config.release.get()),
+    tracesSampleRate: Number.isFinite(rate) && rate >= 0 && rate <= 1 ? rate : 0,
+    source: config.envDsn.trim() !== '' ? 'environment' : dsn !== '' ? 'settings' : 'none',
+  }
+}
+
+/** What the settings page shows: where reports go, never the key. */
+export interface ReportingStatus {
+  enabled: boolean
+  source: EffectiveSettings['source']
+  /** The GlitchTip server and project, from the DSN. */
+  host?: string
+  projectId?: string
+  environment?: string
+  release?: string
+  /** Why a configured DSN is not in use, e.g. it does not parse. */
+  error?: string
+}
 
 /** The plugin a Session belongs to, from its id prefix. */
 function sessionPlugin(sessionId: string): string {
@@ -164,50 +227,119 @@ export function messageOnly(error: unknown): Error {
   return copy
 }
 
+/** One started SDK and what it was started with. */
+interface Active {
+  key: string
+  dsn: Dsn
+  browserDsn: Dsn
+  settings: EffectiveSettings
+  tunnel: (req: IncomingMessage, res: ServerResponse) => Promise<void>
+}
+
 /**
- * Install reporting.
+ * Install reporting. Listeners and routes are installed at once and do
+ * nothing while no DSN is in force; the SDK is loaded with the first DSN.
  * @param ctx - the plugin context.
- * @param config - the DSN and limits.
+ * @param config - the DSN, limits and deployment overrides.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
-  if (config.dsn.trim() === '') {
-    process.stderr.write('error-reporting: sentry_disabled\n')
-    return
-  }
-  const dsn = parseDsn(config.dsn)
-  const browserDsn = parseDsn(config.publicDsn.trim() === '' ? config.dsn : config.publicDsn)
-  const Sentry = await import('@sentry/node')
+  type SentryModule = typeof import('@sentry/node')
+  let Sentry: SentryModule | undefined
+  let active: Active | undefined
+  let status: ReportingStatus = { enabled: false, source: 'none' }
   const userId = createHash('sha256').update(config.account).digest('hex').slice(0, 12)
   // Strings a report must not carry, keyed by the error they travel with.
   const redactions = new WeakMap<object, readonly string[]>()
-  const tracing = config.tracesSampleRate > 0
+  const tunnelPath = config.tunnelPath.replace(/\/+$/u, '')
 
-  Sentry.init({
-    dsn: dsn.canonical,
-    environment: config.environment,
-    ...config.release === '' ? {} : { release: config.release },
-    // Only the integrations named here run: no sessions, no request or console
-    // capture, no local variables, no automatic process handlers (the harness
-    // owns its own fatal exit, and the listeners below only report).
-    defaultIntegrations: false,
-    integrations: [Sentry.linkedErrorsIntegration(), Sentry.dedupeIntegration(), Sentry.functionToStringIntegration()],
-    skipOpenTelemetrySetup: !tracing,
-    ...tracing ? { tracesSampleRate: config.tracesSampleRate } : {},
-    sendClientReports: false,
-    maxBreadcrumbs: 0,
-    beforeBreadcrumb: () => null,
-    initialScope: { user: { id: userId }, tags: { runtime: 'node' } },
-    beforeSend: (event, hint) => {
-      const original = hint.originalException
-      if (expectedError(original)) return null
-      const named = typeof original === 'object' && original !== null ? redactions.get(original) ?? [] : []
-      return scrubEvent(event, named) as typeof event
-    },
-  })
-  process.stderr.write(`error-reporting: sentry_enabled environment=${config.environment}${config.release === '' ? '' : ` release=${config.release}`} tunnel=${config.tunnelPath}\n`)
+  const stop = async (): Promise<void> => {
+    if (active === undefined || Sentry === undefined) return
+    active = undefined
+    await Sentry.close(2000)
+  }
+
+  const start = async (settings: EffectiveSettings, key: string): Promise<void> => {
+    let dsn: Dsn
+    let browserDsn: Dsn
+    try {
+      dsn = parseDsn(settings.dsn)
+      browserDsn = parseDsn(settings.publicDsn === '' ? settings.dsn : settings.publicDsn)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      status = { enabled: false, source: settings.source, error: reason }
+      process.stderr.write(`error-reporting: sentry_disabled (${reason})\n`)
+      return
+    }
+    Sentry ??= await import('@sentry/node')
+    const tracing = settings.tracesSampleRate > 0
+    Sentry.init({
+      dsn: dsn.canonical,
+      environment: settings.environment,
+      ...settings.release === '' ? {} : { release: settings.release },
+      // Only the integrations named here run: no sessions, no request or console
+      // capture, no local variables, no automatic process handlers (the harness
+      // owns its own fatal exit, and the listeners below only report).
+      defaultIntegrations: false,
+      integrations: [Sentry.linkedErrorsIntegration(), Sentry.dedupeIntegration(), Sentry.functionToStringIntegration()],
+      skipOpenTelemetrySetup: !tracing,
+      ...tracing ? { tracesSampleRate: settings.tracesSampleRate } : {},
+      sendClientReports: false,
+      maxBreadcrumbs: 0,
+      beforeBreadcrumb: () => null,
+      initialScope: { user: { id: userId }, tags: { runtime: 'node' } },
+      beforeSend: (event, hint) => {
+        const original = hint.originalException
+        if (expectedError(original)) return null
+        const named = typeof original === 'object' && original !== null ? redactions.get(original) ?? [] : []
+        return scrubEvent(event, named) as typeof event
+      },
+    })
+    active = {
+      key, dsn, browserDsn, settings,
+      tunnel: createTunnel({
+        dsn: browserDsn,
+        maxBytes: config.tunnelMaxBytes,
+        perMinute: config.tunnelPerMinute,
+        timeoutMs: config.tunnelTimeoutMs,
+        trustProxy: config.trustProxy,
+      }),
+    }
+    status = {
+      enabled: true, source: settings.source, host: dsn.origin, projectId: dsn.projectId, environment: settings.environment,
+      ...settings.release === '' ? {} : { release: settings.release },
+    }
+    process.stderr.write(`error-reporting: sentry_enabled source=${settings.source} host=${new URL(dsn.origin).host} project=${dsn.projectId} environment=${settings.environment}${settings.release === '' ? '' : ` release=${settings.release}`}\n`)
+  }
+
+  // Settings are re-read on a timer: a volatile field has no change signal,
+  // and a DSN saved on the page must apply without a restart.
+  let syncing: Promise<void> = Promise.resolve()
+  let lastKey: string | undefined
+  const sync = (): Promise<void> => {
+    syncing = syncing.then(async () => {
+      const settings = effectiveSettings(config)
+      const key = JSON.stringify([settings.dsn, settings.publicDsn, settings.environment, settings.release, settings.tracesSampleRate])
+      if (key === lastKey) return
+      lastKey = key
+      await stop()
+      if (settings.dsn === '') {
+        status = { enabled: false, source: 'none' }
+        process.stderr.write('error-reporting: sentry_disabled (no DSN: set one on Plugins -> Error reporting or SENTRY_DSN)\n')
+        return
+      }
+      await start(settings, key)
+    }).catch((error: unknown) => {
+      process.stderr.write(`error-reporting: could not apply the settings: ${error instanceof Error ? error.message : String(error)}\n`)
+    })
+    return syncing
+  }
+  await sync()
+  const timer = setInterval(() => { void sync() }, config.checkEveryMs)
+  timer.unref()
+  ctx.effect(() => () => { clearInterval(timer) }, 'error-reporting: settings check')
 
   const report = (error: unknown, tags: Record<string, string | undefined>, named: readonly string[] = []): void => {
-    if (expectedError(error)) return
+    if (active === undefined || Sentry === undefined || expectedError(error)) return
     const reported = error instanceof Error ? error : messageOnly(error)
     if (named.length > 0) redactions.set(reported, named)
     // Tags travel with this one event: the SDK runs without async context here,
@@ -235,7 +367,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   ctx.effect(() => ctx.logger.exporter({
     levels: { default: 0 },
     export: (message) => {
-      if (message.type !== 'error' || message.name === name) return
+      if (active === undefined || message.type !== 'error' || message.name === name) return
       const error = logLineError(message.args)
       if (skippedLogError(error) || !limit.admit(message.name)) return
       report(error, { source: 'log', logger: message.name, plugin: message.name })
@@ -277,34 +409,40 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }, failure.redact)
   })
 
-  // The Web UI: settings injected per request, the bundle served on demand.
-  const tunnelPath = config.tunnelPath.replace(/\/+$/u, '')
+  // The Web UI: settings injected per page render while reporting is on.
   ctx.on('webserver/index-inject', (table) => {
+    if (active === undefined) return
     table.push({
       kind: 'global',
       name: '__DSH_SENTRY__',
       value: {
-        dsn: browserDsn.canonical, tunnel: tunnelPath, environment: config.environment, userId,
-        ...config.release === '' ? {} : { release: config.release },
+        dsn: active.browserDsn.canonical, tunnel: tunnelPath, environment: active.settings.environment, userId,
+        ...active.settings.release === '' ? {} : { release: active.settings.release },
       },
     })
     table.push({ kind: 'script-src', placement: 'head', src: `${tunnelPath}/sdk.js` })
   })
 
-  const tunnel = createTunnel({
-    dsn: browserDsn,
-    maxBytes: config.tunnelMaxBytes,
-    perMinute: config.tunnelPerMinute,
-    timeoutMs: config.tunnelTimeoutMs,
-    trustProxy: config.trustProxy,
-  })
-  ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: tunnelPath, handler: tunnel }), 'error-reporting: tunnel')
+  const json = (res: ServerResponse, code: number, body: unknown): void => {
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify(body))
+  }
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: tunnelPath,
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      if (active === undefined) { json(res, 404, { error: 'error reporting is off' }); return }
+      await active.tunnel(req, res)
+    },
+  }), 'error-reporting: tunnel')
 
   let bundle: Promise<string> | undefined
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: `${tunnelPath}/sdk.js`,
     handler: async (_req: IncomingMessage, res: ServerResponse) => {
+      if (active === undefined) { res.writeHead(404); res.end(); return }
       bundle ??= buildBrowserBundle()
       try {
         const code = await bundle
@@ -319,22 +457,36 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   }), 'error-reporting: browser reporter')
 
-  // Admin check: signed-in POST sends one test event and waits for it to leave.
+  // The settings page's status line: where reports go, never the key.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: `${tunnelPath}/status`,
+    handler: async (_req: IncomingMessage, res: ServerResponse) => {
+      await sync()
+      json(res, 200, status)
+    },
+  }), 'error-reporting: status route')
+
+  // Admin check: a signed-in POST sends one test event and waits for it to leave.
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: `${tunnelPath}/test`,
     handler: async (req: IncomingMessage, res: ServerResponse) => {
       if (req.method !== 'POST') { res.writeHead(405); res.end(); return }
+      await sync()
+      if (active === undefined || Sentry === undefined) {
+        json(res, 409, { sent: false, error: status.error ?? 'Error reporting is off: save a DSN first.' })
+        return
+      }
       const eventId = Sentry.captureException(new Error('Harness error-reporting test event'), { tags: { test: 'true', source: 'test' } })
       const sent = await Sentry.flush(5000)
       process.stderr.write(`error-reporting: test event ${eventId} ${sent ? 'sent' : 'not confirmed within 5s'}\n`)
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ eventId, sent }))
+      json(res, 200, { eventId, sent })
     },
   }), 'error-reporting: test route')
 
   ctx.effect(() => async () => {
-    await Sentry.close(2000)
+    await stop()
   }, 'error-reporting: flush on shutdown')
 }
 

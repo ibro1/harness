@@ -531,12 +531,15 @@ fi
 patch_args+=(--patch "$APP_DIR/deploy/plugins/bg-notify.cordis.yml")
 echo "[entrypoint] Background notify route enabled at /bg-notify (jobs POST \$DSH_NOTIFY_URL to wake the session)"
 
-# Error reporting (packages/host/error-reporting): the plugin and the Sentry SDK
-# load only with a DSN. The DSN itself is never printed.
-if [[ -n "${SENTRY_DSN//[[:space:]]/}" ]]; then
-  echo "[entrypoint] sentry_enabled (environment ${SENTRY_ENVIRONMENT:-production}; browser reports via /api/monitor)"
+# Error reporting (packages/host/error-reporting): configured on Plugins ->
+# Error reporting, or by SENTRY_DSN, which wins. The plugin logs
+# sentry_enabled / sentry_disabled itself; the DSN is never printed.
+if [[ "${DSH_ERROR_REPORTING:-}" == "0" ]]; then
+  echo "[entrypoint] error reporting left out (DSH_ERROR_REPORTING=0)"
+elif [[ -n "${SENTRY_DSN//[[:space:]]/}" ]]; then
+  echo "[entrypoint] error reporting: DSN from SENTRY_DSN (overrides Plugins -> Error reporting)"
 else
-  echo "[entrypoint] sentry_disabled (SENTRY_DSN unset)"
+  echo "[entrypoint] error reporting: DSN from Plugins -> Error reporting, if one is saved"
 fi
 
 trusted_args=(--trusted-host "$DSH_PUBLIC_HOST")
