@@ -2605,6 +2605,9 @@ importers:
       '@deepseek-ai/dsh-host-dokploy':
         specifier: workspace:*
         version: link:../../host/dokploy
+      '@deepseek-ai/dsh-host-error-reporting':
+        specifier: workspace:*
+        version: link:../../host/error-reporting
       '@deepseek-ai/dsh-host-frontend-static':
         specifier: workspace:*
         version: link:../../host/frontend-static
