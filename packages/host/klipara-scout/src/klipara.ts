@@ -2,7 +2,8 @@
  * The three Klipara API calls a sample needs: start an analysis job (free),
  * read the job and its ranked clips (free), and export the best clip, which
  * spends one Klip of the workspace balance and returns a download link that
- * expires within the hour. Every call carries the workspace's API key.
+ * expires within the hour. Candidates and exports also carry the clip's designed
+ * cover as a link that expires as soon. Every call carries the workspace's API key.
  */
 
 /** Where one analysis job stands. */
@@ -23,6 +24,8 @@ export interface KliparaCandidate {
   gatedOut: boolean
   startMs: number
   endMs: number
+  /** Signed link to the clip's designed cover (about an hour), or null when it has none. */
+  thumbnailUrl: string | null
 }
 
 /** The Klipara API as the scout uses it. */
@@ -30,7 +33,7 @@ export interface KliparaApi {
   startJob(videoUrl: string, signal: AbortSignal): Promise<KliparaJob>
   getJob(jobId: string, signal: AbortSignal): Promise<KliparaJob>
   candidates(jobId: string, signal: AbortSignal): Promise<KliparaCandidate[]>
-  exportClip(clipId: string, signal: AbortSignal): Promise<{ downloadUrl: string; charged: string }>
+  exportClip(clipId: string, signal: AbortSignal): Promise<{ downloadUrl: string; thumbnailUrl: string | null; charged: string }>
 }
 
 /** Best-effort record read. */
@@ -103,13 +106,14 @@ export function kliparaClient(base: string, apiKey: () => string, timeoutMs: num
         gatedOut: row['gated_out'] === true,
         startMs: typeof row['start_ms'] === 'number' ? row['start_ms'] : 0,
         endMs: typeof row['end_ms'] === 'number' ? row['end_ms'] : 0,
+        thumbnailUrl: text(row['thumbnail_url']) || null,
       }])
     },
     async exportClip(clipId, signal) {
       const body = await call('POST', `/clips/${encodeURIComponent(clipId)}/export`, signal, { aspect: '9:16' }, `scout-export:${clipId}`)
       const downloadUrl = text(body['download_url'])
       if (downloadUrl === '') throw new Error(`Klipara exported ${clipId} but returned no download link; export it again to get one.`)
-      return { downloadUrl, charged: JSON.stringify(body['charged'] ?? body['charge'] ?? '') }
+      return { downloadUrl, thumbnailUrl: text(body['thumbnail_url']) || null, charged: JSON.stringify(body['charged'] ?? body['charge'] ?? '') }
     },
   }
 }

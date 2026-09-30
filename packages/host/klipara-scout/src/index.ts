@@ -22,8 +22,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ParameterSchemaSpec, PreToolDecision, ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { bestCandidate, kliparaClient, type KliparaApi } from './klipara.ts'
-import { serveSample, storeSample } from './samples.ts'
+import { bestCandidate, kliparaClient, type KliparaApi, type KliparaCandidate } from './klipara.ts'
+import { samplePosterSource, serveSample, setSampleCover, storeSample } from './samples.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -242,7 +242,7 @@ export async function finishSample(deps: ScoutDeps, channelId: string, signal: A
     title: lead.videoTitle ?? '',
     creatorName: lead.channelName,
     sourceVideoUrl: lead.videoUrl ?? '',
-  }, signal)
+  }, signal, { clipId: best.clipId, coverUrl: exported.thumbnailUrl ?? best.thumbnailUrl })
   const samplePageUrl = `${deps.sampleBase()}/${sampleId}`
   await deps.store.update((s) => {
     const l = find(s)
@@ -254,6 +254,43 @@ export async function finishSample(deps: ScoutDeps, channelId: string, signal: A
     outcome: 'ready',
     text: `Sample ready for ${lead.channelName}: ${samplePageUrl} (clip ${String(Math.round(best.startMs / 1000))}s–${String(Math.round(best.endMs / 1000))}s of "${lead.videoTitle ?? ''}"). Pitch it with scout_pitch.`,
   }
+}
+
+/**
+ * Put Klipara's designed cover on samples that still show a frame, when their
+ * clip has one. Reading a job's candidates is free and returns fresh cover
+ * links; a sample whose clip has no cover keeps its frame and is not asked
+ * about again until the next start.
+ * @param deps - the store and Klipara client.
+ * @param signal - cancels the calls.
+ * @returns how many samples got their cover.
+ */
+export async function backfillCovers(deps: ScoutDeps, signal: AbortSignal): Promise<number> {
+  const state = await deps.store.read()
+  const byJob = new Map<string, { sampleId: string; clipId: string }[]>()
+  for (const lead of state.leads) {
+    if (lead.sampleId === undefined || lead.jobId === undefined) continue
+    if (await samplePosterSource(deps.samplesDir, lead.sampleId) === 'cover') continue
+    // Samples stored before records named their clip: the history line that made them does.
+    const clipId = lead.history.map(h => /^clip (\S+) /u.exec(h.note ?? '')?.[1]).find(id => id !== undefined)
+    if (clipId === undefined) continue
+    byJob.set(lead.jobId, [...byJob.get(lead.jobId) ?? [], { sampleId: lead.sampleId, clipId }])
+  }
+  let covered = 0
+  for (const [jobId, samples] of byJob) {
+    let candidates: KliparaCandidate[]
+    try {
+      candidates = await deps.klipara.candidates(jobId, signal)
+    } catch (error) {
+      process.stderr.write(`klipara-scout: no covers for job ${jobId}: ${error instanceof Error ? error.message : String(error)}\n`)
+      continue
+    }
+    for (const { sampleId, clipId } of samples) {
+      const cover = candidates.find(c => c.clipId === clipId)?.thumbnailUrl
+      if (cover && await setSampleCover(deps.samplesDir, sampleId, cover, signal)) covered++
+    }
+  }
+  return covered
 }
 
 /**
@@ -793,6 +830,18 @@ export function apply(ctx: Context, config: Config): void {
   }
   const watcher = setInterval(() => { void watch() }, config.sampleCheckMs)
   ctx.effect(() => () => { clearInterval(watcher) })
+
+  // Samples made before Klipara returned covers show a frame; once per start,
+  // shortly after boot, swap in the cover where the clip has one.
+  const backfill = setTimeout(() => {
+    if (config.kliparaApiKey.get().trim() === '') return
+    backfillCovers(deps, AbortSignal.timeout(10 * 60_000)).then((covered) => {
+      if (covered > 0) process.stderr.write(`klipara-scout: put Klipara's cover on ${String(covered)} earlier sample(s)\n`)
+    }, (error: unknown) => {
+      process.stderr.write(`klipara-scout: cover backfill failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    })
+  }, 30_000)
+  ctx.effect(() => () => { clearTimeout(backfill) })
 
   // Reply checks: while any pitch awaits an answer, ask the shift to look at the
   // Gmail inbox and YouTube notifications every few minutes. Each check is a

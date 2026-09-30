@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { apply, bestCandidate, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
+import { apply, backfillCovers, bestCandidate, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 
@@ -52,8 +52,15 @@ afterEach(async () => {
 })
 
 /** Serve a fake clip file and return its URL. */
+/** A designed cover as Klipara serves it: JPEG bytes. */
+const COVER = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.from('designed-cover')])
+
 async function clipServer(): Promise<string> {
-  server = createServer((_req, res) => { res.writeHead(200, { 'Content-Type': 'video/mp4' }); res.end(Buffer.from('fake-mp4')) })
+  server = createServer((req, res) => {
+    if (req.url === '/cover.jpg') { res.writeHead(200, { 'Content-Type': 'image/jpeg' }); res.end(COVER); return }
+    if (req.url === '/gone.jpg') { res.writeHead(403); res.end(); return }
+    res.writeHead(200, { 'Content-Type': 'video/mp4' }); res.end(Buffer.from('fake-mp4'))
+  })
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const address = server.address()
@@ -61,17 +68,17 @@ async function clipServer(): Promise<string> {
   return `http://127.0.0.1:${String(address.port)}/clip.mp4`
 }
 
-function klipara(downloadUrl: string, state = 'succeeded'): KliparaApi & { exports: string[] } {
+function klipara(downloadUrl: string, state = 'succeeded', cover: string | null = null): KliparaApi & { exports: string[] } {
   const exports: string[] = []
   return {
     exports,
     startJob: () => Promise.resolve({ id: 'job_1', state: 'queued' }),
     getJob: () => Promise.resolve({ id: 'job_1', state }),
     candidates: () => Promise.resolve([
-      { clipId: 'clp_gated', rank: 1, totalScore: 0.9, gatedOut: true, startMs: 0, endMs: 30_000 },
-      { clipId: 'clp_good', rank: 2, totalScore: 0.8, gatedOut: false, startMs: 60_000, endMs: 105_000 },
+      { clipId: 'clp_gated', rank: 1, totalScore: 0.9, gatedOut: true, startMs: 0, endMs: 30_000, thumbnailUrl: null },
+      { clipId: 'clp_good', rank: 2, totalScore: 0.8, gatedOut: false, startMs: 60_000, endMs: 105_000, thumbnailUrl: cover },
     ]),
-    exportClip: (clipId) => { exports.push(clipId); return Promise.resolve({ downloadUrl, charged: '1' }) },
+    exportClip: (clipId) => { exports.push(clipId); return Promise.resolve({ downloadUrl, thumbnailUrl: cover, charged: '1' }) },
   }
 }
 
@@ -134,6 +141,39 @@ describe('klipara scout', () => {
     const check = await finishSample(deps, 'UC_small', exec.signal)
     expect(check.outcome).toBe('ready')
     expect((await deps.store.read()).leads.find(l => l.channelId === 'UC_small')!.stage).toBe('sampled')
+  })
+
+  it('uses Klipara\'s designed cover as the poster, and a frame when the cover cannot be fetched', async () => {
+    const url = await clipServer()
+    const cover = url.replace('clip.mp4', 'cover.jpg')
+    const { run, deps } = setup({ klipara: klipara(url, 'succeeded', cover) })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    await run('scout_check_sample', { channel_id: 'UC_small' })
+    const id = (await deps.store.read()).leads[0]!.sampleId ?? ''
+    expect(readFileSync(join(deps.samplesDir, `${id}.jpg`))).toEqual(COVER)
+    expect(JSON.parse(readFileSync(join(deps.samplesDir, `${id}.meta.json`), 'utf8'))).toMatchObject({ clipId: 'clp_good', poster: 'cover' })
+
+    const second = setup({ klipara: klipara(url, 'succeeded', url.replace('clip.mp4', 'gone.jpg')) })
+    await second.run('scout_search')
+    await second.run('scout_make_sample', { channel_id: 'UC_small' })
+    expect(await second.run('scout_check_sample', { channel_id: 'UC_small' })).toContain('Sample ready')
+    const other = (await second.deps.store.read()).leads[0]!.sampleId ?? ''
+    expect(JSON.parse(readFileSync(join(second.deps.samplesDir, `${other}.meta.json`), 'utf8'))).toMatchObject({ poster: 'frame' })
+  })
+
+  it('backfills the cover onto a sample made before covers, and leaves one without a cover alone', async () => {
+    const url = await clipServer()
+    const { run, deps } = setup({ klipara: klipara(url) })
+    await run('scout_search')
+    await run('scout_make_sample', { channel_id: 'UC_small' })
+    await run('scout_check_sample', { channel_id: 'UC_small' })
+    const id = (await deps.store.read()).leads[0]!.sampleId ?? ''
+    expect(await backfillCovers(deps, exec.signal)).toBe(0)
+    deps.klipara = klipara(url, 'succeeded', url.replace('clip.mp4', 'cover.jpg'))
+    expect(await backfillCovers(deps, exec.signal)).toBe(1)
+    expect(readFileSync(join(deps.samplesDir, `${id}.jpg`))).toEqual(COVER)
+    expect(await backfillCovers(deps, exec.signal)).toBe(0)
   })
 
   it('refuses a sample past the daily cap', async () => {

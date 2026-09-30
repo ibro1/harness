@@ -1,12 +1,14 @@
 /**
  * Sample hosting. Klipara's export link expires within the hour, shorter than
  * a creator takes to open a pitch, so each exported clip is copied into the
- * scout's directory at once with a poster frame and a small metadata record,
- * and served from the harness under an unguessable id:
+ * scout's directory at once with a poster and a small metadata record, and
+ * served from the harness under an unguessable id. The poster is Klipara's
+ * designed cover for the clip when it has one (its link expires as fast, so it
+ * is copied too), else a frame cut one second in:
  *
  * - `<prefix>/<id>`       an HTML page that plays the clip
  * - `<prefix>/<id>.mp4`   the clip, with range requests
- * - `<prefix>/<id>.jpg`   the poster frame
+ * - `<prefix>/<id>.jpg`   the poster
  * - `<prefix>/<id>.json`  public, read-only metadata for the page Klipara serves
  *
  * An id is 11 base64url characters, 64 random bits, and is the only thing that
@@ -18,12 +20,14 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 
 /** Largest sample accepted, so one bad link cannot fill the volume. */
 const MAX_SAMPLE_BYTES = 200 * 1024 * 1024
+/** Largest cover accepted. */
+const MAX_COVER_BYTES = 10 * 1024 * 1024
 
 /** A short id (11 base64url characters) or a legacy one (32 hex characters). */
 const SAMPLE_ID = /^(?:[A-Za-z0-9_-]{11}|[0-9a-f]{32})$/u
@@ -39,6 +43,20 @@ export interface SampleMeta {
 interface StoredMeta extends SampleMeta {
   id: string
   createdAt: string
+  /** The Klipara clip the sample was exported from; not served. */
+  clipId?: string
+  /** Where the poster came from: Klipara's designed cover, or a frame of the clip; not served. */
+  poster?: 'cover' | 'frame'
+}
+
+/** What `storeSample` is told beyond the public record. */
+export interface StoreOptions {
+  /** The Klipara clip, kept in the record so a later cover can be found for it. */
+  clipId?: string
+  /** Signed link to the clip's designed cover, or null when it has none. */
+  coverUrl?: string | null
+  /** The creation time. */
+  now?: Date
 }
 
 /** How sample requests are answered. */
@@ -79,15 +97,86 @@ function cutPoster(video: string, poster: string): Promise<boolean> {
 }
 
 /**
+ * Copy Klipara's designed cover to the sample's poster, replacing what is
+ * there only once the whole image is in. A cover that is not JPEG is re-encoded.
+ * @param url - the signed cover link.
+ * @param poster - where the JPEG goes.
+ * @param signal - cancels the download.
+ * @returns whether the poster is now the cover; a failure leaves the old poster in place.
+ */
+export async function fetchCover(url: string, poster: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]) })
+    if (!response.ok) return false
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length === 0 || bytes.length > MAX_COVER_BYTES) return false
+    const partial = `${poster}.part`
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+      await writeFile(partial, bytes, { mode: 0o600 })
+    } else {
+      const source = `${poster}.src`
+      await writeFile(source, bytes, { mode: 0o600 })
+      const converted = await new Promise<boolean>((resolve) => {
+        execFile('ffmpeg', ['-y', '-loglevel', 'error', '-i', source, '-frames:v', '1', '-q:v', '2', '-f', 'mjpeg', partial], { timeout: 60_000 }, (error) => { resolve(error === null) })
+      })
+      await rm(source, { force: true })
+      if (!converted) { await rm(partial, { force: true }); return false }
+    }
+    await rename(partial, poster)
+    return true
+  } catch {
+    // An expired link, a network failure or a cancelled shift: the frame stays.
+    return false
+  }
+}
+
+/**
+ * Put Klipara's cover on an existing sample and note it in the record.
+ * @param dir - the samples directory.
+ * @param id - the sample id.
+ * @param coverUrl - the signed cover link.
+ * @param signal - cancels the download.
+ * @returns whether the cover is now the poster.
+ */
+export async function setSampleCover(dir: string, id: string, coverUrl: string, signal: AbortSignal): Promise<boolean> {
+  if (!SAMPLE_ID.test(id)) return false
+  const recordPath = join(dir, `${id}.meta.json`)
+  const record = JSON.parse(await readFile(recordPath, 'utf8')) as StoredMeta
+  if (!await fetchCover(coverUrl, join(dir, `${id}.jpg`), signal)) return false
+  record.poster = 'cover'
+  await writeFile(`${recordPath}.part`, `${JSON.stringify(record)}\n`, { mode: 0o600 })
+  await rename(`${recordPath}.part`, recordPath)
+  return true
+}
+
+/**
+ * Where a sample's poster came from, as its record says.
+ * @param dir - the samples directory.
+ * @param id - the sample id.
+ * @returns `cover`, `frame`, or undefined for a sample stored before posters were noted, or none.
+ */
+export async function samplePosterSource(dir: string, id: string): Promise<'cover' | 'frame' | undefined> {
+  if (!SAMPLE_ID.test(id)) return undefined
+  try {
+    return (JSON.parse(await readFile(join(dir, `${id}.meta.json`), 'utf8')) as StoredMeta).poster
+  } catch {
+    // No record: treat as not noted.
+    return undefined
+  }
+}
+
+/**
  * Download one exported clip into the samples directory, with its poster and record.
  * @param dir - the samples directory.
  * @param url - Klipara's signed download link.
  * @param meta - the public fields of the record.
  * @param signal - cancels the download.
- * @param now - the creation time.
+ * @param options - the clip, its cover link and the creation time.
  * @returns the new sample's id.
  */
-export async function storeSample(dir: string, url: string, meta: SampleMeta, signal: AbortSignal, now = new Date()): Promise<string> {
+export async function storeSample(
+  dir: string, url: string, meta: SampleMeta, signal: AbortSignal, options: StoreOptions = {},
+): Promise<string> {
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`Downloading the exported clip failed with HTTP ${String(response.status)}.`)
   const declared = Number(response.headers.get('content-length') ?? '0')
@@ -99,8 +188,14 @@ export async function storeSample(dir: string, url: string, meta: SampleMeta, si
   const partial = join(dir, `${id}.mp4.part`)
   await writeFile(partial, bytes, { mode: 0o600 })
   await rename(partial, join(dir, `${id}.mp4`))
-  await cutPoster(join(dir, `${id}.mp4`), join(dir, `${id}.jpg`))
-  const record: StoredMeta = { id, ...meta, createdAt: now.toISOString() }
+  const poster = join(dir, `${id}.jpg`)
+  const cover = options.coverUrl ? await fetchCover(options.coverUrl, poster, signal) : false
+  if (!cover) await cutPoster(join(dir, `${id}.mp4`), poster)
+  const record: StoredMeta = {
+    id, ...meta, createdAt: (options.now ?? new Date()).toISOString(),
+    ...options.clipId === undefined ? {} : { clipId: options.clipId },
+    poster: cover ? 'cover' : 'frame',
+  }
   await writeFile(join(dir, `${id}.meta.json`), `${JSON.stringify(record)}\n`, { mode: 0o600 })
   return id
 }
@@ -241,7 +336,8 @@ export async function serveSample(
     'Content-Length': String(end - start + 1),
     'Accept-Ranges': 'bytes',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
-    'Cache-Control': 'public, max-age=3600',
+    // A poster can change once, when a cover replaces the frame, so it is kept for less time than the clip.
+    'Cache-Control': kind === 'jpg' ? 'public, max-age=300' : 'public, max-age=3600',
     ...range === null ? {} : { 'Content-Range': `bytes ${String(start)}-${String(end)}/${String(size)}` },
   })
   if (req.method === 'HEAD') {
