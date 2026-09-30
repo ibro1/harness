@@ -249,6 +249,7 @@ const server = createServer(async (req, res) => {
       // session, a skill can link back to its workspace, and the
       // background-notify hook can wake it.
       const sessionId = sessionIdOf(req, body)
+      console.log(`[OpenCode] session=${sessionId || '-'}`)
       const childEnv = sessionId !== undefined
         ? { ...ENV, DSH_SESSION_ID: sessionId }
         : ENV

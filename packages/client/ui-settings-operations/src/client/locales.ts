@@ -6,7 +6,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
+  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -79,7 +79,7 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.shiftModel.hint': 'The model the shift runs on. Your default model is used when none is chosen.',
   'scout.shiftModel.none': 'Default model',
   'scout.fallbackModelPick': 'Fallback model',
-  'scout.fallbackModelPick.hint': 'When the shift model fails (quota, rate limit, server error), the turn retries on this model; the next turn tries the shift model again.',
+  'scout.fallbackModelPick.hint': 'When the shift model fails (quota, rate limit, server error), scout turns move to this model until its quota resets or the cooldown ends, then try the shift model again.',
   'scout.fallbackModelPick.none': 'No fallback',
   'scoutInvalid': 'Not a value this setting accepts.',
   'scout.enabled': 'Run the daily shift',
@@ -120,6 +120,8 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.fallbackProvider.hint': 'When the shift model fails (quota, rate limit, server error), the turn retries on this provider and model. Leave either empty to turn the fallback off.',
   'scout.fallbackModel': 'Fallback model',
   'scout.fallbackModel.hint': 'The model id for the fallback, for example big-pickle. The next turn tries the shift model again.',
+  'scout.fallbackCooldownMinutes': 'Fallback cooldown (minutes)',
+  'scout.fallbackCooldownMinutes.hint': 'How long scout turns stay on the fallback after the shift model fails. A spent quota uses its stated reset time instead (for example "Resets in 1h56m"), and skips the retries.',
   'scout.fallbackPitches': 'Pitch on the fallback model',
   'scout.fallbackPitches.hint': 'Off: a turn on the fallback model checks replies and makes samples, and pitches wait for the shift model. On: it pitches too.',
   'scout.sampleHeadline': 'Sample page headline',
@@ -191,7 +193,7 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.shiftModel.hint': '班次使用的模型。未选择时使用默认模型。',
   'scout.shiftModel.none': '默认模型',
   'scout.fallbackModelPick': '备用模型',
-  'scout.fallbackModelPick.hint': '班次模型失败（额度、限流、服务器错误）时，本轮改用此模型重试；下一轮会重新尝试班次模型。',
+  'scout.fallbackModelPick.hint': '班次模型失败（额度、限流、服务器错误）时，侦察回合改用此模型，直到额度重置或冷却结束，再重新尝试班次模型。',
   'scout.fallbackModelPick.none': '不使用备用',
   'scoutInvalid': '该设置不接受此值。',
   'scout.enabled': '运行每日班次',
@@ -232,6 +234,8 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.fallbackProvider.hint': '班次模型失败（额度、限流、服务器错误）时，本轮改用此提供方和模型重试。任一留空则关闭备用。',
   'scout.fallbackModel': '备用模型',
   'scout.fallbackModel.hint': '备用模型 id，例如 big-pickle。下一轮会重新尝试班次模型。',
+  'scout.fallbackCooldownMinutes': '备用冷却时间（分钟）',
+  'scout.fallbackCooldownMinutes.hint': '班次模型失败后，侦察回合继续使用备用模型的时长。额度用尽时改用其声明的重置时间（例如“Resets in 1h56m”），并跳过重试。',
   'scout.fallbackPitches': '备用模型也可推介',
   'scout.fallbackPitches.hint': '关闭：备用模型的回合只检查回复和制作样片，推介等待班次模型。开启：也发送推介。',
   'scout.sampleHeadline': '样片页标题',

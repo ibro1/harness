@@ -74,6 +74,8 @@ export interface Config {
   fallbackModel: Volatile<string>
   /** Whether a turn on the fallback model may pitch; off holds pitches for the shift's own model. */
   fallbackPitches: Volatile<boolean>
+  /** Minutes a failed shift model is left alone when the failure does not say when it is usable again. */
+  fallbackCooldownMinutes: Volatile<number>
   /** Public link base a pitch gives for a sample; the link is `<base>/<id>`. Its origin may read the sample JSON. */
   sampleBaseUrl: Volatile<string>
   /** Days a sample stays served; 0 keeps samples for good. */
@@ -131,6 +133,7 @@ export const Config = z.object({
   fallbackProvider: z.string().default('opencode').volatile(),
   fallbackModel: z.string().default('big-pickle').volatile(),
   fallbackPitches: z.boolean().default(false).volatile(),
+  fallbackCooldownMinutes: z.natural().default(15).volatile(),
   sampleBaseUrl: z.string().default('https://klipara.linkfa.de/s').volatile(),
   sampleTtlDays: z.natural().default(30).volatile(),
   outreachBrowser: z.string().default('').volatile(),
@@ -673,15 +676,20 @@ export function apply(ctx: Context, config: Config): void {
   // The fallback model: a scout turn whose model fails for a provider reason,
   // after the harness's own retries, retries on the fallback and finishes the
   // turn there.
-  const router = new FallbackRouter(() => {
-    const provider = config.fallbackProvider.get().trim()
-    const model = config.fallbackModel.get().trim()
-    return provider === '' || model === '' ? undefined : { provider, model }
-  }, (change) => {
-    const from = `${change.from.provider}/${change.from.model}`
-    const to = `${change.to.provider}/${change.to.model}`
-    process.stderr.write(`klipara-scout: ${from} failed in ${change.sessionId} turn ${String(change.turn)} (${change.failure.code}: ${change.failure.message.slice(0, 300)}); retrying on ${to}\n`)
-    void notify(`Klipara Scout: ${from} failed (${change.failure.message.slice(0, 160)}). This turn continues on ${to}${config.fallbackPitches.get() ? '' : '; pitches wait for the main model'}.`)
+  const route = (provider: string, model: string): { provider: string; model: string } | undefined =>
+    provider.trim() === '' || model.trim() === '' ? undefined : { provider: provider.trim(), model: model.trim() }
+  const router = new FallbackRouter({
+    fallback: () => route(config.fallbackProvider.get(), config.fallbackModel.get()),
+    shift: () => route(config.provider.get(), config.model.get()),
+    cooldownMs: () => config.fallbackCooldownMinutes.get() * 60_000,
+    onSwitch: (change) => {
+      const from = `${change.from.provider}/${change.from.model}`
+      const to = `${change.to.provider}/${change.to.model}`
+      const until = localTime(change.until, config.timeZone.get())
+      const at = `${String(Math.floor(until.minutes / 60)).padStart(2, '0')}:${String(until.minutes % 60).padStart(2, '0')}${until.date === localTime(new Date(), config.timeZone.get()).date ? '' : ` on ${until.date}`}`
+      process.stderr.write(`klipara-scout: ${from} failed in ${change.sessionId} turn ${String(change.turn)} (${change.failure.code}: ${change.failure.message.slice(0, 300)}); scout turns use ${to} until ${change.until.toISOString()}\n`)
+      void notify(`Klipara Scout: ${from} failed (${change.failure.message.slice(0, 160)}). Scout turns use ${to} until ${at}${change.stated ? ', when its quota resets' : ''}, then try ${from} again${config.fallbackPitches.get() ? '' : '; pitches wait for it'}.`)
+    },
   })
   const pitchHeld = (sessionId: string, tool: string): string | undefined =>
     tool === 'scout_pitch' && !config.fallbackPitches.get() && router.onFallback(sessionId)

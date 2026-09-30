@@ -93,6 +93,27 @@ const SESSION_HEADER = (process.env.DSH_BRIDGE_SESSION_HEADER || 'x-dsh-session-
  * The calling harness session's id, from the session header, or from a body
  * field for a client that sends it there; undefined when neither is present.
  */
+/**
+ * The reason a failed agy run gives: the `short_error` of its `AGY_ERROR` line,
+ * else its last stderr lines, else the exit code.
+ * @param {string} stderr - the tail of agy's stderr.
+ * @param {number | null} code - its exit code.
+ * @returns {string} one line.
+ */
+function agyFailure(stderr, code) {
+  const line = stderr.split('\n').reverse().find(l => l.startsWith('AGY_ERROR: '))
+  if (line !== undefined) {
+    try {
+      const parsed = JSON.parse(line.slice('AGY_ERROR: '.length))
+      if (typeof parsed.short_error === 'string' && parsed.short_error !== '') return parsed.short_error
+    } catch {
+      // Not JSON after all: fall through to the raw lines.
+    }
+  }
+  const tail = stderr.replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').filter(Boolean).slice(-2).join(' ')
+  return tail || `agy exited with code ${String(code)}`
+}
+
 function sessionIdOf(req, body) {
   const header = req.headers[SESSION_HEADER]
   if (typeof header === 'string' && header !== '') return header
@@ -263,7 +284,7 @@ const server = createServer(async (req, res) => {
       const id = `chatcmpl-${Date.now()}`
       const created = Math.floor(Date.now() / 1000)
 
-      console.log(`[AGY] Start req model=${model} stream=${stream} len=${prompt.length} images=${savedImages.length}`)
+      console.log(`[AGY] Start req model=${model} stream=${stream} len=${prompt.length} images=${savedImages.length} session=${sessionId || '-'}`)
 
       const cleanupImages = () => {
         // give a grace period before deleting images
@@ -326,8 +347,14 @@ const server = createServer(async (req, res) => {
           if (!res.writableEnded && Date.now() - lastActivity >= HEARTBEAT_MS) sendProgress('·')
         }, 10000)
 
+        // agy reports a failed run (quota, auth, a bad model) on stderr as
+        // `AGY_ERROR: {json}` and exits non-zero with no output. Kept so the run
+        // ends with that reason as an error, not an empty answer.
+        let stderrTail = ''
         proc.stderr.on('data', d => {
-          console.error('[AGY stderr]', d.toString())
+          const text = d.toString()
+          stderrTail = `${stderrTail}${text}`.slice(-2000)
+          console.error('[AGY stderr]', text)
         })
 
         const rl = createInterface({ input: proc.stdout })
@@ -371,6 +398,12 @@ const server = createServer(async (req, res) => {
           const tokens = usage ? ` in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} context=${lastStepInput}` : ''
           console.log(`[AGY proc closed] code=${code} emittedText=${emittedText} tools=${toolSteps.length}${tokens}${toolSteps.length ? ` [${toolSteps.join(' ')}]` : ''}`)
           if (guard.reason() !== undefined) return
+          if (code !== 0 && !emittedText && toolSteps.length === 0) {
+            res.write(`data: ${JSON.stringify({ error: { message: `agy: ${agyFailure(stderrTail, code)}` } })}\n\n`)
+            res.end()
+            cleanupImages()
+            return
+          }
           const finalChunk = {
             id,
             object: 'chat.completion.chunk',
