@@ -822,6 +822,8 @@ one Klipara's ingest downloads with. Leads are on their own page (**View leads**
 pitch emails link to `https://klipara.linkfa.de/s/<id>`, a page Klipara serves from the harness's public `/scout/s/<id>.json`; comments carry no link. Nothing is sent until an outreach browser, signed in to a Google account of its own, is set on the page: never the DeerFlow browser, whose account Klipara downloads with. `DSH_KLIPARA_SCOUT=0` leaves it
 out; `DSH_SCOUT_MCP=0` keeps its tools from agy and opencode.
 
+The outreach browser on the DeerFlow sandbox (`/mnt/shared/outreach-browser`, outside this repo) starts with `--mute-audio` and a local `no-autoplay` extension that pauses every YouTube video as it starts, so shifts and reply checks never leave videos playing. The scout skill also tells the shift to close the tabs it opens.
+
 ## Error reporting (GlitchTip)
 
 Production errors go to the self-hosted GlitchTip at https://bug.linkfa.de

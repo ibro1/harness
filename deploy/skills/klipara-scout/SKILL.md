@@ -26,10 +26,24 @@ Prefer channels with clear speech, a steady upload habit, and a recent episode w
 
 ## Writing a pitch
 
-Every pitch is written for this creator and this episode. Mention something specific from the video's title or topic. Never guess a guest's or host's gender: say "your guest" or use their name, not "he" or "she", unless the title says. Never reuse another pitch's wording: `scout_pitch` refuses text too close to an earlier one.
+Every pitch is written for this creator and this episode. Mention something specific: the moment you clipped, what was said, the minute mark. Never guess a guest's or host's gender: say "your guest" or use their name, not "he" or "she", unless the title says. Never reuse another pitch's wording: `scout_pitch` refuses text too close to an earlier one.
 
-- **Email** (when the lead has an address): a plain subject naming their episode (never "Re:" or "Fwd:"), then 4–6 short lines. Say you clipped one moment from the episode, give the sample link exactly as `scout_check_sample` gave it, and offer to cut more like it from every episode. Sign as "Klipara". No attachments, no pricing.
-- **Comment** (no email): 2–3 sentences, conversational. Say which moment you clipped (the topic or the line said) and that you made it into a vertical clip, and ask them to reply if they want it. **No link of any kind**: YouTube hides comments with links, and `scout_pitch` refuses one. When they reply, the owner sends the link. No hashtags, no "check out my channel", no capital-letter hype.
+**Sound like a person, not a template.** Creators get many AI-written comments and ignore them, and spam filters flag the same patterns. Write the way someone types a quick note on their phone:
+
+- Short, plain sentences. Contractions ("I've", "it's"). One idea each.
+- Say the concrete thing, not praise: "the bit at 14:20 where she explains why she moved back" beats "such an inspiring story".
+- Ask directly: "want it?" or "happy to send it over", not "let me know if you would like me to share it with you".
+- No long dashes (— or –), at most one exclamation mark, no stacked adjectives, no "truly", "resonated", "life-changing", "valuable insights", "I came across your", "hope this finds you well".
+- Imperfect is fine. Lowercase at the start, a sentence fragment, a casual "honestly" are all normal in a comment.
+
+`scout_pitch` refuses text with these tells and says which; rewrite and call it again.
+
+Too AI: "Such an inspiring story about your guest leaving behind the American Dream to build a new life in Ghana. I turned the part where they reflect on making that life-changing transition into a vertical clip for Shorts. Let me know if you would like me to share it with you!"
+
+Human: "The part around 18:40 where she talks about packing up the US life for Accra got me. I cut it into a 40s vertical clip for Shorts, want it?"
+
+- **Email** (when the lead has an address): a plain subject naming their episode (never "Re:" or "Fwd:"), then 3–5 short lines. Say you clipped one moment from the episode, give the sample link exactly as `scout_check_sample` gave it, and offer to cut more like it from every episode. Sign as "Klipara". No attachments, no pricing.
+- **Comment** (no email): 1–3 sentences. Say which moment you clipped (the topic, the line said, or the minute) and that you made it into a vertical clip, and ask if they want it. **No link of any kind**: YouTube hides comments with links, and `scout_pitch` refuses one. When they reply, the owner sends the link. No hashtags, no "check out my channel", no capital-letter hype.
 
 ## Sending
 
@@ -39,6 +53,8 @@ Call `scout_pitch` **before** sending, with the exact text. It reserves the pitc
 
 - **Email:** open Gmail, compose to the address, paste the subject and body, send, and confirm it appears in Sent.
 - **Comment:** open the video URL, scroll to the comments, add the comment, post it, and confirm it appears under the video.
+
+**Leave nothing open.** You never watch videos: they are paused as they load, so do not press play. When you are done with a page (a video you commented on, Gmail after sending or reading, notifications), close its tab. End every shift and reply check with no YouTube tabs open.
 
 ## Stop immediately — `scout_pause`
 

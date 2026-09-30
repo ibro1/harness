@@ -28,6 +28,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { FallbackRouter, installFallback } from './fallback.ts'
+import { styleProblems } from './style.ts'
 import { localTime, parseShiftTime, shiftDue, startShift } from './shift.ts'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
 import { channelFacts, execYtDlp, searchLongVideos, type YtDlpRunner } from './youtube.ts'
@@ -519,7 +520,7 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
     }),
     tool({
       name: 'scout_pitch',
-      description: 'Reserve one pitch for a `sampled` lead and record exactly what will be sent. Call it BEFORE sending, then send exactly this text from the outreach account: by email to the lead\'s address, or as a comment on the lead\'s video. An email must contain the sample link; a comment must contain no link at all (say what you clipped and ask them to reply). It refuses when no outreach account is configured, outreach is paused, today\'s pitch cap is used, the link rule is broken, an email subject starts with Re: or Fwd:, or the text is too close to an earlier pitch.',
+      description: 'Reserve one pitch for a `sampled` lead and record exactly what will be sent. Call it BEFORE sending, then send exactly this text from the outreach account: by email to the lead\'s address, or as a comment on the lead\'s video. An email must contain the sample link; a comment must contain no link at all (say what you clipped and ask them to reply). It refuses when no outreach account is configured, outreach is paused, today\'s pitch cap is used, the link rule is broken, an email subject starts with Re: or Fwd:, the text has machine-writing tells (long dashes, stock praise, "let me know if you would like"), or the text is too close to an earlier pitch.',
       parameters: {
         channel_id: channelParameter,
         via: { type: 'string', required: true, enum: ['email', 'comment'], description: 'email when the lead has an address, otherwise comment.' },
@@ -545,6 +546,10 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           const subject = /^\s*subject:\s*(.*)$/imu.exec(text)?.[1] ?? text.split('\n').find(line => line.trim() !== '') ?? ''
           if (via === 'email' && /^\s*(?:re|fwd?)\s*:/iu.test(subject)) {
             throw new Error('An email pitch may not open with a "Re:" or "Fwd:" subject: it pretends to continue a conversation that never happened, and Gmail flags it. Write a plain subject naming their episode.')
+          }
+          const tells = styleProblems(text)
+          if (tells.length > 0) {
+            throw new Error(`This pitch reads as machine-written, which creators ignore and spam filters flag. Rewrite it the way a person would type a quick note, then call scout_pitch again. Found: ${tells.join('; ')}.`)
           }
           if (via === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(to)) throw new Error('An email pitch needs an email address in `to`.')
           if (via === 'comment' && !/youtube\.com|youtu\.be/u.test(to)) throw new Error('A comment pitch needs the video URL in `to`.')
