@@ -13,6 +13,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the Plugins page's SlotMap merge (the 'plugins.item' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: the ctx.remote Context merge and the forwarded-event key face.
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { CloudflareCard } from './CloudflareCard.tsx'
 import { DokployCard } from './DokployCard.tsx'
@@ -23,6 +25,7 @@ import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-contr
 import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
 import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
 import { SCOUT_NS, ScoutCardController } from './scout-card-controller.ts'
+import { ScoutModelCatalog } from './scout-model-catalog.ts'
 import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
 
 export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from './cloudflare-card-controller.ts'
@@ -45,7 +48,7 @@ const SCOUT_LEADS_ID = 'klipara-scout-leads'
 export const NS = 'settings.operations'
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'configForms']
+export const inject = ['slots', 'locale', 'remote', 'configForms']
 
 /**
  * Mount each page while the Host serves its namespace.
@@ -59,6 +62,10 @@ export function apply(ctx: ClientContext): void {
   const postgres = new PostgresCardController(ctx.configForms.get(POSTGRES_NS))
   const cloudflare = new CloudflareCardController(ctx.configForms.get(CLOUDFLARE_NS))
   const scout = new ScoutCardController(ctx.configForms.get(SCOUT_NS))
+  const scoutModels = new ScoutModelCatalog(ctx)
+  // Adapters come and go, and a settings commit elsewhere can change the routes.
+  ctx.effect(() => ctx.remote.$on('llm/adapters-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model adapters')
+  ctx.effect(() => ctx.remote.$on('settings/document-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model settings')
   ctx.effect(() => () => {
     dokploy.dispose()
     postgres.dispose()
@@ -77,7 +84,10 @@ export function apply(ctx: ClientContext): void {
   }, CloudflareCard))), 'ui-settings-operations: Cloudflare page')
   ctx.effect(() => ctx.configForms.whileServed([SCOUT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'klipara-scout', order: 80, label: () => t('scoutTitle'), locale: NS,
-    inject: () => scout.inject(() => { ctx.get('pluginNavigation')?.openItem(SCOUT_LEADS_ID) }),
+    inject: () => {
+      scoutModels.refresh()
+      return scout.inject(() => { ctx.get('pluginNavigation')?.openItem(SCOUT_LEADS_ID) }, scoutModels.store, () => { scoutModels.refresh() })
+    },
   }, ScoutCard))), 'ui-settings-operations: Klipara Scout page')
   ctx.effect(() => ctx.configForms.whileServed([SCOUT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: SCOUT_LEADS_ID, order: 81, label: () => t('scoutLeadsPageTitle'), locale: NS,

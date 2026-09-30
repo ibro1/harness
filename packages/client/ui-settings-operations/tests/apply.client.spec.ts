@@ -38,7 +38,7 @@ describe('ui-settings-operations apply', () => {
   })
 
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'configForms'])
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'configForms'])
   })
 
   it('registers one page per served namespace, titled in the active locale', async () => {

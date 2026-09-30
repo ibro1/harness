@@ -30,7 +30,7 @@ Each field is a JSON array, and each entry supplies its secret one of two ways: 
 - **Dokploy — Servers:** a `name`, a `url`, and a key.
 - **Postgres — Databases:** a `name` and a connection string, plus an optional boolean `readOnly` (true unless set to false) and a positive `statementTimeoutMs`.
 - **Cloudflare — Zones:** a `name`, a `zoneId`, and a token scoped to that zone.
-- **Klipara Scout:** the daily outreach shift's switch, start time and time zone, sample and pitch caps, search topics, channel limits, Klipara API key, WhatsApp alert recipient, shift model and sample-page text, with a **View leads** button opening a separate **Klipara Scout leads** page that lists every lead and refreshes every 15 seconds.
+- **Klipara Scout:** the daily outreach shift's switch, start time and time zone, sample and pitch caps, search topics, channel limits, Klipara API key (shown with all but its kind and last four characters hidden until **Change key**), WhatsApp alert recipient, the shift and fallback models (each chosen from the Host's model catalog with a searchable list, and flagged when a saved model is not in it), the fallback pitch switch and sample-page text, with a **View leads** button opening a separate **Klipara Scout leads** page that lists every lead and refreshes every 15 seconds.
 - **Cloudflare — Accounts (optional):** a `name`, an account `id`, and a token scoped to the whole account. With one configured, the agent reaches every domain on the account by domain name, so **Zones** need only list domains that should use a narrower token of their own. The token needs DNS Edit and Cache Purge across the account, plus Zone Edit to add domains.
 
 -----

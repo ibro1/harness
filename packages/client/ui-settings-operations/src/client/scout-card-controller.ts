@@ -1,6 +1,7 @@
 /** The Klipara Scout card's staged form over the `klipara-scout` settings namespace. */
 
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ScoutModelCatalogState } from './scout-model-catalog.ts'
 import {
   SettingsFormModel, settingsNumberField, settingsTextField,
   type SettingsFieldSpec, type SettingsFieldState, type SettingsFormActions, type SettingsFormScope, type SettingsFormShell,
@@ -22,6 +23,14 @@ export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyChec
 /** On/off fields, in the order the card shows them. */
 export const SCOUT_SWITCH_FIELDS = ['enabled', 'fallbackPitches'] as const
 
+/** Provider and model pairs the card sets through a model picker rather than as text. */
+export const SCOUT_MODEL_PAIRS = [
+  { key: 'shiftModel', provider: 'provider', model: 'model' },
+  { key: 'fallbackModelPick', provider: 'fallbackProvider', model: 'fallbackModel' },
+] as const
+/** The API key, shown masked. */
+export const SCOUT_KEY_FIELD = 'kliparaApiKey'
+
 type ScoutTextField = typeof SCOUT_TEXT_FIELDS[number]
 type ScoutSwitchField = typeof SCOUT_SWITCH_FIELDS[number]
 type ScoutNumberField = typeof SCOUT_NUMBER_FIELDS[number]
@@ -41,9 +50,13 @@ export interface ScoutCardState extends SettingsFormShell {
 export interface ScoutCardFace extends SettingsFormActions {
   /** Open the separate Klipara Scout leads page. */
   openLeads: () => void
+  /** Load the model catalog again after a failure. */
+  retryModels: () => void
   hooks: {
     /** Card snapshot bound by the renderer as useScoutCard. */
     scoutCard: SnapshotStore<ScoutCardState>
+    /** Model catalog bound by the renderer as useScoutModels. */
+    scoutModels: SnapshotStore<ScoutModelCatalogState>
   }
 }
 
@@ -110,9 +123,11 @@ export class ScoutCardController {
   /**
    * Build the face the card's slot registration injects.
    * @param openLeads - opens the leads page.
-   * @returns the card's snapshot, its form actions and the leads link.
+   * @param models - the model catalog the pickers offer.
+   * @param retryModels - reloads that catalog.
+   * @returns the card's snapshot, its form actions, the catalog and the leads link.
    */
-  inject(openLeads: () => void): ScoutCardFace {
-    return { hooks: { scoutCard: this.store }, ...this.form.actions(), openLeads }
+  inject(openLeads: () => void, models: SnapshotStore<ScoutModelCatalogState>, retryModels: () => void): ScoutCardFace {
+    return { hooks: { scoutCard: this.store, scoutModels: models }, ...this.form.actions(), openLeads, retryModels }
   }
 }

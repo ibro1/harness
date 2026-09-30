@@ -6,7 +6,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
+  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -18,7 +18,8 @@ export type OperationsSettingsLocaleKey =
   | 'scoutViewLeads' | 'scoutLeadsPageTitle' | 'scoutLeadsDescription' | 'scoutLeadsTitle' | 'scoutLeadsEmpty' | 'scoutLeadsToday' | 'scoutLeadsPaused' | 'scoutLeadsFailed'
   | 'scoutColStage' | 'scoutColChannel' | 'scoutColVideo' | 'scoutColSample' | 'scoutColPitch' | 'scoutColReplies' | 'scoutColUpdated'
   | 'scoutSampleLink'
-  | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint`
+  | 'scoutChangeKey' | 'scoutKeyPlaceholder' | 'scoutKeepKey' | 'scoutModelSearch' | 'scoutModelChange' | 'scoutModelLoading' | 'scoutModelFailed' | 'scoutModelRetry' | 'scoutModelNoMatch' | 'scoutModelUnknown'
+  | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint` | 'scout.shiftModel.none' | 'scout.fallbackModelPick.none'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed'
 
@@ -64,6 +65,22 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   scoutColReplies: 'Replies',
   scoutColUpdated: 'Updated',
   scoutSampleLink: 'Open',
+  scoutChangeKey: 'Change key',
+  scoutKeyPlaceholder: 'klp_sk_live_…',
+  scoutKeepKey: 'Keep the current key',
+  scoutModelSearch: 'Search models',
+  scoutModelChange: 'Choose',
+  scoutModelLoading: 'Loading models…',
+  scoutModelFailed: 'The model list did not load.',
+  scoutModelRetry: 'Try again',
+  scoutModelNoMatch: 'No model matches.',
+  scoutModelUnknown: 'Not in the model list',
+  'scout.shiftModel': 'Shift model',
+  'scout.shiftModel.hint': 'The model the shift runs on. Your default model is used when none is chosen.',
+  'scout.shiftModel.none': 'Default model',
+  'scout.fallbackModelPick': 'Fallback model',
+  'scout.fallbackModelPick.hint': 'When the shift model fails (quota, rate limit, server error), the turn retries on this model; the next turn tries the shift model again.',
+  'scout.fallbackModelPick.none': 'No fallback',
   'scoutInvalid': 'Not a value this setting accepts.',
   'scout.enabled': 'Run the daily shift',
   'scout.enabled.hint': 'Off until you turn it on. Outreach also stops by itself when YouTube or Gmail shows a warning; you get a WhatsApp message and resume it by asking in a Klipara Scout session.',
@@ -160,6 +177,22 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   scoutColReplies: '回复',
   scoutColUpdated: '更新时间',
   scoutSampleLink: '打开',
+  scoutChangeKey: '更换密钥',
+  scoutKeyPlaceholder: 'klp_sk_live_…',
+  scoutKeepKey: '保留当前密钥',
+  scoutModelSearch: '搜索模型',
+  scoutModelChange: '选择',
+  scoutModelLoading: '正在加载模型…',
+  scoutModelFailed: '模型列表未能加载。',
+  scoutModelRetry: '重试',
+  scoutModelNoMatch: '没有匹配的模型。',
+  scoutModelUnknown: '不在模型列表中',
+  'scout.shiftModel': '班次模型',
+  'scout.shiftModel.hint': '班次使用的模型。未选择时使用默认模型。',
+  'scout.shiftModel.none': '默认模型',
+  'scout.fallbackModelPick': '备用模型',
+  'scout.fallbackModelPick.hint': '班次模型失败（额度、限流、服务器错误）时，本轮改用此模型重试；下一轮会重新尝试班次模型。',
+  'scout.fallbackModelPick.none': '不使用备用',
   'scoutInvalid': '该设置不接受此值。',
   'scout.enabled': '运行每日班次',
   'scout.enabled.hint': '默认关闭，需手动开启。YouTube 或 Gmail 出现警告时外联会自动暂停；你会收到 WhatsApp 消息，并在 Klipara Scout 会话中要求恢复。',
