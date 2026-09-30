@@ -202,6 +202,8 @@ describe('klipara scout', () => {
     await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: `Clipped your landlord story: ${link}` }))
       .rejects.toThrow('must contain no link')
     await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'not-an-address', text: link })).rejects.toThrow('needs an email address')
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: `Subject: Re: your Lagos rent episode\n\nI clipped the landlord story: ${link}` }))
+      .rejects.toThrow('may not open with a "Re:"')
     expect(await run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: `Loved the episode about Lagos rent — I clipped the landlord story: ${link}` })).toContain('Pitch 1/2 reserved')
     const state = await deps.store.read()
     expect(state.leads[0]!.stage).toBe('pitched')

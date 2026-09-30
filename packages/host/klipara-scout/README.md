@@ -36,7 +36,7 @@ The shift reads its instructions from the `klipara-scout` skill (`deploy/skills/
 | `scout_leads` | lists leads, optionally one stage |
 | `scout_make_sample` | starts a Klipara analysis job for a `found` lead (free); counts against the sample cap |
 | `scout_check_sample` | when the job is done, exports the best standalone clip (one Klip), hosts it and records the public link |
-| `scout_pitch` | reserves one pitch and records the exact text; refused without an outreach browser, when paused, on the fallback model unless allowed, over the cap, for an email without the sample link or a comment with any link, or at 60% word overlap with an earlier pitch |
+| `scout_pitch` | reserves one pitch and records the exact text; refused without an outreach browser, when paused, on the fallback model unless allowed, over the cap, for an email without the sample link or with a "Re:"/"Fwd:" subject, a comment with any link, or at 60% word overlap with an earlier pitch |
 | `scout_record_reply` | records a reply and alerts the owner on WhatsApp |
 | `scout_update_lead` | closes a lead as won, lost or skipped |
 | `scout_pause` / `scout_resume` | stops all outreach and alerts the owner / resumes it when the owner asks |

@@ -26,9 +26,9 @@ Prefer channels with clear speech, a steady upload habit, and a recent episode w
 
 ## Writing a pitch
 
-Every pitch is written for this creator and this episode. Mention something specific from the video's title or topic. Never reuse another pitch's wording: `scout_pitch` refuses text too close to an earlier one.
+Every pitch is written for this creator and this episode. Mention something specific from the video's title or topic. Never guess a guest's or host's gender: say "your guest" or use their name, not "he" or "she", unless the title says. Never reuse another pitch's wording: `scout_pitch` refuses text too close to an earlier one.
 
-- **Email** (when the lead has an address): a subject naming their episode, then 4–6 short lines. Say you clipped one moment from the episode, give the sample link exactly as `scout_check_sample` gave it, and offer to cut more like it from every episode. Sign as "Klipara". No attachments, no pricing.
+- **Email** (when the lead has an address): a plain subject naming their episode (never "Re:" or "Fwd:"), then 4–6 short lines. Say you clipped one moment from the episode, give the sample link exactly as `scout_check_sample` gave it, and offer to cut more like it from every episode. Sign as "Klipara". No attachments, no pricing.
 - **Comment** (no email): 2–3 sentences, conversational. Say which moment you clipped (the topic or the line said) and that you made it into a vertical clip, and ask them to reply if they want it. **No link of any kind**: YouTube hides comments with links, and `scout_pitch` refuses one. When they reply, the owner sends the link. No hashtags, no "check out my channel", no capital-letter hype.
 
 ## Sending
