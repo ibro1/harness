@@ -45,6 +45,7 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
   const [notice, setNotice] = useState<Notice>(undefined)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [gscSites, setGscSites] = useState<{ siteUrl: string; permissionLevel: string }[] | undefined>(undefined)
+  const [gscError, setGscError] = useState<string | undefined>(undefined)
   const set = <K extends keyof SeoSiteForm>(key: K, value: SeoSiteForm[K]): void => { setForm(previous => ({ ...previous, [key]: value })) }
 
   const field = (key: FormTextKey, labelKey: SeoSiteFieldKey, options: { multiline?: boolean; placeholder?: string } = {}) => {
@@ -128,7 +129,8 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
     setNotice(undefined)
     const result = await postSeoAction(props.request, { action: 'gsc-sites' })
     setBusy(undefined)
-    if (!result.ok) { setNotice({ tone: 'error', message: t('seoFailed', { error: result.error }) }); return }
+    if (!result.ok) { setGscError(t('seoFailed', { error: result.error })); return }
+    setGscError(undefined)
     const sites = Array.isArray(result.body['sites']) ? result.body['sites'] as { siteUrl: string; permissionLevel: string }[] : []
     setGscSites(sites.filter(entry => typeof entry.siteUrl === 'string'))
   }
@@ -190,6 +192,7 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
             {busy === 'gsc' ? t('seoGscLoading') : t('seoGscLoad')}
           </Button>
         </div>
+        {gscError === undefined ? null : <p className={css.error} role="status">{gscError}</p>}
         {gscSites === undefined
           ? null
           : gscSites.length === 0
