@@ -19,6 +19,15 @@ type FormTextKey = Exclude<keyof SeoSiteForm, 'id' | 'kind' | 'enabled' | 'marke
 /** A transient message under the form's buttons. */
 type Notice = { tone: 'ok' | 'error'; message: string } | undefined
 
+/** One Google Ads account the site's Google access reaches. */
+interface AdsAccountRow { customerId: string; name: string; manager: boolean; status: string }
+
+/** An ISO time in the viewer's own time zone, to the minute. */
+function localTime(iso: string | null): string {
+  if (iso === null || Number.isNaN(Date.parse(iso))) return ''
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 /** Props of {@link SeoSiteForm}. */
 export interface SeoSiteFormProps {
   t: SeoTranslate
@@ -41,12 +50,14 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
   const base = useId()
   const [form, setForm] = useState<SeoSiteForm>(() => site === undefined ? emptySiteForm() : siteFormFrom(site))
   const [secretsSet, setSecretsSet] = useState(site?.secretsSet ?? { apiKey: false, wpUser: false, wpAppPassword: false })
-  const [busy, setBusy] = useState<'save' | 'test' | 'delete' | 'gsc' | undefined>(undefined)
+  const [busy, setBusy] = useState<'save' | 'test' | 'delete' | 'gsc' | 'ads' | undefined>(undefined)
   const [notice, setNotice] = useState<Notice>(undefined)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [gscSites, setGscSites] = useState<{ siteUrl: string; permissionLevel: string }[] | undefined>(undefined)
   const [gscError, setGscError] = useState<string | undefined>(undefined)
   const [linkCopied, setLinkCopied] = useState(false)
+  const [adsAccounts, setAdsAccounts] = useState<AdsAccountRow[] | undefined>(undefined)
+  const [adsError, setAdsError] = useState<string | undefined>(undefined)
   const set = <K extends keyof SeoSiteForm>(key: K, value: SeoSiteForm[K]): void => { setForm(previous => ({ ...previous, [key]: value })) }
 
   const field = (key: FormTextKey, labelKey: SeoSiteFieldKey, options: { multiline?: boolean; placeholder?: string } = {}) => {
@@ -135,6 +146,21 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
     setGscError(undefined)
     const sites = Array.isArray(result.body['sites']) ? result.body['sites'] as { siteUrl: string; permissionLevel: string }[] : []
     setGscSites(sites.filter(entry => typeof entry.siteUrl === 'string'))
+  }
+
+  const loadAds = async (): Promise<void> => {
+    setBusy('ads')
+    const result = await postSeoAction(props.request, { action: 'ads-accounts', id: form.id, site: buildSaveSiteBody(form)?.site ?? {} })
+    setBusy(undefined)
+    if (!result.ok) { setAdsError(t('seoFailed', { error: result.error })); return }
+    setAdsError(undefined)
+    const rows = Array.isArray(result.body['accounts']) ? result.body['accounts'] as Record<string, unknown>[] : []
+    setAdsAccounts(rows.map(row => ({
+      customerId: typeof row['customerId'] === 'string' ? row['customerId'] : '',
+      name: typeof row['name'] === 'string' ? row['name'] : '',
+      manager: row['manager'] === true,
+      status: typeof row['status'] === 'string' ? row['status'] : '',
+    })).filter(row => row.customerId !== ''))
   }
 
   const kinds: SeoPublisherKind[] = ['klipara', 'wordpress']
@@ -235,7 +261,7 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
                 <>
                   <p className={props.site.googleConnection.connected ? css.ok : css.error} role="status">
                     {props.site.googleConnection.connected
-                      ? t('seoSiteGoogleConnected', { date: (props.site.googleConnection.connectedAt ?? '').slice(0, 16).replace('T', ' ') })
+                      ? t('seoSiteGoogleConnected', { date: localTime(props.site.googleConnection.connectedAt) })
                       : t('seoSiteGoogleNotConnected')}
                   </p>
                   <p className={css.hint}>{t('seoSiteGoogleLink')}</p>
@@ -249,7 +275,7 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
                   <div className={css.row}>
                     <Button variant="outline" size="sm" onClick={() => {
                       window.open(`/seo/oauth/start?site=${encodeURIComponent(form.id)}`, 'seo-google-connect', 'popup,width=560,height=720')
-                    }}>{t('seoSiteGoogleConnectHere')}</Button>
+                    }}>{props.site.googleConnection.connected ? t('seoSiteGoogleSignInAgain') : t('seoSiteGoogleConnectHere')}</Button>
                     {props.site.googleConnection.connected
                       ? (
                         <Button variant="ghost" size="sm" disabled={busy !== undefined} onClick={() => {
@@ -263,6 +289,35 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
           </div>
         )
         : null}
+      <div className={css.field}>
+        <div className={css.row}>
+          <span className={`${css.label} ${css.grow}`}>{t('seoSiteAdsPick')}</span>
+          <Button variant="outline" size="sm" disabled={busy !== undefined} onClick={() => { void loadAds() }}>
+            {busy === 'ads' ? t('seoGscLoading') : t('seoGscLoad')}
+          </Button>
+        </div>
+        {adsError === undefined ? null : <p className={css.error} role="status">{adsError}</p>}
+        {adsAccounts === undefined
+          ? <p className={css.hint}>{t('seoSiteAdsPick.hint')}</p>
+          : adsAccounts.length === 0
+            ? <p className={css.hint} role="status">{t('seoSiteAdsNone')}</p>
+            : (
+              <select className={css.input} aria-label={t('seoSiteAdsPick')} value={form.adsCustomerId}
+                onChange={(event) => { set('adsCustomerId', event.target.value); set('adsLoginCustomerId', '') }}>
+                <option value="">{t('seoSiteAdsAutomatic')}</option>
+                {adsAccounts.map(account => (
+                  <option key={account.customerId} value={account.customerId} disabled={account.status !== 'ENABLED'}>
+                    {t('seoSiteAdsOption', {
+                      name: account.name === '' ? account.customerId : account.name,
+                      id: account.customerId,
+                      kind: account.manager ? t('seoSiteAdsManager') : t('seoSiteAdsClient'),
+                      status: account.status.toLowerCase(),
+                    })}
+                  </option>
+                ))}
+              </select>
+            )}
+      </div>
       {field('adsCustomerId', 'adsCustomerId', { placeholder: '1234567890' })}
       {field('adsLoginCustomerId', 'adsLoginCustomerId', { placeholder: '8152070364' })}
 

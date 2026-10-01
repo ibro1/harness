@@ -33,7 +33,8 @@ export type SeoLocaleKey =
   | `seoSite.${SeoSiteFieldKey}` | `seoSite.${SeoSiteFieldKey}.hint` | `seoKind.${'klipara' | 'wordpress'}` | `seoMarket.${SeoMarketKey}`
   | 'seoGscLoad' | 'seoGscLoading' | 'seoGscChoose' | 'seoGscEmpty'
   | 'seoSiteGoogle' | `seoGoogleAccess.${'shared' | 'own'}` | `seoGoogleAccess.${'shared' | 'own'}.hint` | 'seoSiteGoogleSaveFirst'
-  | 'seoSiteGoogleConnected' | 'seoSiteGoogleNotConnected' | 'seoSiteGoogleLink' | 'seoSiteGoogleConnectHere'
+  | 'seoSiteGoogleConnected' | 'seoSiteGoogleNotConnected' | 'seoSiteGoogleLink' | 'seoSiteGoogleConnectHere' | 'seoSiteGoogleSignInAgain'
+  | 'seoSiteAdsPick' | 'seoSiteAdsPick.hint' | 'seoSiteAdsNone' | 'seoSiteAdsAutomatic' | 'seoSiteAdsOption' | 'seoSiteAdsManager' | 'seoSiteAdsClient'
   | 'seoSave' | 'seoSaving' | 'seoSaved' | 'seoClose' | 'seoTest' | 'seoTesting' | 'seoTestWordPress' | 'seoTestWordPressSignedIn' | 'seoTestNotWordPress' | 'seoTestKlipara'
   | 'seoDelete' | 'seoDeleteConfirm' | 'seoDeleteYes' | 'seoCancel' | 'seoPerWeekInvalid' | 'seoFailed'
   | 'seoQuestionsTitle' | 'seoQuestionsEmpty' | 'seoQuestionAsked' | 'seoAnswerLabel' | 'seoAnswerSend' | 'seoAnswerSending' | 'seoAnsweredTitle' | 'seoAnsweredOn'
@@ -207,6 +208,14 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoSiteGoogleNotConnected: 'Not connected yet: send the site owner the link below.',
   seoSiteGoogleLink: 'Sign-in link for the site owner. It works without a harness login and only connects this site.',
   seoSiteGoogleConnectHere: 'Sign in here instead',
+  seoSiteGoogleSignInAgain: 'Sign in with a different account',
+  seoSiteAdsPick: 'Google Ads account for Keyword Planner',
+  'seoSiteAdsPick.hint': 'Load the accounts this site\'s Google access reaches and pick one, or leave it on automatic (the first active account).',
+  seoSiteAdsNone: 'This Google access reaches no Google Ads account; Keyword Planner stays off for this site.',
+  seoSiteAdsAutomatic: 'Automatic: the first active account',
+  seoSiteAdsOption: '{name} ({id}), {kind}, {status}',
+  seoSiteAdsManager: 'manager',
+  seoSiteAdsClient: 'account',
   'seoSite.adsCustomerId': 'Google Ads account for this site (optional)',
   'seoSite.adsCustomerId.hint': 'Usually leave empty: the account is found from the site\'s Google sign-in. Set it only to pick a different 10-digit account, for example one client account under your manager account.',
   'seoSite.adsLoginCustomerId': 'Manager account for that Ads account (optional)',
@@ -429,6 +438,14 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoSiteGoogleNotConnected: '尚未连接：请将下方链接发送给站点所有者。',
   seoSiteGoogleLink: '给站点所有者的登录链接。无需 harness 登录即可使用，且只连接本站。',
   seoSiteGoogleConnectHere: '改为在此登录',
+  seoSiteGoogleSignInAgain: '用其他账号登录',
+  seoSiteAdsPick: '关键词规划师使用的 Google Ads 账号',
+  'seoSiteAdsPick.hint': '加载本站 Google 访问可用的广告账号并选择一个，或保持自动（第一个有效账号）。',
+  seoSiteAdsNone: '此 Google 访问没有可用的 Google Ads 账号；本站不使用关键词规划师。',
+  seoSiteAdsAutomatic: '自动：第一个有效账号',
+  seoSiteAdsOption: '{name}（{id}），{kind}，{status}',
+  seoSiteAdsManager: '经理账号',
+  seoSiteAdsClient: '账号',
   'seoSite.adsCustomerId': '本站的 Google Ads 账号（可选）',
   'seoSite.adsCustomerId.hint': '通常留空：账号会根据本站的 Google 登录自动找到。仅在需要指定其他 10 位账号时填写，例如你经理账号下的某个客户账号。',
   'seoSite.adsLoginCustomerId': '该广告账号的经理账号（可选）',

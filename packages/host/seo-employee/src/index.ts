@@ -572,6 +572,17 @@ export function apply(ctx: Context, config: Config): void {
             json(res, 200, { sites: await listSites(fetch, token, AbortSignal.timeout(20_000)) })
             return
           }
+          case 'ads-accounts': {
+            // The Ads accounts the site's Google access reaches, for the owner to pick one.
+            const id = typeof body['id'] === 'string' ? body['id'] : ''
+            const state = await store.read()
+            const draft = parseSite(body['site'], state.sites.find(x => x.id === id), now)
+            const site = typeof draft === 'string' ? state.sites.find(x => x.id === id) : { ...draft, id: id || draft.id }
+            const accounts = await accessibleAccounts(fetch, { accessToken: s => googleToken(s, site) }, AbortSignal.timeout(60_000),
+              config.adsApiVersion.get().trim() || 'v25')
+            json(res, 200, { accounts })
+            return
+          }
           case 'disconnect-site-google': {
             const id = typeof body['id'] === 'string' ? body['id'] : ''
             await store.update((s) => {
