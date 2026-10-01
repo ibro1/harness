@@ -35,7 +35,7 @@ export type SeoLocaleKey =
   | 'seoGscLoad' | 'seoGscLoading' | 'seoGscChoose' | 'seoGscEmpty'
   | 'seoSiteBrand' | 'seoSiteBrand.hint' | 'seoSiteGoogle' | `seoGoogleAccess.${'shared' | 'own'}` | `seoGoogleAccess.${'shared' | 'own'}.hint` | 'seoSiteGoogleSaveFirst'
   | 'seoSiteGoogleConnected' | 'seoSiteGoogleNotConnected' | 'seoSiteGoogleLink' | 'seoSiteGoogleConnectHere' | 'seoSiteGoogleSignInAgain'
-  | 'seoSiteAdsPick' | 'seoSiteAdsPick.hint' | 'seoSiteAdsNone' | 'seoSiteAdsAutomatic' | 'seoSiteAdsOption' | 'seoSiteAdsManager' | 'seoSiteAdsClient'
+  | 'seoSiteAdsPick' | 'seoSiteAdsPick.hint' | 'seoSiteAdsNone' | 'seoSiteAdsAutomatic' | 'seoSiteAdsOption' | 'seoSiteAdsOptionUnnamed' | 'seoSiteAdsManager' | 'seoSiteAdsClient'
   | 'seoSave' | 'seoSaving' | 'seoSaved' | 'seoClose' | 'seoTest' | 'seoTesting' | 'seoTestWordPress' | 'seoTestWordPressSignedIn' | 'seoTestNotWordPress' | 'seoTestKlipara'
   | 'seoDelete' | 'seoDeleteConfirm' | 'seoDeleteYes' | 'seoCancel' | 'seoPerWeekInvalid' | 'seoFailed'
   | 'seoQuestionsTitle' | 'seoQuestionsEmpty' | 'seoQuestionAsked' | 'seoAnswerLabel' | 'seoAnswerSend' | 'seoAnswerSending' | 'seoAnsweredTitle' | 'seoAnsweredOn'
@@ -232,6 +232,7 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoSiteAdsNone: 'This Google access reaches no Google Ads account; Keyword Planner stays off for this site.',
   seoSiteAdsAutomatic: 'Automatic: the first active account',
   seoSiteAdsOption: '{name} ({id}), {kind}, {status}',
+  seoSiteAdsOptionUnnamed: '{id}, {kind}, {status}',
   seoSiteAdsManager: 'manager',
   seoSiteAdsClient: 'account',
   'seoSite.adsCustomerId': 'Google Ads account for this site (optional)',
@@ -479,6 +480,7 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoSiteAdsNone: '此 Google 访问没有可用的 Google Ads 账号；本站不使用关键词规划师。',
   seoSiteAdsAutomatic: '自动：第一个有效账号',
   seoSiteAdsOption: '{name}（{id}），{kind}，{status}',
+  seoSiteAdsOptionUnnamed: '{id}，{kind}，{status}',
   seoSiteAdsManager: '经理账号',
   seoSiteAdsClient: '账号',
   'seoSite.adsCustomerId': '本站的 Google Ads 账号（可选）',

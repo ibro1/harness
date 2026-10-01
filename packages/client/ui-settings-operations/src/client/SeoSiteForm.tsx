@@ -315,8 +315,8 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
                 <option value="">{t('seoSiteAdsAutomatic')}</option>
                 {adsAccounts.map(account => (
                   <option key={account.customerId} value={account.customerId} disabled={account.status !== 'ENABLED'}>
-                    {t('seoSiteAdsOption', {
-                      name: account.name === '' ? account.customerId : account.name,
+                    {t(account.name === '' ? 'seoSiteAdsOptionUnnamed' : 'seoSiteAdsOption', {
+                      name: account.name,
                       id: account.customerId,
                       kind: account.manager ? t('seoSiteAdsManager') : t('seoSiteAdsClient'),
                       status: account.status.toLowerCase(),
