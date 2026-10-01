@@ -433,13 +433,16 @@ export interface AdsAccount {
   customerId: string
   name: string
   manager: boolean
+  /** Google's status (`ENABLED`, `CANCELED`, …), or `UNREADABLE` when Google refused to describe the account. */
   status: string
+  /** Why Google refused, for an `UNREADABLE` account. */
+  error?: string
 }
 
 /**
  * List the Ads accounts a sign-in can reach directly, with each one's status,
  * so Keyword Planner can run without the owner typing an account id.
- * Accounts Google refuses to describe (cancelled, closed) are left out.
+ * Accounts Google refuses to describe come back as `UNREADABLE` with its reason.
  * @param fetcher - HTTP.
  * @param auth - the sign-in.
  * @param signal - cancels the calls.
@@ -472,10 +475,14 @@ export async function accessibleAccounts(fetcher: typeof fetch, auth: AdsAuth, s
       body: JSON.stringify({ query: 'SELECT customer.id, customer.descriptive_name, customer.manager, customer.status FROM customer LIMIT 1' }),
       signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
     })
-    if (!response.ok) continue
-    const row = record(record(list(record(JSON.parse(await response.text()))['results'])[0])['customer'])
+    const body = await response.text()
+    if (!response.ok) {
+      accounts.push({ customerId: id, name: '', manager: false, status: 'UNREADABLE', error: parseError(body).message || `HTTP ${String(response.status)}` })
+      continue
+    }
+    const row = record(record(list(record(JSON.parse(body))['results'])[0])['customer'])
     accounts.push({ customerId: id, name: text(row['descriptiveName']), manager: row['manager'] === true, status: text(row['status']) || 'UNKNOWN' })
   }
-  const rank = (a: AdsAccount): number => (a.status === 'ENABLED' ? 0 : 2) + (a.manager ? 1 : 0)
+  const rank = (a: AdsAccount): number => (a.status === 'ENABLED' ? 0 : a.status === 'UNREADABLE' ? 4 : 2) + (a.manager ? 1 : 0)
   return accounts.sort((a, b) => rank(a) - rank(b))
 }

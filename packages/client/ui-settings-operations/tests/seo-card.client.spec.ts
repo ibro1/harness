@@ -34,7 +34,7 @@ describe('the SEO employee card', () => {
     })
     expect(request).toHaveBeenCalledWith('/seo/status', expect.objectContaining({ credentials: 'same-origin' }))
     expect(google().status).toEqual({
-      serviceAccount: null, adsAccount: { source: 'none', id: null, name: '', error: null }, clientSet: true, adsSet: false, clientSecretSet: true, developerTokenSet: false, connected: true, connectedAt: '2026-09-30T08:00:00.000Z',
+      serviceAccount: null, adsAccount: { source: 'none', id: null, name: '', error: null, seen: '' }, clientSet: true, adsSet: false, clientSecretSet: true, developerTokenSet: false, connected: true, connectedAt: '2026-09-30T08:00:00.000Z',
       redirectUri: 'https://harness.example.com/seo/oauth/callback',
     })
   })

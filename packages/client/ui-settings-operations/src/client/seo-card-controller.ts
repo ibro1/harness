@@ -71,6 +71,8 @@ export interface SeoCardFace extends SettingsFormActions {
   connectGoogle: () => void
   /** Forget the Google connection. */
   disconnectGoogle: () => void
+  /** Look up the Ads accounts the sign-in reaches again, instead of the hourly cache. */
+  recheckAds: () => void
   /** Remove the saved service account key, so the employee uses the owner's own Google sign-in. */
   removeServiceAccount: () => void
   /** Read the Google status again. */
@@ -189,6 +191,9 @@ export class SeoCardController {
       connectGoogle: () => { this.openWindow(SEO_OAUTH_START_PATH) },
       disconnectGoogle: () => { this.disconnectGoogle() },
       removeServiceAccount: () => { this.removeServiceAccount() },
+      recheckAds: () => {
+        void postSeoAction(this.request, { action: 'recheck-ads' }).then(() => { this.refreshStatus() })
+      },
       refreshStatus: () => { this.refreshStatus() },
     }
   }

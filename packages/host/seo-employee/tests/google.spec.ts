@@ -279,7 +279,7 @@ describe('Keyword Planner without a developer token', () => {
 })
 
 describe('finding the Ads account a sign-in reaches', () => {
-  it('lists the accounts, skips ones Google refuses to describe, and puts active client accounts first', async () => {
+  it('lists the accounts with Google\'s reason for any it refuses to describe, active client accounts first', async () => {
     const calls: { url: string; login: string | null }[] = []
     const fetcher: typeof fetch = (input, init) => {
       const url = input instanceof Request ? input.url : input.toString()
@@ -293,7 +293,10 @@ describe('finding the Ads account a sign-in reaches', () => {
       return Promise.resolve(Response.json({ results: [{ customer: { id, descriptiveName: manager ? 'Netlinkogrp' : 'Client', manager, status: 'ENABLED' } }] }))
     }
     const accounts = await accessibleAccounts(fetcher, { accessToken: () => Promise.resolve('t') }, new AbortController().signal)
-    expect(accounts.map(a => [a.customerId, a.manager])).toEqual([['1112223333', false], ['8152070364', true]])
+    expect(accounts.map(a => [a.customerId, a.manager, a.status])).toEqual([
+      ['1112223333', false, 'ENABLED'], ['8152070364', true, 'ENABLED'], ['3133505423', false, 'UNREADABLE'],
+    ])
+    expect(accounts[2]?.error).toBe('The customer account is cancelled.')
     expect(calls.find(c => c.url.includes('8152070364/googleAds:search'))?.login).toBe('8152070364')
   })
 })

@@ -348,7 +348,7 @@ export function apply(ctx: Context, config: Config): void {
     return { provider: selected.provider, model: selected.model }
   }
   // Ads accounts found for each sign-in when none is configured, rechecked hourly.
-  const discovered = new Map<string, { at: number; customerId?: string; name?: string; error?: string }>()
+  const discovered = new Map<string, { at: number; customerId?: string; name?: string; error?: string; seen?: string }>()
   const deps: SeoDeps = {
     store,
     settings: {
@@ -417,14 +417,18 @@ export function apply(ctx: Context, config: Config): void {
   // ----- The owner's routes -----
 
   /** The account discovery for the shared access, run at most hourly (every 5 minutes after a failure). */
-  const sharedAds = async (): Promise<{ customerId?: string; name?: string; error?: string }> => {
+  const sharedAds = async (): Promise<{ customerId?: string; name?: string; error?: string; seen?: string }> => {
     if (config.adsCustomerId.get().trim() !== '') return {}
     const known = discovered.get('shared')
     if (known !== undefined && Date.now() - known.at < (known.error === undefined ? 3_600_000 : 300_000)) return known
     try {
       const accounts = await accessibleAccounts(fetch, { accessToken: s => sharedToken(s) }, AbortSignal.timeout(30_000), config.adsApiVersion.get().trim() || 'v25')
       const chosen = accounts.find(a => a.status === 'ENABLED')
-      const entry = { at: Date.now(), ...chosen === undefined ? {} : { customerId: chosen.customerId, name: chosen.name } }
+      // What the sign-in reached, so a "none" says why: each account with its status or Google's refusal.
+      const seen = accounts.length === 0
+        ? 'none'
+        : accounts.map(a => `${a.customerId}${a.name === '' ? '' : ` ${a.name}`}: ${a.status.toLowerCase()}${a.error === undefined ? '' : ` (${a.error})`}`).join('; ')
+      const entry = { at: Date.now(), seen, ...chosen === undefined ? {} : { customerId: chosen.customerId, name: chosen.name } }
       discovered.set('shared', entry)
       return entry
     } catch (error) {
@@ -452,8 +456,11 @@ export function apply(ctx: Context, config: Config): void {
         adsSet: config.adsCustomerId.get().trim() !== '' || ads.customerId !== undefined,
         // The Ads account Keyword Planner runs in for sites on the shared access: typed, or found from the sign-in.
         adsAccount: config.adsCustomerId.get().trim() !== ''
-          ? { source: 'configured', id: config.adsCustomerId.get().trim(), name: '', error: null }
-          : { source: ads.customerId === undefined ? (ads.error === undefined ? 'none' : 'error') : 'found', id: ads.customerId ?? null, name: ads.name ?? '', error: ads.error ?? null },
+          ? { source: 'configured', id: config.adsCustomerId.get().trim(), name: '', error: null, seen: '' }
+          : {
+            source: ads.customerId === undefined ? (ads.error === undefined ? 'none' : 'error') : 'found',
+            id: ads.customerId ?? null, name: ads.name ?? '', error: ads.error ?? null, seen: ads.seen ?? '',
+          },
         connected: state.google !== null,
         connectedAt: state.google?.connectedAt ?? null,
       },
@@ -609,6 +616,11 @@ export function apply(ctx: Context, config: Config): void {
             json(res, 200, { ok: true })
             return
           }
+          case 'recheck-ads': {
+            discovered.delete('shared')
+            json(res, 200, { ok: true })
+            return
+          }
           case 'disconnect-google': {
             await store.update((s) => { s.google = null })
             refreshToken = ''
@@ -729,6 +741,7 @@ export function apply(ctx: Context, config: Config): void {
             return s.sites.find(x => x.id === siteId)?.name ?? siteId
           })
           siteTokens.delete(siteId)
+          discovered.delete(`site:${siteId}`)
           void notify(`SEO employee: Google is now connected for ${name}, by the site owner's own sign-in.`)
           answer(200, 'Connected', `<p>Thank you. ${html(name)} is connected to Google. You can close this tab.</p>`, '<script>window.close()</script>')
           return
@@ -736,6 +749,8 @@ export function apply(ctx: Context, config: Config): void {
         await store.update((s) => { s.google = connection })
         refreshToken = grant.refreshToken
         tokens.clear()
+        // A new sign-in may reach different Ads accounts.
+        discovered.delete('shared')
         // The settings page opens this flow in a popup: close it, and the page re-reads the status on focus.
         // A popup that cannot close itself (or a tab) goes back to the harness instead.
         answer(200, 'Google connected', '<p>Search Console and Keyword Planner are connected. Taking you back to the harness…</p><p><a href="/">Back to the harness</a></p>',

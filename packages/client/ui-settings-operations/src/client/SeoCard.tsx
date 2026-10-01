@@ -108,7 +108,7 @@ function adsLine(t: Translate, ads: SeoGoogleStatus['adsAccount']): string {
     case 'configured': return t('seoAdsConfigured', { id: ads.id ?? '' })
     case 'found': return t('seoAdsFound', { id: ads.id ?? '', name: ads.name === '' ? ads.id ?? '' : ads.name })
     case 'error': return t('seoAdsLookupFailed', { error: ads.error ?? '' })
-    case 'none': return t('seoAdsNoneFound')
+    case 'none': return t('seoAdsNoneFound', { seen: ads.seen === '' || ads.seen === 'none' ? t('seoAdsNoAccounts') : ads.seen })
   }
 }
 
@@ -216,6 +216,9 @@ export function SeoCard(props: SeoCardProps) {
         {google.status === undefined
           ? null
           : <p className={google.status.adsSet ? css.pickerValue : css.pickerUnknown} role="status">{adsLine(t, google.status.adsAccount)}</p>}
+        {google.status === undefined || google.status.adsAccount.source === 'configured'
+          ? null
+          : <p><Button variant="ghost" size="sm" onClick={props.recheckAds}>{t('seoAdsRecheck')}</Button></p>}
       </div>
       <SettingsSecretField
         id="plugin-config-seo-adsDeveloperToken"

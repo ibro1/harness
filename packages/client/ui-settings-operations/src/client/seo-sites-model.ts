@@ -131,7 +131,7 @@ export interface SeoGoogleStatus {
   /** The Ads developer token and customer id are saved. */
   adsSet: boolean
   /** The Ads account Keyword Planner runs in for shared-access sites: typed, found from the sign-in, none, or a lookup error. */
-  adsAccount: { source: 'configured' | 'found' | 'none' | 'error'; id: string | null; name: string; error: string | null }
+  adsAccount: { source: 'configured' | 'found' | 'none' | 'error'; id: string | null; name: string; error: string | null; seen: string }
   /** The service account Google is reached as, when its key is saved; `error` says why a saved key is unusable. */
   serviceAccount: { email: string | null; error: string | null } | null
   /** The OAuth client secret is saved; never the secret itself. */
@@ -236,6 +236,7 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
           id: typeof ads['id'] === 'string' ? ads['id'] : null,
           name: str(ads['name']),
           error: typeof ads['error'] === 'string' ? ads['error'] : null,
+          seen: str(ads['seen']),
         }
       })(),
       clientSecretSet: google['clientSecretSet'] === true,
