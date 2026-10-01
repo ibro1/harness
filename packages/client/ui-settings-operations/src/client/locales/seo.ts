@@ -10,7 +10,7 @@ export type SeoFieldKey =
 
 /** The site form fields that carry a label and a hint. */
 export type SeoSiteFieldKey =
-  | 'name' | 'baseUrl' | 'kind' | 'enabled' | 'business' | 'audience' | 'offer' | 'voice' | 'ctaText' | 'ctaUrl' | 'markets' | 'seeds'
+  | 'name' | 'baseUrl' | 'kind' | 'enabled' | 'business' | 'audience' | 'offer' | 'voice' | 'facts' | 'ctaText' | 'ctaUrl' | 'markets' | 'seeds'
   | 'gscProperty' | 'articlesPerWeek' | 'authorName' | 'authorUrl' | 'authorBio' | 'apiKey' | 'wpUser' | 'wpAppPassword'
   | 'googleAccess' | 'adsCustomerId' | 'adsLoginCustomerId'
   | 'brandAccent' | 'brandPaper' | 'brandInk' | 'brandDisplayFont' | 'brandBodyFont'
@@ -166,6 +166,8 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   'seoSite.offer.hint': 'What the business sells and to whom; the only thing an article may point readers to.',
   'seoSite.voice': 'Voice',
   'seoSite.voice.hint': 'How articles should sound. A line starting with "Avoid:" lists banned words and phrases, comma-separated, for example: Avoid: game-changer, unlock, in today\'s fast-paced world',
+  'seoSite.facts': 'Product facts',
+  'seoSite.facts.hint': 'One verified fact per line about what the product does today: features, limits, pricing, how it works. Articles may claim only these about the product; the editor refuses any other product claim as invented. Empty means articles make no specific product claims.',
   'seoSite.ctaText': 'Call to action',
   'seoSite.ctaText.hint': 'The closing line every article ends with, for example Try Klipara free.',
   'seoSite.ctaUrl': 'Call to action link',
@@ -426,6 +428,8 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   'seoSite.offer.hint': '业务向谁出售什么；文章只能把读者引向这里。',
   'seoSite.voice': '语气',
   'seoSite.voice.hint': '文章应有的语气。以“Avoid:”开头的一行列出禁用的词语，用逗号分隔，例如：Avoid: game-changer, unlock, in today\'s fast-paced world',
+  'seoSite.facts': '产品事实',
+  'seoSite.facts.hint': '每行一条关于产品当前功能的已核实事实：功能、限制、定价、工作方式。文章只能就产品声明这些内容；编辑会将其他产品声明视为捏造而拒绝。留空则文章不做具体的产品声明。',
   'seoSite.ctaText': '行动号召',
   'seoSite.ctaText.hint': '每篇文章结尾的那句话，例如“免费试用 Klipara”。',
   'seoSite.ctaUrl': '行动号召链接',

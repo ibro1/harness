@@ -197,6 +197,7 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
       {field('audience', 'audience', { multiline: true })}
       {field('offer', 'offer', { multiline: true })}
       {field('voice', 'voice', { multiline: true })}
+      {field('facts', 'facts', { multiline: true })}
       {field('ctaText', 'ctaText')}
       {field('ctaUrl', 'ctaUrl')}
 

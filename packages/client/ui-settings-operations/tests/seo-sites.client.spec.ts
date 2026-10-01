@@ -7,7 +7,7 @@ import {
 
 const site: SeoSite = {
   id: 'klipara', name: 'Klipara blog', baseUrl: 'https://klipara.linkfa.de', kind: 'klipara', enabled: true,
-  profile: { business: 'Clips long videos', audience: 'Podcasters', offer: 'Klips', voice: 'Plain.\nAvoid: unlock, game-changer', cta: { text: 'Try it', url: 'https://klipara.linkfa.de' } },
+  profile: { business: 'Clips long videos', audience: 'Podcasters', offer: 'Klips', voice: 'Plain.\nAvoid: unlock, game-changer', facts: 'Takes public links 5 to 180 minutes long.', cta: { text: 'Try it', url: 'https://klipara.linkfa.de' } },
   markets: [
     { label: 'Nigeria', geoId: '2566', languageId: '1000' },
     { label: 'Hausa speakers in Nigeria', geoId: '2566', languageId: '' },

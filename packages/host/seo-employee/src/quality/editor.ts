@@ -85,6 +85,8 @@ About the site:
 - Offer: ${p.offer}
 - Voice: ${p.voice}
 - Call to action: ${p.cta.text} (${p.cta.url})
+- Product facts (the only things the article may claim about the product; one per line):
+${(p.facts ?? '').trim() === '' ? '(none given: any specific claim about how the product works, its features, limits or pricing is unverified)' : (p.facts ?? '').trim()}
 
 Target search query: "${keyword}"
 
@@ -101,7 +103,9 @@ chart of cited numbers, the steps of a how-to); deduct for decoration, and treat
 Deduct for machine-writing tells: long dashes, stock words (delve, robust, seamless, leverage), "not just X but Y" contrasts, \
 three-item lists everywhere, bold-led bullets, questions answered in the next breath, summary conclusions.
 4. accuracy: Is every factual claim either common knowledge, the owner's own experience, or supported by a linked source? Any \
-invented statistic, quote, study, person, price, or product feature is a must-fix, and caps this score at 3.
+invented statistic, quote, study, person, price, or product feature is a must-fix, and caps this score at 3. Check every sentence \
+about the product against the product facts above: a claim about how it works, what it detects, its limits, its pricing or its \
+screens that the facts do not state is invented, however plausible. So is any claim about competitors without a linked source.
 5. usefulness: Think about what the pages that rank for "${keyword}" usually cover. Does this article give the reader something they \
 lack (first-hand detail, a worked example, a clearer answer, an honest limitation)? Deduct if it only restates them.
 

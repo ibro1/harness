@@ -28,6 +28,11 @@ export interface SiteProfile {
   voice: string
   /** The call to action an article ends with. */
   cta: { text: string; url: string }
+  /**
+   * What the product does today, one verified fact per line. Articles may claim only these about the product;
+   * anything else about features, pricing or how it works is a must-fix for the editor.
+   */
+  facts?: string
 }
 
 /**

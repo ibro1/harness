@@ -283,6 +283,13 @@ function reply(scores: Record<string, number>, extra: Record<string, unknown> = 
 const GOOD = { directness: 8, specificity: 7, voice: 7, accuracy: 8, usefulness: 7 }
 
 describe('editorial review', () => {
+  it('gives the editor the product facts and tells it to treat any other product claim as invented', () => {
+    const prompt = editorPrompt(baseDraft(), { ...site, profile: { ...site.profile, facts: 'Takes public links 5 to 180 minutes long.' } }, 'sermon clips')
+    expect(prompt).toContain('Takes public links 5 to 180 minutes long.')
+    expect(prompt).toContain('that the facts do not state is invented')
+    expect(editorPrompt(baseDraft(), site, 'q')).toContain('(none given:')
+  })
+
   it('builds a prompt with the article, the query, and the reply format', () => {
     const prompt = editorPrompt(baseDraft(), site, 'podcast clips for shorts')
     expect(prompt).toContain('"podcast clips for shorts"')

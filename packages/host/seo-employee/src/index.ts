@@ -250,6 +250,7 @@ export function parseSite(input: unknown, existing: Site | undefined, now: strin
       offer: text(profile['offer']),
       voice: text(profile['voice']),
       cta: { text: text(cta['text']), url: text(cta['url']) },
+      facts: typeof profile['facts'] === 'string' ? profile['facts'].trim().slice(0, 6000) : '',
     },
     markets,
     seeds: Array.isArray(r['seeds']) ? r['seeds'].map(text).filter(s => s !== '').slice(0, 30) : [],

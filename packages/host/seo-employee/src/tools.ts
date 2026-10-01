@@ -287,6 +287,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
             `Offer: ${site.profile.offer}`,
             `Voice: ${site.profile.voice}`,
             `Call to action: ${site.profile.cta.text} (${site.profile.cta.url})`,
+            `Product facts (claim nothing else about the product): ${(site.profile.facts ?? '').trim() === '' ? 'NONE GIVEN: make no specific claims about how the product works, its features or pricing; ask the owner.' : `\n${(site.profile.facts ?? '').trim()}`}`,
             `Seeds: ${site.seeds.join('; ') || 'none'}`,
             `Topics: planned ${String(count('planned'))}, asked ${String(count('asked'))}, drafted ${String(count('drafted'))}, published ${String(count('published'))}, rejected ${String(count('rejected'))}.`,
           )

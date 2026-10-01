@@ -39,7 +39,7 @@ export interface SeoSite {
   baseUrl: string
   kind: SeoPublisherKind
   enabled: boolean
-  profile: { business: string; audience: string; offer: string; voice: string; cta: { text: string; url: string } }
+  profile: { business: string; audience: string; offer: string; voice: string; facts: string; cta: { text: string; url: string } }
   markets: SeoMarket[]
   seeds: string[]
   gscProperty: string
@@ -195,6 +195,7 @@ export interface SeoSiteForm {
   audience: string
   offer: string
   voice: string
+  facts: string
   ctaText: string
   ctaUrl: string
   markets: SeoMarketKey[]
@@ -278,6 +279,7 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
         enabled: site['enabled'] !== false,
         profile: {
           business: str(profile['business']), audience: str(profile['audience']), offer: str(profile['offer']), voice: str(profile['voice']),
+          facts: str(profile['facts']),
           cta: { text: str(cta['text']), url: str(cta['url']) },
         },
         markets: list(site['markets']).map((m) => {
@@ -372,7 +374,7 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
 export function emptySiteForm(): SeoSiteForm {
   return {
     id: '', name: '', baseUrl: 'https://', kind: 'klipara', enabled: true,
-    business: '', audience: '', offer: '', voice: '', ctaText: '', ctaUrl: '',
+    business: '', audience: '', offer: '', voice: '', facts: '', ctaText: '', ctaUrl: '',
     markets: [], otherMarkets: [], seeds: '', gscProperty: '', articlesPerWeek: '2',
     authorName: '', authorUrl: '', authorBio: '', brandAccent: '', brandPaper: '', brandInk: '', brandDisplayFont: '', brandBodyFont: '', googleAccess: 'shared', adsCustomerId: '', adsLoginCustomerId: '',
     apiKey: '', wpUser: '', wpAppPassword: '',
@@ -395,6 +397,7 @@ export function siteFormFrom(site: SeoSite): SeoSiteForm {
   return {
     id: site.id, name: site.name, baseUrl: site.baseUrl, kind: site.kind, enabled: site.enabled,
     business: site.profile.business, audience: site.profile.audience, offer: site.profile.offer, voice: site.profile.voice,
+    facts: site.profile.facts,
     ctaText: site.profile.cta.text, ctaUrl: site.profile.cta.url,
     markets, otherMarkets,
     seeds: site.seeds.join('\n'), gscProperty: site.gscProperty, articlesPerWeek: String(site.articlesPerWeek),
@@ -453,6 +456,7 @@ export function buildSaveSiteBody(form: SeoSiteForm): SeoSaveSiteBody | undefine
       enabled: form.enabled,
       profile: {
         business: form.business.trim(), audience: form.audience.trim(), offer: form.offer.trim(), voice: form.voice.trim(),
+        facts: form.facts.trim(),
         cta: { text: form.ctaText.trim(), url: form.ctaUrl.trim() },
       },
       markets,

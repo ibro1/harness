@@ -48,6 +48,10 @@ The code checks reject these. Write around them from the start.
 - Emoji.
 - Any phrase listed in the site's voice as one to avoid.
 
+## What you may say about the product
+
+`seo_status` lists the site's product facts. Claim nothing else about the product: not how it works inside, what it detects or analyses, its limits, its pricing, its screens, or how it compares with competitors. A plausible feature that is not in the facts is an invented feature, and the editor refuses it. If the article needs a fact that is not listed, ask the owner. Claims about competitors need a linked source.
+
 ## Fake professional tone
 
 The polished, safe register reads impressive once and empty the second time. Write the way the owner would explain it to a creator over WhatsApp: plain words, a definite opinion where they have one, and the specific detail a stranger could not have made up. If a sentence would fit in any company's blog unchanged, cut it or make it about this site's readers.
