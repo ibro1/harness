@@ -23,7 +23,7 @@ export type SeoLocaleKey =
   | 'seoTitle' | 'seoDescription' | 'seoInvalid' | 'seoOpenSites'
   | 'seoGoogleTitle' | 'seoGoogleLoading' | 'seoGoogleUnknown' | 'seoGoogleNotSetUp' | 'seoGoogleNotConnected' | 'seoGoogleConnected' | 'seoGoogleServiceAccount' | 'seoGoogleServiceAccountBad' | 'seoRemoveServiceAccount'
   | 'seoGoogleRedirect' | 'seoGoogleConnect' | 'seoGoogleReconnect' | 'seoGoogleConnectHint' | 'seoGoogleDisconnect' | 'seoGoogleDisconnectFailed'
-  | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady' | 'seoAdsConfigured' | 'seoAdsFound' | 'seoAdsLookupFailed' | 'seoAdsNoneFound' | 'seoAdsNoAccounts' | 'seoAdsRecheck' | 'seoAdsChecking' | 'seoAdsCheckedAt'
+  | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady' | 'seoAdsConfigured' | 'seoAdsFound' | 'seoAdsFoundUnnamed' | 'seoAdsLookupFailed' | 'seoAdsNoneFound' | 'seoAdsNoAccounts' | 'seoAdsRecheck' | 'seoAdsChecking' | 'seoAdsCheckedAt'
   | 'seoSecretSaved' | 'seoSecretUnset'
   | `seo.${SeoFieldKey}` | `seo.${SeoFieldKey}.hint` | 'seo.shiftModel.none' | 'seo.fallbackModelPick.none' | 'seo.editorModelPick.none'
   | 'seoSitesPageTitle' | 'seoSitesDescription' | 'seoSitesLoading' | 'seoSitesFailed'
@@ -74,6 +74,7 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoAdsNotReady: 'Keyword Planner is not set up: the employee works from Search Console and search suggestions only.',
   seoAdsConfigured: 'Keyword Planner runs in Google Ads account {id}.',
   seoAdsFound: 'Keyword Planner runs in {name} ({id}), found from your Google sign-in. Nothing to fill in below.',
+  seoAdsFoundUnnamed: 'Keyword Planner runs in Google Ads account {id}, found from your Google sign-in. Nothing to fill in below.',
   seoAdsLookupFailed: 'Your Google Ads accounts could not be read: {error}',
   seoAdsNoneFound: 'Your Google sign-in reaches no active Google Ads account, so Keyword Planner is off: the employee researches from Search Console and search suggestions. What the sign-in reached: {seen}.',
   seoAdsNoAccounts: 'no Google Ads accounts at all (sign in with the Google account that has Ads access)',
@@ -320,6 +321,7 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoAdsNotReady: '关键词规划师未设置：员工仅依据 Search Console 和搜索建议工作。',
   seoAdsConfigured: '关键词规划师在 Google Ads 账号 {id} 中运行。',
   seoAdsFound: '关键词规划师在 {name}（{id}）中运行，由你的 Google 登录自动找到。下方无需填写。',
+  seoAdsFoundUnnamed: '关键词规划师在 Google Ads 账号 {id} 中运行，由你的 Google 登录自动找到。下方无需填写。',
   seoAdsLookupFailed: '无法读取你的 Google Ads 账号：{error}',
   seoAdsNoneFound: '你的 Google 登录没有可用的 Google Ads 账号，因此关键词规划师已关闭：员工依据 Search Console 和搜索建议研究。该登录可访问：{seen}。',
   seoAdsNoAccounts: '没有任何 Google Ads 账号（请用拥有 Ads 权限的 Google 账号登录）',
