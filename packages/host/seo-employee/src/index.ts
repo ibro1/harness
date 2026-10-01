@@ -78,6 +78,7 @@ export interface Config {
   googleServiceAccountKey: Volatile<string>
   googleClientId: Volatile<string>
   googleClientSecret: Volatile<string>
+  /** Legacy and optional: Google ignores the developer token since 2026-09-09. */
   adsDeveloperToken: Volatile<string>
   adsLoginCustomerId: Volatile<string>
   adsCustomerId: Volatile<string>
@@ -328,10 +329,15 @@ export function apply(ctx: Context, config: Config): void {
     now: () => new Date(),
     googleToken,
     adsAuth: () => {
+      // Keyword Planner needs only an Ads account to plan in; the developer token is a legacy, optional header.
+      if (config.adsCustomerId.get().trim() === '') return undefined
       const developerToken = config.adsDeveloperToken.get().trim()
-      if (developerToken === '') return undefined
       const login = config.adsLoginCustomerId.get().trim()
-      return { accessToken: googleToken, developerToken, ...login === '' ? {} : { loginCustomerId: login } }
+      return {
+        accessToken: googleToken,
+        ...developerToken === '' ? {} : { developerToken },
+        ...login === '' ? {} : { loginCustomerId: login },
+      }
     },
     publisher: async (site) => {
       const secrets: SiteSecrets = (await store.read()).secrets[site.id] ?? {}
@@ -378,7 +384,7 @@ export function apply(ctx: Context, config: Config): void {
         clientSet: config.googleClientId.get().trim() !== '' && config.googleClientSecret.get().trim() !== '',
         clientSecretSet: config.googleClientSecret.get().trim() !== '',
         developerTokenSet: config.adsDeveloperToken.get().trim() !== '',
-        adsSet: config.adsDeveloperToken.get().trim() !== '' && config.adsCustomerId.get().trim() !== '',
+        adsSet: config.adsCustomerId.get().trim() !== '',
         connected: state.google !== null,
         connectedAt: state.google?.connectedAt ?? null,
       },

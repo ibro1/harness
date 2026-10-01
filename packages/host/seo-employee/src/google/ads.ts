@@ -162,8 +162,11 @@ export class AdsApiError extends Error {
 export interface AdsAuth {
   /** A valid OAuth access token with the `adwords` scope. */
   accessToken: (signal: AbortSignal) => Promise<string>
-  /** The manager account's developer token. */
-  developerToken: string
+  /**
+   * A legacy developer token. Since Google sunset developer tokens (2026-09-09) the access level comes from the Cloud
+   * project behind the OAuth client or service account, and the header is optional and ignored; it is sent only when set.
+   */
+  developerToken?: string
   /** Manager account the call goes through; dashes allowed. */
   loginCustomerId?: string
   /** Spacing queue; defaults to one shared by the process. */
@@ -315,7 +318,7 @@ async function post(
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
-          'developer-token': auth.developerToken,
+          ...auth.developerToken === undefined || auth.developerToken === '' ? {} : { 'developer-token': auth.developerToken },
           'Content-Type': 'application/json',
           ...login === undefined ? {} : { 'login-customer-id': login },
         },

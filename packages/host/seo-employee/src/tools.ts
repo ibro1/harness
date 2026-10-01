@@ -344,7 +344,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const market = marketOf(site, str(args['market']))
         const auth = deps.adsAuth()
         const customerId = settings.adsCustomerId().trim()
-        if (auth === undefined || customerId === '') throw new Error('Keyword Planner is not set up (developer token and customer id on the SEO employee page). Use seo_search_console and seo_autocomplete instead.')
+        if (auth === undefined || customerId === '') throw new Error('Keyword Planner is not set up (the Ads account id on the SEO employee page). Use seo_search_console and seo_autocomplete instead.')
         const seeds = (strings(args['seeds']).length > 0 ? strings(args['seeds']) : site.seeds).filter(isPlannableKeyword).slice(0, 10)
         const url = str(args['url'])
         if (seeds.length === 0 && url === '') throw new Error('Give seed keywords or a page URL; the site has no plannable seeds.')
@@ -381,7 +381,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const market = marketOf(site, str(args['market']))
         const auth = deps.adsAuth()
         const customerId = settings.adsCustomerId().trim()
-        if (auth === undefined || customerId === '') throw new Error('Keyword Planner is not set up (developer token and customer id on the SEO employee page).')
+        if (auth === undefined || customerId === '') throw new Error('Keyword Planner is not set up (the Ads account id on the SEO employee page).')
         const keywords = [...new Set(strings(args['keywords']).map(normalizeKeyword))].slice(0, 30)
         const { result: metrics, cachedAt } = await cached('metrics', site.id, `volumes ${market.label}: ${keywords.join(', ')}`, { keywords, market },
           settings.researchCacheDays(), () => generateKeywordHistoricalMetrics(deps.fetch, { ...auth, accessToken: deps.googleToken }, {

@@ -266,6 +266,18 @@ describe('Keyword Planner', () => {
 const row = (query: string, page: string, impressions: number, position: number): GscRow =>
   ({ query, page, clicks: 1, impressions, ctr: 0, position })
 
+describe('Keyword Planner without a developer token', () => {
+  it('sends no developer-token header when none is set, as Google no longer needs one', async () => {
+    const { queue } = fakeTime()
+    const { fetcher, calls } = scripted([() => Response.json({ results: [] })])
+    await generateKeywordIdeas(fetcher, { accessToken: () => Promise.resolve('ya29.SECRET-ACCESS'), queue }, {
+      customerId: '1234567890', keywords: ['rent in lagos'], geoIds: [],
+    }, new AbortController().signal)
+    expect(calls[0]?.headers['developer-token']).toBeUndefined()
+    expect(calls[0]?.headers['authorization']).toBe('Bearer ya29.SECRET-ACCESS')
+  })
+})
+
 describe('Search Console', () => {
   it('keeps the best page per query only when it is in striking distance', () => {
     const rows = [
