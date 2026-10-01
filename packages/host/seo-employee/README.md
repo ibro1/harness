@@ -50,6 +50,10 @@ Tools, on `seo-` Sessions only (and to agy and opencode over `deploy/mcp/seo-mcp
 | `seo_articles` | per-article Search Console clicks, impressions and position, recorded; flags refreshes |
 | `seo_pause`, `seo_resume` | pause and alert the owner; resume only when the owner asks |
 
+### Ads employee
+
+A second employee in the same plugin runs Google Search ads for the sites, on its own daily shift (`ads-` Sessions, the `ads-employee` skill, settings `ads*` on the same namespace, off by default). It reads results (`ads_status`, `ads_search_terms`), saves money on its own (`ads_add_negatives`, `ads_pause_campaign`), and only **proposes** spending (`ads_propose_campaign`, `ads_propose_budget`, `ads_propose_resume`). No tool enables a campaign or raises a budget: the owner approves a proposal on **Plugins → Ads proposals**, and the plugin then re-checks the account (active, conversion tracking when required) and the owner's limits (monthly ceiling over all live campaigns at 30.4 days a month, per-campaign daily budget, click bid ceiling) before creating the campaign paused and enabling it. Campaigns are Search only, Google Search network only, people in the target countries only, exact and phrase keywords, maximise clicks under the click ceiling, and one responsive search ad whose text passes the article style check and the site's banned phrases. Every hour, without a model turn, a watcher pauses a campaign that spent the owner's cost-per-conversion limit with no conversion (or 1.5 times it per conversion), and every campaign once the month's spend reaches the ceiling. A monthly ceiling of 0, the default, allows no spend at all.
+
 -----
 
 <a id="understand-the-implementation"></a>

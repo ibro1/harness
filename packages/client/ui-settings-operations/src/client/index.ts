@@ -1,5 +1,5 @@
 /**
- * The Dokploy, Cloudflare, Postgres, Klipara Scout, Error reporting and SEO employee settings pages, browser
+ * The Dokploy, Cloudflare, Postgres, Klipara Scout, Error reporting, SEO employee and ads employee settings pages, browser
  * half: the servers, zones, accounts and databases an agent may act on, and the employees' shifts. Each page
  * registers into the Plugins page's `plugins.item` slot while the Host serves
  * its namespace, so a deployment that leaves a plugin out shows no trace of it.
@@ -16,6 +16,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the ctx.remote Context merge and the forwarded-event key face.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { AdsCard } from './AdsCard.tsx'
+import { AdsProposalsPage } from './AdsProposalsPage.tsx'
 import { CloudflareCard } from './CloudflareCard.tsx'
 import { DokployCard } from './DokployCard.tsx'
 import { PostgresCard } from './PostgresCard.tsx'
@@ -31,6 +33,7 @@ import { ERROR_REPORTING_NS, ErrorReportingCardController } from './error-report
 import { SCOUT_NS, ScoutCardController } from './scout-card-controller.ts'
 import { ScoutModelCatalog } from './scout-model-catalog.ts'
 import { SEO_NS, SeoCardController } from './seo-card-controller.ts'
+import { AdsCardController } from './ads-card-controller.ts'
 import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
 
 export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from './cloudflare-card-controller.ts'
@@ -38,6 +41,7 @@ export type { DokployCardFace, DokployCardState, DokploySettings } from './dokpl
 export type { PostgresCardFace, PostgresCardState, PostgresSettings } from './postgres-card-controller.ts'
 export type { ScoutCardFace, ScoutCardState, ScoutSettings } from './scout-card-controller.ts'
 export type { SeoCardFace, SeoCardState, SeoSettings } from './seo-card-controller.ts'
+export type { AdsCardFace, AdsCardState, AdsSettings } from './ads-card-controller.ts'
 export type { ErrorReportingCardFace, ErrorReportingCardState, ErrorReportingSettings } from './error-reporting-card-controller.ts'
 export type { OperationsSettingsLocaleKey } from './locales.ts'
 
@@ -52,6 +56,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const SCOUT_LEADS_ID = 'klipara-scout-leads'
 /** The SEO sites page's `plugins.item` id. */
 const SEO_SITES_ID = 'seo-employee-sites'
+/** The Ads proposals page's `plugins.item` id. */
+const ADS_PROPOSALS_ID = 'ads-employee-proposals'
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.operations'
@@ -74,6 +80,8 @@ export function apply(ctx: ClientContext): void {
   // One model catalog serves every picker on the Klipara Scout and SEO employee cards.
   const scoutModels = new ScoutModelCatalog(ctx)
   const seo = new SeoCardController(ctx.configForms.get(SEO_NS))
+  // The ads employee's settings live in the SEO employee's namespace; its card stages only the ads fields.
+  const ads = new AdsCardController(ctx.configForms.get(SEO_NS))
   const errorReporting = new ErrorReportingCardController(ctx.configForms.get(ERROR_REPORTING_NS))
   // Adapters come and go, and a settings commit elsewhere can change the routes.
   ctx.effect(() => ctx.remote.$on('llm/adapters-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model adapters')
@@ -85,6 +93,7 @@ export function apply(ctx: ClientContext): void {
     scout.dispose()
     errorReporting.dispose()
     seo.dispose()
+    ads.dispose()
   }, 'ui-settings-operations: form subscriptions')
 
   ctx.effect(() => ctx.configForms.whileServed([DOKPLOY_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
@@ -119,4 +128,11 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([SEO_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: SEO_SITES_ID, order: 83, label: () => t('seoSitesPageTitle'), locale: NS,
   }, SeoSitesPage))), 'ui-settings-operations: SEO sites page')
+  ctx.effect(() => ctx.configForms.whileServed([SEO_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'ads-employee', order: 84, label: () => t('adsTitle'), locale: NS,
+    inject: () => ads.inject(() => { ctx.get('pluginNavigation')?.openItem(ADS_PROPOSALS_ID) }),
+  }, AdsCard))), 'ui-settings-operations: ads employee page')
+  ctx.effect(() => ctx.configForms.whileServed([SEO_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: ADS_PROPOSALS_ID, order: 85, label: () => t('adsProposalsPageTitle'), locale: NS,
+  }, AdsProposalsPage))), 'ui-settings-operations: Ads proposals page')
 }

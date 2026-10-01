@@ -131,6 +131,60 @@ export interface SeoState {
    * sites page), never a shift: featuring a creator's clip in marketing needs their permission.
    */
   clipPermissions?: Record<string, ClipPermission>
+  /** The ads employee's proposals; only the owner approves one, and only an approved one spends. */
+  adsProposals?: AdsProposal[]
+  /** Campaigns the ads employee created, by campaign resource name. */
+  adsCampaigns?: AdsCampaign[]
+  /** Set when the ads employee or its spend watcher paused everything; only the owner clears it. */
+  adsPaused?: { reason: string; at: string } | null
+  lastAdsShiftDate?: string | null
+  lastAdsShiftSession?: string
+}
+
+/** A search campaign as the ads employee proposes it. Money is in the Ads account's currency, as micros. */
+export interface AdsCampaignSpec {
+  name: string
+  dailyBudgetMicros: number
+  cpcCeilingMicros: number
+  geoIds: string[]
+  languageId?: string
+  keywords: { text: string; match: 'EXACT' | 'PHRASE' }[]
+  negatives: string[]
+  ad: { finalUrl: string; headlines: string[]; descriptions: string[]; path1?: string; path2?: string }
+}
+
+/** One change that would spend money, waiting for the owner. */
+export interface AdsProposal {
+  id: string
+  siteId: string
+  kind: 'campaign' | 'budget' | 'resume'
+  status: 'proposed' | 'approved' | 'rejected' | 'failed'
+  /** Why the employee proposes it, with the numbers it saw. */
+  reason: string
+  /** A new campaign. */
+  campaign?: AdsCampaignSpec
+  /** A budget change or resume: the campaign it acts on. */
+  campaignResource?: string
+  newDailyBudgetMicros?: number
+  createdAt: string
+  decidedAt?: string
+  /** What happened when it was carried out, or why it failed. */
+  outcome?: string
+}
+
+/** A campaign the ads employee created. */
+export interface AdsCampaign {
+  resource: string
+  budget: string
+  adGroup: string
+  siteId: string
+  customerId: string
+  name: string
+  dailyBudgetMicros: number
+  createdAt: string
+  enabledAt?: string
+  /** Set when it was paused by the employee or the watcher, with why. */
+  paused?: { reason: string; at: string }
 }
 
 /** Why a sample may be featured. */
@@ -144,7 +198,11 @@ export interface ClipPermission {
   at: string
 }
 
-/** The ids of every `::clip[id]` line in a Markdown body. */
+/**
+ * The ids of every `::clip[id]` line in a Markdown body.
+ * @param markdown - the body.
+ * @returns each id once.
+ */
 export function clipIds(markdown: string): string[] {
   return [...new Set([...markdown.matchAll(/^\s*::clip\[([A-Za-z0-9_-]+)\]\s*$/gmu)].map(m => m[1] ?? '').filter(Boolean))]
 }

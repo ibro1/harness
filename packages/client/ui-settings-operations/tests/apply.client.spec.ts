@@ -65,15 +65,17 @@ describe('ui-settings-operations apply', () => {
     expect(slots.entries('plugins.item')[0]!.options.id).toBe('cloudflare')
   })
 
-  it('registers the SEO employee card and its sites page while the Host serves seo-employee', async () => {
+  it('registers the SEO and ads employee cards and their pages while the Host serves seo-employee', async () => {
     const { ctx, slots } = await bench(['seo-employee'])
 
     await ctx.plugin({ inject: [...inject], apply }).await()
 
-    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(2) })
+    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(4) })
     const entries = slots.entries('plugins.item')
-    expect(entries.map(entry => [entry.options.id, entry.options.order])).toEqual([['seo-employee', 82], ['seo-employee-sites', 83]])
-    expect(entries.map(entry => resolveSlotLabel(entry.options.label))).toEqual(['SEO employee', 'SEO sites'])
+    expect(entries.map(entry => [entry.options.id, entry.options.order])).toEqual([
+      ['seo-employee', 82], ['seo-employee-sites', 83], ['ads-employee', 84], ['ads-employee-proposals', 85],
+    ])
+    expect(entries.map(entry => resolveSlotLabel(entry.options.label))).toEqual(['SEO employee', 'SEO sites', 'Ads employee', 'Ads proposals'])
   })
 
   it('removes its pages with the plugin', async () => {

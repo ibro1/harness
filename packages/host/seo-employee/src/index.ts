@@ -38,6 +38,9 @@ import { createPublisher } from './publishers/index.ts'
 import { probeWordPress } from './publishers/wordpress.ts'
 import { SeoStore, publishedThisWeek } from './store.ts'
 import { buildSeoTools, type SeoDeps } from './tools.ts'
+import { buildAdsTools, carryOut, type AdsDeps } from './ads/tools.ts'
+import { campaignReport, setCampaignStatus } from './ads/api.ts'
+import { campaignsToPause, MICROS } from './ads/policy.ts'
 import type { Market, PublisherKind, Site, SiteGoogle, SiteSecrets } from './types.ts'
 
 export { SeoStore, emptyState, isoWeek, publishedThisWeek } from './store.ts'
@@ -64,6 +67,8 @@ export const inject = ['agents', 'webServer', 'llm', 'agentDefaultModel', 'agent
 
 /** Session ids of the employee's shifts start with this. */
 const SESSION_PREFIX = 'seo-'
+/** Session ids of the ads employee's shifts start with this. */
+const ADS_PREFIX = 'ads-'
 
 /** Plugin configuration; fields marked volatile are edited on the SEO employee page. */
 export interface Config {
@@ -90,6 +95,19 @@ export interface Config {
   adsApiVersion: Volatile<string>
   researchCacheDays: Volatile<number>
   answerWaitHours: Volatile<number>
+  /** The ads employee: off until the owner turns it on; it proposes, and the owner approves anything that spends. */
+  adsEnabled: Volatile<boolean>
+  adsShiftTime: Volatile<string>
+  /** Most the ads employee's live campaigns may cost in a month, in the Ads account's currency. 0 allows no spend. */
+  adsMonthlyCeiling: Volatile<number>
+  /** Largest daily budget one campaign may have. */
+  adsMaxDailyBudget: Volatile<number>
+  /** Largest click bid ceiling. */
+  adsMaxCpc: Volatile<number>
+  /** The watcher pauses a campaign that spends this much with no conversion, or 1.5 times it per conversion; 0 turns that off. */
+  adsMaxCostPerConversion: Volatile<number>
+  /** Whether approving needs conversion tracking in the account. */
+  adsRequireConversionTracking: Volatile<boolean>
   /** Directory for the state file; empty uses `<DSH home>/seo-employee`. */
   dataDir: string
   /** Absolute origin of this harness, for the OAuth redirect and unpublish links. */
@@ -103,6 +121,8 @@ export interface Config {
   permissionPreset: string
   /** The shift's opening message; `{skill}` becomes the skill file's path. */
   shiftPrompt: string
+  /** The ads shift's opening message; `{skill}` becomes the ads skill file's path. */
+  adsShiftPrompt: string
   timeoutMs: number
   /** How often owner answers are collected from WhatsApp. */
   answerCheckMs: number
@@ -134,6 +154,14 @@ export const Config = z.object({
   adsApiVersion: z.string().default('v25').volatile(),
   researchCacheDays: z.natural().min(1).default(30).volatile(),
   answerWaitHours: z.natural().default(48).volatile(),
+  adsEnabled: z.boolean().default(false).volatile(),
+  adsShiftTime: z.string().default('11:00').volatile(),
+  adsMonthlyCeiling: z.natural().default(0).volatile(),
+  adsMaxDailyBudget: z.natural().default(0).volatile(),
+  adsMaxCpc: z.natural().default(0).volatile(),
+  adsMaxCostPerConversion: z.natural().default(0).volatile(),
+  adsRequireConversionTracking: z.boolean().default(true).volatile(),
+  adsShiftPrompt: z.string().default('Run today\'s ads employee shift. Your instructions are the ads-employee skill at {skill}: read that file first, then follow it exactly.'),
   dataDir: z.string().default(''),
   publicBaseUrl: z.string().default(''),
   path: z.string().default('/seo'),
@@ -159,7 +187,8 @@ const OAUTH_FLOW_MS = 15 * 60_000
  * @returns true for a Session this plugin started.
  */
 function isSession(agent: Agent): boolean {
-  return String(agent.session.id).startsWith(SESSION_PREFIX)
+  const id = String(agent.session.id)
+  return id.startsWith(SESSION_PREFIX) || id.startsWith(ADS_PREFIX)
 }
 
 async function readBody(req: IncomingMessage, limit: number): Promise<string | undefined> {
@@ -424,6 +453,22 @@ export function apply(ctx: Context, config: Config): void {
     },
   }
   const tools = buildSeoTools(deps)
+  const adsDeps: AdsDeps = {
+    store,
+    fetch,
+    now: () => new Date(),
+    apiVersion: () => config.adsApiVersion.get().trim() || 'v25',
+    limits: () => ({
+      monthlyCeiling: config.adsMonthlyCeiling.get(),
+      maxDailyBudget: config.adsMaxDailyBudget.get(),
+      maxCpc: config.adsMaxCpc.get(),
+      requireConversionTracking: config.adsRequireConversionTracking.get(),
+    }),
+    adsAuth: (site, signal) => deps.adsAuth(site, signal),
+    notify,
+    proposalsLink: () => `${publicBase}/ (Plugins → Ads proposals)`,
+  }
+  const adsTools = buildAdsTools(adsDeps)
 
   const resolveRoute = (provider: string, model: string): { provider: string; model: string } | undefined =>
     provider.trim() === '' || model.trim() === '' ? undefined : { provider: provider.trim(), model: model.trim() }
@@ -505,6 +550,12 @@ export function apply(ctx: Context, config: Config): void {
           }
           : null,
       })),
+      ads: {
+        paused: state.adsPaused ?? null,
+        lastShiftDate: state.lastAdsShiftDate ?? null,
+        proposals: [...state.adsProposals ?? []].reverse().slice(0, 50),
+        campaigns: state.adsCampaigns ?? [],
+      },
       clipPermissions: Object.entries(state.clipPermissions ?? {}).map(([sampleId, p]) => ({ sampleId, ...p })),
       questions: state.questions
         .filter(q => q.answer === undefined || Date.parse(q.answeredAt ?? q.askedAt) > now.getTime() - 14 * 86_400_000)
@@ -671,6 +722,30 @@ export function apply(ctx: Context, config: Config): void {
             await store.update((s) => { s.google = null })
             refreshToken = ''
             tokens.clear()
+            json(res, 200, { ok: true })
+            return
+          }
+          case 'approve-proposal': {
+            const id = typeof body['id'] === 'string' ? body['id'] : ''
+            json(res, 200, { ok: true, outcome: await carryOut(adsDeps, id, AbortSignal.timeout(120_000)) })
+            return
+          }
+          case 'reject-proposal': {
+            const id = typeof body['id'] === 'string' ? body['id'] : ''
+            await store.update((s) => {
+              const p = (s.adsProposals ?? []).find(x => x.id === id)
+              if (p !== undefined && p.status === 'proposed') { p.status = 'rejected'; p.decidedAt = now }
+            })
+            json(res, 200, { ok: true })
+            return
+          }
+          case 'ads-pause': {
+            await store.update((s) => { s.adsPaused = { reason: 'paused by the owner', at: now } })
+            json(res, 200, { ok: true })
+            return
+          }
+          case 'ads-resume': {
+            await store.update((s) => { s.adsPaused = null })
             json(res, 200, { ok: true })
             return
           }
@@ -882,7 +957,7 @@ export function apply(ctx: Context, config: Config): void {
         const a = createHmac('sha256', 'cmp').update(presented).digest()
         const b = createHmac('sha256', 'cmp').update(config.token).digest()
         if (!timingSafeEqual(a, b)) { res.writeHead(404); res.end(); return }
-        if (req.method === 'GET') { json(res, 200, { tools: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }); return }
+        if (req.method === 'GET') { json(res, 200, { tools: [...tools, ...adsTools].map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }); return }
         const raw = await readBody(req, 512 * 1024)
         if (raw === undefined) { json(res, 413, { error: 'the command body is too large' }); return }
         let request: { name?: unknown; args?: unknown }
@@ -892,7 +967,7 @@ export function apply(ctx: Context, config: Config): void {
           json(res, 400, { error: 'the command body is not JSON' })
           return
         }
-        const found = tools.find(t => t.name === request.name)
+        const found = [...tools, ...adsTools].find(t => t.name === request.name)
         if (found === undefined) { json(res, 400, { error: `no such tool: ${String(request.name)}` }); return }
         const abort = new AbortController()
         res.on('close', () => { if (!res.writableEnded) abort.abort() })
@@ -919,8 +994,9 @@ export function apply(ctx: Context, config: Config): void {
   const installed = new Map<Agent, { dispose: () => Promise<void> }>()
   const install = (agent: Agent): void => {
     if (installed.has(agent) || !isSession(agent)) return
+    const own = String(agent.session.id).startsWith(ADS_PREFIX) ? adsTools : tools
     installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
-      for (const definition of tools) scope.effect(() => scope.tools.register(definition), `seo-employee: ${definition.name}`)
+      for (const definition of own) scope.effect(() => scope.tools.register(definition), `seo-employee: ${definition.name}`)
     }))
   }
   for (const agent of ctx.agents.list()) install(agent)
@@ -932,7 +1008,7 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   const skillPath = join(process.env['DSH_HOME'] ?? join(homedir(), '.dsh'), 'skills', 'seo-employee', 'SKILL.md')
-  const start = async (title: string, prompt: string): Promise<string> => {
+  const start = async (title: string, prompt: string, sessionPrefix = SESSION_PREFIX): Promise<string> => {
     await mkdir(config.workspacePath, { recursive: true })
     const sessionId = await startShift(ctx, {
       workspacePath: config.workspacePath,
@@ -942,10 +1018,10 @@ export function apply(ctx: Context, config: Config): void {
       permissionPreset: config.permissionPreset,
       provider: config.provider.get(),
       model: config.model.get(),
-      sessionPrefix: SESSION_PREFIX,
+      sessionPrefix,
       source: summary => ({ kind: 'seo-employee', form: 'notice', summary }),
     }, AbortSignal.timeout(120_000))
-    await store.update((s) => { s.lastShiftSession = sessionId })
+    await store.update((s) => { if (sessionPrefix === ADS_PREFIX) s.lastAdsShiftSession = sessionId; else s.lastShiftSession = sessionId })
     return sessionId
   }
 
@@ -978,6 +1054,86 @@ export function apply(ctx: Context, config: Config): void {
   }
   const timer = setInterval(() => { void tick() }, 60_000)
   ctx.effect(() => () => { clearInterval(timer) })
+
+  // The ads shift: once a day after its time, only when turned on, not paused, and with spend allowed.
+  const adsSkillPath = join(process.env['DSH_HOME'] ?? join(homedir(), '.dsh'), 'skills', 'ads-employee', 'SKILL.md')
+  let adsStarting = false
+  let adsRetryAt = 0
+  const adsTick = async (): Promise<void> => {
+    if (adsStarting || !config.adsEnabled.get() || config.adsMonthlyCeiling.get() <= 0 || Date.now() < adsRetryAt) return
+    const at = parseShiftTime(config.adsShiftTime.get())
+    if (at === undefined) return
+    const now = localTime(new Date(), config.timeZone.get())
+    const state = await store.read()
+    if (state.adsPaused || state.sites.every(s => !s.enabled) || !shiftDue(now, at, state.lastAdsShiftDate ?? null)) return
+    adsStarting = true
+    const previous = state.lastAdsShiftDate ?? null
+    try {
+      await store.update((s) => { s.lastAdsShiftDate = now.date })
+      await start(`Ads employee shift ${now.date}`, config.adsShiftPrompt.replaceAll('{skill}', adsSkillPath), ADS_PREFIX)
+    } catch (error) {
+      await store.update((s) => { s.lastAdsShiftDate = previous })
+      adsRetryAt = Date.now() + 30 * 60_000
+      void notify(`Ads employee: today's shift did not start (${(error instanceof Error ? error.message : String(error)).slice(0, 200)}).`)
+    } finally {
+      adsStarting = false
+    }
+  }
+  const adsTimer = setInterval(() => { void adsTick() }, 60_000)
+  ctx.effect(() => () => { clearInterval(adsTimer) })
+
+  // The spend watcher, hourly and with no model turn: pauses a campaign past the owner's cost per
+  // conversion, and every campaign once this month's spend reaches the ceiling.
+  let watching = false
+  const watchSpend = async (): Promise<void> => {
+    if (watching) return
+    const state = await store.read()
+    const live = (state.adsCampaigns ?? []).filter(c => c.enabledAt !== undefined && c.paused === undefined)
+    if (live.length === 0) return
+    watching = true
+    try {
+      const signal = AbortSignal.timeout(120_000)
+      const v = config.adsApiVersion.get().trim() || 'v25'
+      const pause = async (campaign: typeof live[number], reason: string): Promise<void> => {
+        const site = state.sites.find(s => s.id === campaign.siteId)
+        const auth = site === undefined ? undefined : await deps.adsAuth(site, signal)
+        if (auth === undefined) return
+        await setCampaignStatus(fetch, auth, campaign.customerId, campaign.resource, 'PAUSED', signal, v)
+        await store.update((s) => {
+          const c = (s.adsCampaigns ?? []).find(x => x.resource === campaign.resource)
+          if (c !== undefined) c.paused = { reason, at: new Date().toISOString() }
+        })
+        void notify(`Ads employee watcher paused "${campaign.name}": ${reason}.`)
+      }
+      for (const site of state.sites) {
+        const mine = live.filter(c => c.siteId === site.id)
+        if (mine.length === 0) continue
+        const auth = await deps.adsAuth(site, signal)
+        if (auth === undefined) continue
+        const day = new Date().getUTCDate()
+        const month = await campaignReport(fetch, auth, auth.customerId, Math.max(day, 1), signal, v)
+        const ours = month.filter(r => mine.some(c => c.resource === r.resourceName))
+        const spent = ours.reduce((sum, r) => sum + r.costMicros, 0) / MICROS
+        if (config.adsMonthlyCeiling.get() > 0 && spent >= config.adsMonthlyCeiling.get()) {
+          for (const c of mine) await pause(c, `this month's spend (${spent.toFixed(0)}) reached the ceiling of ${String(config.adsMonthlyCeiling.get())}`)
+          continue
+        }
+        const recent = await campaignReport(fetch, auth, auth.customerId, 14, signal, v)
+        const results = recent.filter(r => mine.some(c => c.resource === r.resourceName))
+          .map(r => ({ resource: r.resourceName, costMicros: r.costMicros, conversions: r.conversions }))
+        for (const p of campaignsToPause(results, config.adsMaxCostPerConversion.get())) {
+          const campaign = mine.find(c => c.resource === p.resource)
+          if (campaign !== undefined) await pause(campaign, p.reason)
+        }
+      }
+    } catch (error) {
+      process.stderr.write(`seo-employee: ads spend watcher failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    } finally {
+      watching = false
+    }
+  }
+  const spendTimer = setInterval(() => { void watchSpend() }, 60 * 60_000)
+  ctx.effect(() => () => { clearInterval(spendTimer) })
 
   // Owner answers: collected from WhatsApp every few minutes without a model
   // turn; when one lands for a topic still waiting, the latest shift is woken

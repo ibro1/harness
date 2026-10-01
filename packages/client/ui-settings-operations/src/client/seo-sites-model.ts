@@ -6,6 +6,7 @@
  * a client package must not depend on a Host package.
  */
 
+import { parseAdsStatus, type AdsStatus } from './ads-model.ts'
 import { en } from './locales.ts'
 
 /** Base path of the SEO employee's owner routes. */
@@ -157,6 +158,8 @@ export interface SeoStatus {
   articles: SeoArticle[]
   /** Klipara samples the owner said may be featured in articles. */
   clipPermissions: SeoClipPermission[]
+  /** The ads employee: its pause, last shift, proposals (newest first) and campaigns. */
+  ads: AdsStatus
 }
 
 /** One sample the owner permitted, and why. */
@@ -265,6 +268,7 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
     },
     paused: paused === null ? null : { reason: str(paused['reason']), at: str(paused['at']) },
     lastShiftDate: typeof body['lastShiftDate'] === 'string' ? body['lastShiftDate'] : null,
+    ads: parseAdsStatus(body['ads']),
     sites: list(body['sites']).map((value) => {
       const site = record(value)
       const profile = record(site['profile'])

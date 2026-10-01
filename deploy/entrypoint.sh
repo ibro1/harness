@@ -383,6 +383,7 @@ fi
 if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
   mkdir -p "$HOME/.dsh/skills"
   ln -sfn "$APP_DIR/deploy/skills/seo-employee" "$HOME/.dsh/skills/seo-employee"
+  ln -sfn "$APP_DIR/deploy/skills/ads-employee" "$HOME/.dsh/skills/ads-employee"
   echo "[entrypoint] SEO employee available (Plugins -> SEO employee: settings, Google and sites)"
   register_cli_mcp dsh-seo seo-mcp.mjs DSH_SEO_TOKEN DSH_SEO_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT/seo/command" "SEO employee"
