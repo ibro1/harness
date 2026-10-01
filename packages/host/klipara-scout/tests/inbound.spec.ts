@@ -136,14 +136,7 @@ describe('the free-clip route', () => {
     return `http://127.0.0.1:${String(typeof address === 'object' && address !== null ? address.port : 0)}`
   }
 
-  it('records a signed request, tells the owner once the clip is sent, and refuses an unsigned one', async () => {
-    const notes: string[] = []
-    const whatsapp = await listen(async (req, res) => {
-      let text = ''
-      for await (const chunk of req) text += String(chunk)
-      notes.push((JSON.parse(text) as { args: { text: string } }).args.text)
-      res.end('{}')
-    })
+  function mount(secrets: { settings: string; env: string }, whatsapp = '') {
     const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => unknown>()
     const ctx = {
       agents: { list: () => [] },
@@ -158,22 +151,39 @@ describe('the free-clip route', () => {
     }
     const dataDir = mkdtempSync(join(tmpdir(), 'scout-route-'))
     apply(ctx as never, {
-      dataDir, path: '/scout', token: '', freeClipSecret: SECRET, enabled: live(false), notifyTo: live('Me'), whatsappUrl: whatsapp, whatsappToken: 't',
-      kliparaApiKey: live(''), maxShorts: live(10), ytDlp: '/bin/false', timeoutMs: 5000, kliparaApi: 'http://k', sampleBaseUrl: live('https://k/s'),
-      fallbackProvider: live(''), fallbackModel: live(''), provider: live(''), model: live(''), fallbackCooldownMinutes: live(15), fallbackPitches: live(false),
-      timeZone: live('Africa/Lagos'), publicBaseUrl: '',
+      dataDir, path: '/scout', token: '', freeClipSecret: live(secrets.settings), envFreeClipSecret: secrets.env, enabled: live(false),
+      notifyTo: live('Me'), whatsappUrl: whatsapp, whatsappToken: 't', kliparaApiKey: live(''), maxShorts: live(10), ytDlp: '/bin/false',
+      timeoutMs: 5000, kliparaApi: 'http://k', sampleBaseUrl: live('https://k/s'), fallbackProvider: live(''), fallbackModel: live(''),
+      provider: live(''), model: live(''), fallbackCooldownMinutes: live(15), fallbackPitches: live(false), timeZone: live('Africa/Lagos'),
+      publicBaseUrl: 'https://harness.test',
     } as Config)
+    return { routes, dataDir }
+  }
+
+  async function poster(routes: Map<string, (req: IncomingMessage, res: ServerResponse) => unknown>) {
     const url = `${await listen(routes.get('/scout/inbound/free-clip')!)}/scout/inbound/free-clip`
-    const post = (raw: string, headers: Record<string, string>) => fetch(url, { method: 'POST', body: raw, headers: { 'Content-Type': 'application/json', ...headers } })
     const ts = Math.floor(Date.now() / 1000)
+    return (id: string, raw: string, secret = SECRET) => fetch(url, {
+      method: 'POST',
+      body: raw,
+      headers: { 'Content-Type': 'application/json', 'X-Klipara-Event-Id': id, 'X-Klipara-Timestamp': String(ts), 'X-Klipara-Signature': sign(raw, ts, secret) },
+    })
+  }
 
-    const unsigned = await post(body('confirmed'), { 'X-Klipara-Event-Id': 'fce_a', 'X-Klipara-Timestamp': String(ts), 'X-Klipara-Signature': 'v1=00' })
-    expect(unsigned.status).toBe(401)
+  it('records a signed request, tells the owner once the clip is sent, and refuses a wrong signature', async () => {
+    const notes: string[] = []
+    const whatsapp = await listen(async (req, res) => {
+      let text = ''
+      for await (const chunk of req) text += String(chunk)
+      notes.push((JSON.parse(text) as { args: { text: string } }).args.text)
+      res.end('{}')
+    })
+    const { routes, dataDir } = mount({ settings: SECRET, env: '' }, whatsapp)
+    const post = await poster(routes)
 
+    expect((await post('fce_a', body('confirmed'), 'wrong')).status).toBe(401)
     for (const [id, status] of [['fce_a', 'confirmed'], ['fce_b', 'sent'], ['fce_b', 'sent']] as const) {
-      const raw = body(status)
-      const response = await post(raw, { 'X-Klipara-Event-Id': id, 'X-Klipara-Timestamp': String(ts), 'X-Klipara-Signature': sign(raw, ts) })
-      expect(response.status).toBe(200)
+      expect((await post(id, body(status))).status).toBe(200)
     }
     await expect.poll(() => notes.length).toBe(1)
     expect(notes[0]).toContain('https://klipara.linkfa.de/s/fc_abc')
@@ -182,5 +192,24 @@ describe('the free-clip route', () => {
     expect(state.leads).toHaveLength(1)
     expect(state.leads[0]).toMatchObject({ stage: 'replied', inbound: { status: 'sent' } })
     expect(state.leads[0]!.replies).toHaveLength(2)
+  })
+
+  it('refuses everything while no secret is set, and the environment\'s secret wins over the settings one', async () => {
+    const unset = mount({ settings: '', env: '' })
+    expect((await (await poster(unset.routes))('fce_x', body('confirmed'), '')).status).toBe(401)
+
+    const both = mount({ settings: 'from-settings', env: SECRET })
+    const post = await poster(both.routes)
+    expect((await post('fce_y', body('confirmed'), 'from-settings')).status).toBe(401)
+    expect((await post('fce_y', body('confirmed'))).status).toBe(200)
+  })
+
+  it('reports where the secret comes from and the address to give Klipara, never the secret', async () => {
+    for (const [secrets, source] of [[{ settings: '', env: '' }, 'none'], [{ settings: SECRET, env: '' }, 'settings'], [{ settings: '', env: SECRET }, 'environment']] as const) {
+      const { routes } = mount(secrets)
+      const text = await (await fetch(`${await listen(routes.get('/scout/inbound/status')!)}/scout/inbound/status`)).text()
+      expect(JSON.parse(text)).toEqual({ source, path: '/scout/inbound/free-clip', url: 'https://harness.test/scout/inbound/free-clip' })
+      expect(text).not.toContain(SECRET)
+    }
   })
 })

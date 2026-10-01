@@ -134,8 +134,10 @@ export interface Config {
   path: string
   /** Shared secret for the CLI command route; empty leaves that route unmounted. */
   token: string
-  /** Secret Klipara signs free-clip requests with; empty leaves `<path>/inbound/free-clip` unmounted. */
-  freeClipSecret: string
+  /** Secret Klipara signs free-clip requests with; write-only on the settings page. Empty refuses every request. */
+  freeClipSecret: Volatile<string>
+  /** The same secret from the deployment's environment; when set it wins over the settings value. */
+  envFreeClipSecret: string
   workspacePath: string
   agentPreset: string
   permissionPreset: string
@@ -184,7 +186,8 @@ export const Config = z.object({
   publicBaseUrl: z.string().default(''),
   path: z.string().default('/scout'),
   token: z.string().default(''),
-  freeClipSecret: z.string().default(''),
+  freeClipSecret: z.string().role('secret').default('').volatile(),
+  envFreeClipSecret: z.string().default(''),
   workspacePath: z.string().default('/workspace/klipara-scout'),
   agentPreset: z.string().default('standard'),
   permissionPreset: z.string().default('workspace-write'),
@@ -987,52 +990,69 @@ export function apply(ctx: Context, config: Config): void {
 
   // Creators who asked Klipara for a free clip on its own page: signed by
   // Klipara, recorded so the scout never cold-pitches them, and the owner told.
-  if (config.freeClipSecret !== '') {
-    ctx.effect(() => ctx.webServer.register({
-      kind: 'exact',
-      path: `${prefix}/inbound/free-clip`,
-      authenticate: false,
-      handler: async (req: IncomingMessage, res: ServerResponse) => {
-        const json = (status: number, body: unknown): void => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
-        if (req.method !== 'POST') { json(405, { error: 'POST only' }); return }
-        const raw = await readBody(req, 16 * 1024)
-        if (raw === undefined) { json(413, { error: 'the body is too large' }); return }
-        const header = (name: string): string => { const v = req.headers[name]; return Array.isArray(v) ? v[0] ?? '' : v ?? '' }
-        const verdict = verifySignature(config.freeClipSecret, header('x-klipara-timestamp'), header('x-klipara-signature'), raw, Math.floor(Date.now() / 1000))
-        if (verdict !== 'ok') { json(401, { error: verdict }); return }
-        const eventId = header('x-klipara-event-id')
-        if (!EVENT_ID.test(eventId)) { json(400, { error: 'X-Klipara-Event-Id is missing or malformed' }); return }
-        const event = parseEvent(raw)
-        // A malformed body will not improve on retry; 422 tells Klipara so, and the failure report says why.
-        if (typeof event === 'string') {
-          deps.reportFailure?.({ stage: 'inbound', error: new Error(`Klipara free-clip event ${eventId}: ${event}`), redact: [] })
-          json(422, { error: event })
-          return
-        }
-        const recorded = await store.update(s => recordEvent(s, eventId, event, new Date().toISOString()))
-        json(200, { ok: true, duplicate: recorded.duplicate })
-        if (recorded.duplicate) return
-        // The channel's name, for the leads page and the owner's note; best effort, after answering.
-        if (recorded.created) {
-          try {
-            const facts = await channelFacts(deps.ytDlp, event.channelId, config.maxShorts.get() + 1, AbortSignal.timeout(60_000))
-            await store.update((s) => {
-              const lead = s.leads.find(l => l.channelId === event.channelId)
-              if (lead === undefined) return
-              if (lead.channelName === lead.channelId && facts.channelName !== '') lead.channelName = facts.channelName
-              if (lead.subscribers === undefined && facts.subscribers !== undefined) lead.subscribers = facts.subscribers
-              lead.shortsCount ??= facts.shortsCount
-              recorded.lead.channelName = lead.channelName
-            })
-          } catch (error) {
-            process.stderr.write(`klipara-scout: no channel facts for free-clip requester ${event.channelId}: ${error instanceof Error ? error.message : String(error)}\n`)
-          }
-        }
-        const note = ownerNote(recorded, event)
-        if (note !== undefined) await notify(note)
-      },
-    }), `klipara-scout: ${prefix}/inbound/free-clip`)
+  const freeClipSecret = (): { secret: string; source: 'environment' | 'settings' | 'none' } => {
+    const fromEnv = config.envFreeClipSecret.trim()
+    if (fromEnv !== '') return { secret: fromEnv, source: 'environment' }
+    const fromSettings = config.freeClipSecret.get().trim()
+    return fromSettings === '' ? { secret: '', source: 'none' } : { secret: fromSettings, source: 'settings' }
   }
+  // Whether a secret is in force and the address to give Klipara; never the secret.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: `${prefix}/inbound/status`,
+    handler: (_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      const path = `${prefix}/inbound/free-clip`
+      const url = config.publicBaseUrl === '' ? null : `${config.publicBaseUrl.replace(/\/+$/u, '')}${path}`
+      res.end(JSON.stringify({ source: freeClipSecret().source, path, url }))
+    },
+  }), `klipara-scout: ${prefix}/inbound/status`)
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: `${prefix}/inbound/free-clip`,
+    authenticate: false,
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      const json = (status: number, body: unknown): void => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
+      if (req.method !== 'POST') { json(405, { error: 'POST only' }); return }
+      const raw = await readBody(req, 16 * 1024)
+      if (raw === undefined) { json(413, { error: 'the body is too large' }); return }
+      const header = (name: string): string => { const v = req.headers[name]; return Array.isArray(v) ? v[0] ?? '' : v ?? '' }
+      const { secret } = freeClipSecret()
+      if (secret === '') { json(401, { error: 'the free-clip hand-off has no secret set in the harness' }); return }
+      const verdict = verifySignature(secret, header('x-klipara-timestamp'), header('x-klipara-signature'), raw, Math.floor(Date.now() / 1000))
+      if (verdict !== 'ok') { json(401, { error: verdict }); return }
+      const eventId = header('x-klipara-event-id')
+      if (!EVENT_ID.test(eventId)) { json(400, { error: 'X-Klipara-Event-Id is missing or malformed' }); return }
+      const event = parseEvent(raw)
+      // A malformed body will not improve on retry; 422 tells Klipara so, and the failure report says why.
+      if (typeof event === 'string') {
+        deps.reportFailure?.({ stage: 'inbound', error: new Error(`Klipara free-clip event ${eventId}: ${event}`), redact: [] })
+        json(422, { error: event })
+        return
+      }
+      const recorded = await store.update(s => recordEvent(s, eventId, event, new Date().toISOString()))
+      json(200, { ok: true, duplicate: recorded.duplicate })
+      if (recorded.duplicate) return
+      // The channel's name, for the leads page and the owner's note; best effort, after answering.
+      if (recorded.created) {
+        try {
+          const facts = await channelFacts(deps.ytDlp, event.channelId, config.maxShorts.get() + 1, AbortSignal.timeout(60_000))
+          await store.update((s) => {
+            const lead = s.leads.find(l => l.channelId === event.channelId)
+            if (lead === undefined) return
+            if (lead.channelName === lead.channelId && facts.channelName !== '') lead.channelName = facts.channelName
+            if (lead.subscribers === undefined && facts.subscribers !== undefined) lead.subscribers = facts.subscribers
+            lead.shortsCount ??= facts.shortsCount
+            recorded.lead.channelName = lead.channelName
+          })
+        } catch (error) {
+          process.stderr.write(`klipara-scout: no channel facts for free-clip requester ${event.channelId}: ${error instanceof Error ? error.message : String(error)}\n`)
+        }
+      }
+      const note = ownerNote(recorded, event)
+      if (note !== undefined) await notify(note)
+    },
+  }), `klipara-scout: ${prefix}/inbound/free-clip`)
 
   // Scout Sessions never drive the DeerFlow browser: its Google account is the
   // one Klipara downloads YouTube videos with, and outreach from it risks that

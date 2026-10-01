@@ -1,14 +1,16 @@
 /** The Klipara Scout plugin's card: the daily shift's switch, caps, targets and credentials. */
 
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
-import { Button, SettingsForm, SettingsValueField, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, SettingsForm, SettingsSecretField, SettingsValueField, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { formLabels } from './locales.ts'
 import { useState } from 'react'
 import { ScoutModelPicker } from './ScoutModelPicker.tsx'
 import {
-  SCOUT_KEY_FIELD, SCOUT_MODEL_PAIRS, SCOUT_NUMBER_FIELDS, SCOUT_SWITCH_FIELDS, SCOUT_TEXT_FIELDS, type ScoutCardFace,
+  SCOUT_FREE_CLIP_SECRET_FIELD, SCOUT_KEY_FIELD, SCOUT_MODEL_PAIRS, SCOUT_NUMBER_FIELDS, SCOUT_SWITCH_FIELDS, SCOUT_TEXT_FIELDS,
+  type FreeClipHandOffState, type ScoutCardFace,
 } from './scout-card-controller.ts'
+import css from './scout.module.css'
 
 /** Fields rendered by a picker or the masked key rather than as plain text. */
 const SPECIAL_FIELDS = new Set<string>([SCOUT_KEY_FIELD, ...SCOUT_MODEL_PAIRS.flatMap(pair => [pair.provider, pair.model])])
@@ -22,6 +24,41 @@ export function maskKey(key: string): string {
   if (key.length <= 8) return '•'.repeat(key.length)
   const prefix = /^[a-z]+_[a-z]+_[a-z]+_/iu.exec(key)?.[0] ?? key.slice(0, 4)
   return `${prefix}${'•'.repeat(12)}${key.slice(-4)}`
+}
+
+/**
+ * The free-clip hand-off: whether Klipara's requests are accepted, where the
+ * secret comes from, and the address to paste into Klipara.
+ * @param props - locale copy and the Host's hand-off status.
+ * @returns the block.
+ */
+function HandOffStatus(props: { t: ScoutCardProps['t']; handOff: FreeClipHandOffState }) {
+  const { t, handOff } = props
+  const [copied, setCopied] = useState(false)
+  const status = handOff.status
+  const address = status === undefined ? '' : status.url ?? `${window.location.origin}${status.path}`
+  return (
+    <div className={css.picker}>
+      <span className={css.pickerLabel}>{t('scoutHandOffTitle')}</span>
+      {status === undefined
+        ? <p className={css.pickerHint}>{handOff.failed ? t('scoutHandOffUnknown') : t('scoutHandOffLoading')}</p>
+        : (
+          <>
+            <p className={status.source === 'none' ? css.pickerUnknown : css.pickerValue} role="status">
+              {status.source === 'none' ? t('scoutHandOffOff') : t('scoutHandOffOn')}
+              {status.source === 'environment' ? ` ${t('scoutHandOffFromEnvironment')}` : ''}
+            </p>
+            <p className={css.pickerHint}>{t('scoutHandOffAddress')}</p>
+            <div className={css.pickerCurrent}>
+              <code className={css.pickerValue}>{address}</code>
+              <Button variant="outline" size="sm" onClick={() => {
+                void navigator.clipboard.writeText(address).then(() => { setCopied(true) }, () => undefined)
+              }}>{copied ? t('scoutHandOffCopied') : t('scoutHandOffCopy')}</Button>
+            </div>
+          </>
+        )}
+    </div>
+  )
 }
 
 /** Props the renderer binds for the Klipara Scout card. */
@@ -40,6 +77,7 @@ export function ScoutCard(props: ScoutCardProps) {
   const { t } = props
   const state = props.useScoutCard(snapshot => snapshot)
   const models = props.useScoutModels(snapshot => snapshot)
+  const handOff = props.useScoutHandOff(snapshot => snapshot)
   // Changing the key types into a fresh draft; the stored key is kept while it is blank.
   const [newKey, setNewKey] = useState<{ saved: string; text: string } | undefined>(undefined)
   if (props.view === 'summary') return t('scoutDescription')
@@ -106,6 +144,20 @@ export function ScoutCard(props: ScoutCardProps) {
             </p>
           </>
         )}
+      <HandOffStatus t={t} handOff={handOff} />
+      <SettingsSecretField
+        id={`plugin-config-scout-${SCOUT_FREE_CLIP_SECRET_FIELD}`}
+        label={t(`scout.${SCOUT_FREE_CLIP_SECRET_FIELD}`)}
+        hint={handOff.status?.source === 'environment' ? t('scout.freeClipSecret.env') : t(`scout.${SCOUT_FREE_CLIP_SECRET_FIELD}.hint`)}
+        disabled={disabled || handOff.status?.source === 'environment'}
+        text={state.freeClipSecret.text}
+        configured={handOff.status !== undefined && handOff.status.source !== 'none'}
+        stateLabel={handOff.status !== undefined && handOff.status.source !== 'none' ? t('scoutSecretSet') : t('scoutSecretUnset')}
+        onEdit={(text) => { props.edit(SCOUT_FREE_CLIP_SECRET_FIELD, text) }}
+      />
+      {handOff.status?.source === 'settings'
+        ? <p><Button variant="ghost" size="sm" disabled={disabled} onClick={props.removeFreeClipSecret}>{t('scoutRemoveSecret')}</Button></p>
+        : null}
       {SCOUT_MODEL_PAIRS.map(pair => (
         <ScoutModelPicker
           key={pair.key}

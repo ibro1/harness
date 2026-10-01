@@ -6,7 +6,7 @@ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'podcastCountry' | 'podcastActiveDays' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays'
+  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'podcastCountry' | 'podcastActiveDays' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays' | 'freeClipSecret'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -24,6 +24,8 @@ export type OperationsSettingsLocaleKey =
   | 'errors.dsn' | 'errors.dsn.hint' | 'errors.dsn.env' | 'errors.publicDsn' | 'errors.publicDsn.hint' | 'errors.environment' | 'errors.environment.hint'
   | 'errors.release' | 'errors.release.hint' | 'errors.tracesSampleRate' | 'errors.tracesSampleRate.hint'
   | 'scoutChangeKey' | 'scoutKeyPlaceholder' | 'scoutKeepKey' | 'scoutModelSearch' | 'scoutModelChange' | 'scoutModelLoading' | 'scoutModelFailed' | 'scoutModelRetry' | 'scoutModelNoMatch' | 'scoutModelUnknown'
+  | 'scoutHandOffTitle' | 'scoutHandOffLoading' | 'scoutHandOffUnknown' | 'scoutHandOffOff' | 'scoutHandOffOn' | 'scoutHandOffFromEnvironment'
+  | 'scoutHandOffAddress' | 'scoutHandOffCopy' | 'scoutHandOffCopied' | 'scoutSecretSet' | 'scoutSecretUnset' | 'scoutRemoveSecret' | 'scout.freeClipSecret.env'
   | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint` | 'scout.shiftModel.none' | 'scout.fallbackModelPick.none'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed'
@@ -103,6 +105,21 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   scoutChangeKey: 'Change key',
   scoutKeyPlaceholder: 'klp_sk_live_…',
   scoutKeepKey: 'Keep the current key',
+  scoutHandOffTitle: 'Free-clip hand-off from Klipara',
+  scoutHandOffLoading: 'Reading the hand-off status…',
+  scoutHandOffUnknown: 'The hand-off status could not be read. Reload the page.',
+  scoutHandOffOff: 'Off: no secret is saved, so Klipara\'s requests are refused. Save below the same secret Klipara has as FREE_CLIP_WEBHOOK_SECRET.',
+  scoutHandOffOn: 'On. People who ask Klipara for a free clip become leads the scout never pitches, and you hear on WhatsApp when their clip is sent.',
+  scoutHandOffFromEnvironment: 'The secret comes from KLIPARA_FREE_CLIP_SECRET in the deployment, which overrides this page.',
+  scoutHandOffAddress: 'In Klipara, Admin → Settings → Scout hand-off webhook:',
+  scoutHandOffCopy: 'Copy',
+  scoutHandOffCopied: 'Copied',
+  scoutSecretSet: 'Saved',
+  scoutSecretUnset: 'Not set',
+  scoutRemoveSecret: 'Remove secret',
+  'scout.freeClipSecret': 'Free-clip webhook secret',
+  'scout.freeClipSecret.hint': 'The same value as FREE_CLIP_WEBHOOK_SECRET in Klipara\'s deployment; make one with openssl rand -hex 32. Write-only: it is never shown again; leave the field empty to keep the saved one.',
+  'scout.freeClipSecret.env': 'Set by KLIPARA_FREE_CLIP_SECRET in the deployment environment, which wins over this page. Remove it there to manage the secret here.',
   scoutModelSearch: 'Search models',
   scoutModelChange: 'Choose',
   scoutModelLoading: 'Loading models…',
@@ -251,6 +268,21 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   scoutChangeKey: '更换密钥',
   scoutKeyPlaceholder: 'klp_sk_live_…',
   scoutKeepKey: '保留当前密钥',
+  scoutHandOffTitle: '来自 Klipara 的免费片段交接',
+  scoutHandOffLoading: '正在读取交接状态…',
+  scoutHandOffUnknown: '无法读取交接状态。请重新加载页面。',
+  scoutHandOffOff: '关闭：未保存密钥，Klipara 的请求会被拒绝。请在下方保存与 Klipara 的 FREE_CLIP_WEBHOOK_SECRET 相同的密钥。',
+  scoutHandOffOn: '已开启。向 Klipara 申请免费片段的人会成为 scout 永不推介的线索；片段发出时你会在 WhatsApp 收到通知。',
+  scoutHandOffFromEnvironment: '密钥来自部署环境中的 KLIPARA_FREE_CLIP_SECRET，它优先于本页面。',
+  scoutHandOffAddress: '在 Klipara 的 Admin → Settings → Scout hand-off webhook 中填写：',
+  scoutHandOffCopy: '复制',
+  scoutHandOffCopied: '已复制',
+  scoutSecretSet: '已保存',
+  scoutSecretUnset: '未设置',
+  scoutRemoveSecret: '移除密钥',
+  'scout.freeClipSecret': '免费片段 webhook 密钥',
+  'scout.freeClipSecret.hint': '与 Klipara 部署中的 FREE_CLIP_WEBHOOK_SECRET 相同；可用 openssl rand -hex 32 生成。只写：保存后不再显示；留空则保留已保存的密钥。',
+  'scout.freeClipSecret.env': '由部署环境中的 KLIPARA_FREE_CLIP_SECRET 设置，它优先于本页面。在那里移除后即可在此管理密钥。',
   scoutModelSearch: '搜索模型',
   scoutModelChange: '选择',
   scoutModelLoading: '正在加载模型…',

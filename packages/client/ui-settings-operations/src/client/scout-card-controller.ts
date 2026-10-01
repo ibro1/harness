@@ -1,6 +1,7 @@
 /** The Klipara Scout card's staged form over the `klipara-scout` settings namespace. */
 
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ScoutModelCatalogState } from './scout-model-catalog.ts'
 import {
   SettingsFormModel, settingsNumberField, settingsTextField,
@@ -30,13 +31,33 @@ export const SCOUT_MODEL_PAIRS = [
 ] as const
 /** The API key, shown masked. */
 export const SCOUT_KEY_FIELD = 'kliparaApiKey'
+/** The free-clip hand-off secret: `role('secret')`, so it never rides a response and is written blind. */
+export const SCOUT_FREE_CLIP_SECRET_FIELD = 'freeClipSecret'
+
+/** The Host route that says whether a hand-off secret is in force, and where Klipara posts. */
+const FREE_CLIP_STATUS_PATH = '/scout/inbound/status'
+
+/** The hand-off as the Host reports it; never the secret. */
+export interface FreeClipHandOff {
+  source: 'environment' | 'settings' | 'none'
+  /** Route path on this site. */
+  path: string
+  /** Absolute address to paste into Klipara, when the Host knows its public origin. */
+  url: string | null
+}
+
+/** The hand-off status the card renders. */
+export interface FreeClipHandOffState {
+  status: FreeClipHandOff | undefined
+  failed: boolean
+}
 
 type ScoutTextField = typeof SCOUT_TEXT_FIELDS[number]
 type ScoutSwitchField = typeof SCOUT_SWITCH_FIELDS[number]
 type ScoutNumberField = typeof SCOUT_NUMBER_FIELDS[number]
 
 /** The Klipara Scout fields this card edits. */
-export type ScoutSettings = Partial<Record<ScoutTextField | ScoutNumberField | ScoutSwitchField | 'topics', unknown>>
+export type ScoutSettings = Partial<Record<ScoutTextField | ScoutNumberField | ScoutSwitchField | 'topics' | typeof SCOUT_FREE_CLIP_SECRET_FIELD, unknown>>
 
 /** What the Klipara Scout card renders. */
 export interface ScoutCardState extends SettingsFormShell {
@@ -44,6 +65,7 @@ export interface ScoutCardState extends SettingsFormShell {
   topics: SettingsFieldState
   text: Record<ScoutTextField, SettingsFieldState>
   numbers: Record<ScoutNumberField, SettingsFieldState>
+  freeClipSecret: SettingsFieldState
 }
 
 /** The registration-side face the card's slot entry injects. */
@@ -52,11 +74,15 @@ export interface ScoutCardFace extends SettingsFormActions {
   openLeads: () => void
   /** Load the model catalog again after a failure. */
   retryModels: () => void
+  /** Remove the saved hand-off secret; Klipara's requests are refused until another is saved. */
+  removeFreeClipSecret: () => void
   hooks: {
     /** Card snapshot bound by the renderer as useScoutCard. */
     scoutCard: SnapshotStore<ScoutCardState>
     /** Model catalog bound by the renderer as useScoutModels. */
     scoutModels: SnapshotStore<ScoutModelCatalogState>
+    /** Hand-off status bound by the renderer as useScoutHandOff. */
+    scoutHandOff: SnapshotStore<FreeClipHandOffState>
   }
 }
 
@@ -92,16 +118,53 @@ function topicsField(): SettingsFieldSpec {
 export class ScoutCardController {
   private readonly form: SettingsFormModel<ScoutSettings>
   private readonly store: SnapshotStore<ScoutCardState>
+  private readonly handOff = createSnapshotStore<FreeClipHandOffState>({ status: undefined, failed: false })
 
-  /** @param scope - the bound settings scope for the `klipara-scout` namespace. */
-  constructor(scope: SettingsFormScope<ScoutSettings>) {
+  /**
+   * @param scope - the bound settings scope for the `klipara-scout` namespace.
+   * @param request - same-origin HTTP, injectable for tests.
+   */
+  constructor(
+    private readonly scope: SettingsFormScope<ScoutSettings>,
+    private readonly request: (url: string, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
+  ) {
     this.form = new SettingsFormModel(scope, [
       ...SCOUT_SWITCH_FIELDS.map(field => switchField(field)),
       topicsField(),
       ...SCOUT_TEXT_FIELDS.map(field => settingsTextField(field)),
       ...SCOUT_NUMBER_FIELDS.map(field => settingsNumberField(field)),
-    ])
+    ], [{
+      field: SCOUT_FREE_CLIP_SECRET_FIELD,
+      write: async (text) => {
+        const accepted = await scope.mutate([{ op: 'set', path: [SCOUT_FREE_CLIP_SECRET_FIELD], value: text.trim() }])
+        this.refreshHandOff()
+        return accepted
+      },
+    }])
     this.store = this.form.bind(() => this.projection())
+  }
+
+  /** Read whether a hand-off secret is in force. */
+  refreshHandOff(): void {
+    void (async () => {
+      try {
+        const response = await this.request(FREE_CLIP_STATUS_PATH, { cache: 'no-store', credentials: 'same-origin' })
+        if (!response.ok) throw new Error(`HTTP ${String(response.status)}`)
+        const status = await response.json() as FreeClipHandOff
+        this.handOff.update((draft) => { draft.status = status; draft.failed = false })
+      } catch {
+        // An older Host without the hand-off, or an expired session: the card says the status is unknown.
+        this.handOff.update((draft) => { draft.failed = true })
+      }
+    })()
+  }
+
+  /** Remove the saved hand-off secret. */
+  removeFreeClipSecret(): void {
+    void (async () => {
+      await this.scope.mutate([{ op: 'unset', path: [SCOUT_FREE_CLIP_SECRET_FIELD] }])
+      this.refreshHandOff()
+    })()
   }
 
   private projection(): ScoutCardState {
@@ -114,6 +177,7 @@ export class ScoutCardController {
         Record<ScoutTextField, SettingsFieldState>,
       numbers: Object.fromEntries(SCOUT_NUMBER_FIELDS.map(field => [field, this.form.field(field)])) as
         Record<ScoutNumberField, SettingsFieldState>,
+      freeClipSecret: this.form.field(SCOUT_FREE_CLIP_SECRET_FIELD),
     }
   }
 
@@ -125,9 +189,16 @@ export class ScoutCardController {
    * @param openLeads - opens the leads page.
    * @param models - the model catalog the pickers offer.
    * @param retryModels - reloads that catalog.
-   * @returns the card's snapshot, its form actions, the catalog and the leads link.
+   * @returns the card's snapshot, its form actions, the catalog, the hand-off status and the leads link.
    */
   inject(openLeads: () => void, models: SnapshotStore<ScoutModelCatalogState>, retryModels: () => void): ScoutCardFace {
-    return { hooks: { scoutCard: this.store, scoutModels: models }, ...this.form.actions(), openLeads, retryModels }
+    this.refreshHandOff()
+    return {
+      hooks: { scoutCard: this.store, scoutModels: models, scoutHandOff: this.handOff },
+      ...this.form.actions(),
+      openLeads,
+      retryModels,
+      removeFreeClipSecret: () => { this.removeFreeClipSecret() },
+    }
   }
 }

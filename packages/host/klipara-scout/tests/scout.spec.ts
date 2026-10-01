@@ -21,7 +21,7 @@ function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config 
     minSubscribers: live(1000), maxSubscribers: live(500_000), maxShorts: live(10),
     kliparaApiKey: live('klp_sk_test_x'), sampleBaseUrl: live('https://klipara.test/s'), sampleTtlDays: live(30), outreachBrowser: live('outreach'), notifyTo: live('Me'), provider: live(''), model: live(''),
     sampleHeadline: live('A clip'), sampleNote: live('note'),
-    dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '', freeClipSecret: '',
+    dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '', freeClipSecret: live(''), envFreeClipSecret: '',
     workspacePath: '/tmp/ws', agentPreset: 'standard', permissionPreset: 'workspace-write', shiftPrompt: 'go',
     ytDlp: 'yt-dlp', timeoutMs: 5000, sampleCheckMs: 120_000, whatsappUrl: '', whatsappToken: '', forbiddenBrowser: 'deerflow',
   }

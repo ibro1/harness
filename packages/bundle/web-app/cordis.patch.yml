@@ -284,7 +284,7 @@
       config:
         publicBaseUrl: !!js "process.env.DSH_PUBLIC_HOST ? 'https://' + process.env.DSH_PUBLIC_HOST : ''"
         token: !!js process.env.DSH_SCOUT_TOKEN || ''
-        freeClipSecret: !!js process.env.KLIPARA_FREE_CLIP_SECRET || ''
+        envFreeClipSecret: !!js process.env.KLIPARA_FREE_CLIP_SECRET || ''
         workspacePath: !!js process.env.DSH_SCOUT_WORKSPACE || '/workspace/klipara-scout'
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''

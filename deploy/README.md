@@ -822,7 +822,7 @@ one Klipara's ingest downloads with. Leads are on their own page (**View leads**
 pitch emails link to `https://klipara.linkfa.de/s/<id>`, a page Klipara serves from the harness's public `/scout/s/<id>.json`; comments carry no link. Nothing is sent until an outreach browser, signed in to a Google account of its own, is set on the page: never the DeerFlow browser, whose account Klipara downloads with. `DSH_KLIPARA_SCOUT=0` leaves it
 out; `DSH_SCOUT_MCP=0` keeps its tools from agy and opencode.
 
-Klipara's free-clip page tells the scout who asked for a clip themselves, so they are never cold-pitched: set the same random secret as `KLIPARA_FREE_CLIP_SECRET` here and `FREE_CLIP_WEBHOOK_SECRET` in Klipara, and Klipara's `FREE_CLIP_WEBHOOK_URL` to `https://<this host>/scout/inbound/free-clip`. Without the secret the route is not mounted.
+Klipara's free-clip page tells the scout who asked for a clip themselves, so they are never cold-pitched: save the same random secret as **Free-clip webhook secret** on the Klipara Scout page and as `FREE_CLIP_WEBHOOK_SECRET` in Klipara, and set Klipara's Scout hand-off webhook to the address the page shows (`https://<this host>/scout/inbound/free-clip`). `KLIPARA_FREE_CLIP_SECRET` in the environment overrides the page. Without a secret every request is refused.
 
 The outreach browser on the DeerFlow sandbox (`/mnt/shared/outreach-browser`, outside this repo) starts with `--mute-audio` and a local `no-autoplay` extension that pauses every YouTube video as it starts, so shifts and reply checks never leave videos playing. The scout skill also tells the shift to close the tabs it opens.
 

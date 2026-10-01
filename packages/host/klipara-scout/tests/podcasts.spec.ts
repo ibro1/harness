@@ -55,7 +55,7 @@ function setup(shows: object[], feeds: Record<string, string>) {
     podcastCountry: live('ng'), podcastActiveDays: live(60), kliparaApiKey: live('k'), notifyTo: live(''), provider: live(''), model: live(''),
     fallbackProvider: live(''), fallbackModel: live(''), fallbackPitches: live(false), fallbackCooldownMinutes: live(15),
     sampleBaseUrl: live('https://klipara.test/s'), sampleTtlDays: live(30), outreachBrowser: live('outreach'), sampleHeadline: live('h'), sampleNote: live('n'),
-    dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '', freeClipSecret: '',
+    dataDir: '', kliparaApi: 'http://klipara.test/api/v1', publicBaseUrl: 'https://h.test', path: '/scout', token: '', freeClipSecret: live(''), envFreeClipSecret: '',
     workspacePath: '/tmp/ws', agentPreset: 'standard', permissionPreset: 'workspace-write', shiftPrompt: 'go',
     ytDlp: 'yt-dlp', timeoutMs: 5000, sampleCheckMs: 120_000, whatsappUrl: '', whatsappToken: '', forbiddenBrowser: 'deerflow',
   } as Config
