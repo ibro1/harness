@@ -76,15 +76,16 @@ describe('kliparaPublisher', () => {
     publishedAt: '2026-09-01T00:00:00Z',
   }
 
-  it('lists articles across cursor pages from either list wrapper', async () => {
+  it('lists articles across numbered pages until the total is reached', async () => {
     const server = fakeServer({
-      'GET /api/v1/content/articles': req => req.url.searchParams.get('cursor') === 'p2'
-        ? json([{ ...row, id: 'a2', slug: 'two', status: 'draft' }])
-        : json({ data: [row], next: 'p2' }),
+      'GET /api/v1/content/articles': req => req.url.searchParams.get('page') === '2'
+        ? json({ articles: [{ ...row, id: 'a2', slug: 'two', status: 'draft' }], page: 2, page_size: 100, total: 2 })
+        : json({ articles: [row], page: 1, page_size: 100, total: 2 }),
     })
     const list = await kliparaPublisher(server.fetcher, { baseUrl: `${base}/`, apiKey: () => KEY }, 5000).list(signal)
     expect(list.map(a => [a.id, a.status])).toEqual([['a1', 'published'], ['a2', 'draft']])
     expect(list[0]?.publishedAt).toBe('2026-09-01T00:00:00Z')
+    expect(server.seen.map(r => r.url.searchParams.get('page_size'))).toEqual(['100', '100'])
     expect(server.seen.every(r => r.headers.get('authorization') === `Bearer ${KEY}`)).toBe(true)
   })
 
@@ -98,9 +99,9 @@ describe('kliparaPublisher', () => {
     const [first, retry, changed] = server.seen
     const body: unknown = JSON.parse(first?.body ?? '')
     expect(body).toEqual({
-      slug: 'clip-podcasts', title: 'How to clip podcasts', metaTitle: 'Clip podcasts fast',
-      metaDescription: 'A guide to clipping podcasts for shorts.', dek: 'Turn long episodes into shorts.',
-      bodyMarkdown: '## Why\n\nShort clips **travel**.\n\n::clip[abc123]\n', tags: ['Podcasts', 'Video'],
+      slug: 'clip-podcasts', title: 'How to clip podcasts', meta_title: 'Clip podcasts fast',
+      meta_description: 'A guide to clipping podcasts for shorts.', dek: 'Turn long episodes into shorts.',
+      body_markdown: '## Why\n\nShort clips **travel**.\n\n::clip[abc123]\n', tags: ['Podcasts', 'Video'],
       faq: [{ q: 'Is it free?', a: 'The first *clip* is.' }], sources: [{ title: 'YouTube Shorts', url: 'https://youtube.com/shorts' }],
       author, status: 'published',
     })
@@ -160,11 +161,10 @@ describe('kliparaPublisher', () => {
     await expect(pending).rejects.toThrow('stopped')
   })
 
-  it('refuses to follow a next link to another origin with the key', async () => {
-    const server = fakeServer({ 'GET /api/v1/content/articles': () => json({ articles: [row], next: 'https://evil.test/steal' }) })
-    const error = await failure(kliparaPublisher(server.fetcher, { baseUrl: base, apiKey: () => KEY }, 5000).list(signal))
-    expect(error.code).toBe('bad_response')
-    expect(server.seen).toHaveLength(1)
+  it('sends a null author so Klipara uses the site default when the profile has no author name', async () => {
+    const server = fakeServer({ 'POST /api/v1/content/articles': () => json({ ...row, slug: 'clip-podcasts' }, 201) })
+    await kliparaPublisher(server.fetcher, { baseUrl: base, apiKey: () => KEY }, 5000).create(draft(), 'draft', { name: '', url: '', bio: '' }, signal)
+    expect((JSON.parse(server.seen[0]?.body ?? '{}') as { author?: unknown }).author).toBeNull()
   })
 })
 
@@ -341,10 +341,10 @@ describe('createPublisher', () => {
   })
 
   it('builds the connector for the site kind', async () => {
-    const server = fakeServer({ 'GET /api/v1/content/articles': () => json([]) })
+    const server = fakeServer({ 'GET /api/v1/content/articles': () => json({ articles: [], page: 1, page_size: 100, total: 0 }) })
     const publisher = createPublisher(server.fetcher, siteOf('klipara'), () => ({ apiKey: KEY }), 1000)
     expect(await publisher.list(signal)).toEqual([])
-    expect(server.seen[0]?.url.href).toBe('https://linkfa.de/api/v1/content/articles')
+    expect(server.seen[0]?.url.href).toBe('https://linkfa.de/api/v1/content/articles?page=1&page_size=100')
   })
 })
 

@@ -26,21 +26,21 @@ export interface KliparaPublisher extends Publisher {
 /** Stop following list pages after this many, so a server that repeats a cursor cannot loop forever. */
 const MAX_LIST_PAGES = 200
 
-/** The request body for a create or update. */
+/** The request body for a create or update, in Klipara's snake_case field names. An empty author name means the site's default author. */
 function articleBody(draft: ArticleDraft, status: ArticleStatus, author: Site['author']): Record<string, unknown> {
   return {
     slug: draft.slug,
     title: draft.title,
-    metaTitle: draft.metaTitle,
-    metaDescription: draft.metaDescription,
+    meta_title: draft.metaTitle,
+    meta_description: draft.metaDescription,
     dek: draft.dek,
-    bodyMarkdown: draft.bodyMarkdown,
+    body_markdown: draft.bodyMarkdown,
     tags: draft.tags,
     faq: draft.faq,
     sources: draft.sources,
-    ...draft.coverImageUrl === undefined ? {} : { coverImageUrl: draft.coverImageUrl },
-    ...draft.coverAlt === undefined ? {} : { coverAlt: draft.coverAlt },
-    author: { name: author.name, url: author.url, bio: author.bio },
+    ...draft.coverImageUrl === undefined ? {} : { cover_image_url: draft.coverImageUrl },
+    ...draft.coverAlt === undefined ? {} : { cover_alt: draft.coverAlt },
+    author: author.name.trim() === '' ? null : { name: author.name, url: author.url, bio: author.bio },
     status,
   }
 }
@@ -173,30 +173,17 @@ export function kliparaPublisher(fetcher: typeof fetch, options: KliparaPublishe
   }
   return {
     async list(signal) {
+      // `{articles, page, page_size, total}`, numbered pages of up to 100.
       const out: RemoteArticle[] = []
-      const seen = new Set<string>()
-      let path = '/articles'
-      for (let page = 0; page < MAX_LIST_PAGES; page++) {
-        const body = await call('GET', path, signal)
-        const top = record(body)
-        const rows = [body, top['data'], top['articles']].find((v): v is unknown[] => Array.isArray(v)) ?? []
+      for (let page = 1; page <= MAX_LIST_PAGES; page++) {
+        const body = record(await call('GET', `/articles?page=${String(page)}&page_size=100`, signal))
+        const rows = Array.isArray(body['articles']) ? body['articles'] : []
         for (const row of rows) {
           const found = article(row)
           if (found !== undefined) out.push(found)
         }
-        const meta = record(top['meta'] ?? top['pagination'])
-        const next = text(top['next']) || text(meta['next'])
-        const cursor = text(top['cursor']) || text(top['nextCursor']) || text(meta['cursor']) || text(meta['nextCursor'])
-        let following = ''
-        const nextIsLink = /^https?:\/\//iu.test(next) || next.startsWith('/')
-        if (next !== '') following = nextIsLink ? next : `/articles?cursor=${encodeURIComponent(next)}`
-        else if (cursor !== '') following = `/articles?cursor=${encodeURIComponent(cursor)}`
-        if (following === '' || rows.length === 0 || seen.has(following)) break
-        seen.add(following)
-        path = following.startsWith('/api/v1/content') ? following.slice('/api/v1/content'.length) : following
-        if (/^https?:\/\//iu.test(path) && !path.startsWith(root)) {
-          throw badResponse(`Klipara's article list pointed to another site (${new URL(path).origin}); refusing to send the key there.`, 0)
-        }
+        const total = typeof body['total'] === 'number' ? body['total'] : out.length
+        if (rows.length === 0 || out.length >= total) break
       }
       return out
     },
