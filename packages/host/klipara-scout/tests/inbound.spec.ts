@@ -106,7 +106,7 @@ describe('the scout and a creator who asked', () => {
     const store = new ScoutStore(join(mkdtempSync(join(tmpdir(), 'scout-in-')), 'leads.json'))
     await store.update((s) => { s.leads.push(lead('sampling', { jobId: 'job_1' })) })
     const klipara = {
-      getJob: () => Promise.resolve({ state: 'succeeded' }),
+      getJob: () => Promise.resolve({ id: 'job_1', state: 'succeeded' }),
       // The creator's request lands while the sample check is reading candidates.
       candidates: async () => {
         const event = parseEvent(body('confirmed'))
