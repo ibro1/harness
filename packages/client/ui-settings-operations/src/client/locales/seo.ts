@@ -33,6 +33,8 @@ export type SeoLocaleKey =
   | 'seoSiteFormNew' | 'seoSiteFormEdit' | 'seoSiteProfile' | 'seoSiteResearch' | 'seoSiteAuthor' | 'seoSiteCredentials'
   | `seoSite.${SeoSiteFieldKey}` | `seoSite.${SeoSiteFieldKey}.hint` | `seoKind.${'klipara' | 'wordpress'}` | `seoMarket.${SeoMarketKey}`
   | 'seoGscLoad' | 'seoGscLoading' | 'seoGscChoose' | 'seoGscEmpty'
+  | 'seoClipsTitle' | 'seoClipsHint' | 'seoClipsEmpty' | 'seoClipId' | 'seoClipBasis' | `seoClipBasis.${'own' | 'cc' | 'permission'}`
+  | 'seoClipCredit' | 'seoClipNote' | 'seoClipAdd' | 'seoClipRemove'
   | 'seoSiteBrand' | 'seoSiteBrand.hint' | 'seoSiteGoogle' | `seoGoogleAccess.${'shared' | 'own'}` | `seoGoogleAccess.${'shared' | 'own'}.hint` | 'seoSiteGoogleSaveFirst'
   | 'seoSiteGoogleConnected' | 'seoSiteGoogleNotConnected' | 'seoSiteGoogleLink' | 'seoSiteGoogleConnectHere' | 'seoSiteGoogleSignInAgain'
   | 'seoSiteAdsPick' | 'seoSiteAdsPick.hint' | 'seoSiteAdsNone' | 'seoSiteAdsAutomatic' | 'seoSiteAdsOption' | 'seoSiteAdsOptionUnnamed' | 'seoSiteAdsManager' | 'seoSiteAdsClient'
@@ -202,6 +204,18 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoGscLoading: 'Loading…',
   seoGscChoose: 'Choose a property',
   seoGscEmpty: 'This Google account has no Search Console properties.',
+  seoClipsTitle: 'Clips you may feature',
+  seoClipsHint: 'Articles can embed a Klipara clip only if it is listed here. A creator\'s clip needs their permission; credit alone is not permission. Your own videos and Creative Commons (CC BY) videos can be listed freely.',
+  seoClipsEmpty: 'No clips listed yet, so articles use screenshots and graphics instead of clips.',
+  seoClipId: 'Sample id or /s/ link',
+  seoClipBasis: 'Why it may be featured',
+  'seoClipBasis.own': 'My own video',
+  'seoClipBasis.permission': 'The creator gave permission',
+  'seoClipBasis.cc': 'Creative Commons (CC BY) video',
+  seoClipCredit: 'Credit line shown with the clip',
+  seoClipNote: 'Note (who agreed, when, where; or the licence link)',
+  seoClipAdd: 'Add clip',
+  seoClipRemove: 'Remove',
   seoSiteBrand: 'Look of graphics',
   'seoSiteBrand.hint': 'Optional. Article graphics (covers, steps, charts) use these. Leave them empty and they are read from the site\'s own stylesheets.',
   'seoSite.brandAccent': 'Accent colour',
@@ -450,6 +464,18 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoGscLoading: '加载中…',
   seoGscChoose: '选择资源',
   seoGscEmpty: '此 Google 账号没有 Search Console 资源。',
+  seoClipsTitle: '可展示的片段',
+  seoClipsHint: '文章只能嵌入列在此处的 Klipara 片段。创作者的片段需要其许可；仅署名不等于许可。你自己的视频和知识共享（CC BY）视频可直接列入。',
+  seoClipsEmpty: '尚未列出片段，因此文章使用截图和图形代替片段。',
+  seoClipId: '样片 ID 或 /s/ 链接',
+  seoClipBasis: '可展示的理由',
+  'seoClipBasis.own': '我自己的视频',
+  'seoClipBasis.permission': '创作者已许可',
+  'seoClipBasis.cc': '知识共享（CC BY）视频',
+  seoClipCredit: '随片段显示的署名',
+  seoClipNote: '备注（谁同意、何时、何处；或许可链接）',
+  seoClipAdd: '添加片段',
+  seoClipRemove: '移除',
   seoSiteBrand: '图形外观',
   'seoSiteBrand.hint': '可选。文章图形（封面、步骤、图表）使用这些设置。留空则从站点自身的样式表读取。',
   'seoSite.brandAccent': '强调色',

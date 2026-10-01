@@ -504,6 +504,7 @@ export function apply(ctx: Context, config: Config): void {
           }
           : null,
       })),
+      clipPermissions: Object.entries(state.clipPermissions ?? {}).map(([sampleId, p]) => ({ sampleId, ...p })),
       questions: state.questions
         .filter(q => q.answer === undefined || Date.parse(q.answeredAt ?? q.askedAt) > now.getTime() - 14 * 86_400_000)
         .map(q => ({ ...q, keyword: state.topics.find(t => t.id === q.topicId)?.keyword ?? '' })),
@@ -619,6 +620,28 @@ export function apply(ctx: Context, config: Config): void {
               s.siteGoogle = rest
             })
             siteTokens.delete(id)
+            json(res, 200, { ok: true })
+            return
+          }
+          case 'permit-clip': {
+            const id = typeof body['sampleId'] === 'string' ? body['sampleId'].trim().replace(/^.*\/s\//u, '').replace(/[/?#].*$/u, '') : ''
+            const basis = body['basis']
+            if (!/^[A-Za-z0-9_-]{6,40}$/u.test(id)) { json(res, 422, { error: 'Give the sample id, or its /s/<id> link.' }); return }
+            if (basis !== 'own' && basis !== 'cc' && basis !== 'permission') { json(res, 422, { error: 'Say why it may be featured: own, cc or permission.' }); return }
+            const credit = typeof body['credit'] === 'string' ? body['credit'].trim() : ''
+            const note = typeof body['note'] === 'string' ? body['note'].trim() : ''
+            if (basis !== 'own' && credit === '') { json(res, 422, { error: 'A creator\'s clip needs the credit line articles show with it.' }); return }
+            if (basis === 'permission' && note === '') { json(res, 422, { error: 'Note how the creator gave permission (who, when, where).' }); return }
+            await store.update((s) => { s.clipPermissions = { ...s.clipPermissions, [id]: { basis, note, credit, at: now } } })
+            json(res, 200, { ok: true })
+            return
+          }
+          case 'revoke-clip': {
+            const id = typeof body['sampleId'] === 'string' ? body['sampleId'] : ''
+            await store.update((s) => {
+              const { [id]: _removed, ...rest } = s.clipPermissions ?? {}
+              s.clipPermissions = rest
+            })
             json(res, 200, { ok: true })
             return
           }

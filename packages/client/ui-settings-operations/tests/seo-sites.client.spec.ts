@@ -27,6 +27,11 @@ describe('parseSeoStatus', () => {
     expect(parseSeoStatus({ google: { serviceAccount: { email: null, error: 'not JSON' } } }).google.serviceAccount).toEqual({ email: null, error: 'not JSON' })
   })
 
+  it('reads the clips the owner allows in articles', () => {
+    expect(parseSeoStatus({ clipPermissions: [{ sampleId: 'abc123', basis: 'cc', credit: 'Clip from X, CC BY', note: 'licence link', at: 't' }, { basis: 'own' }] })
+      .clipPermissions).toEqual([{ sampleId: 'abc123', basis: 'cc', credit: 'Clip from X, CC BY', note: 'licence link', at: 't' }])
+  })
+
   it('reads every section and fills what a partial answer leaves out', () => {
     const status = parseSeoStatus({
       redirectUri: 'https://h.example/seo/oauth/callback',

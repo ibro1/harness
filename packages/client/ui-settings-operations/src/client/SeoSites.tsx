@@ -8,7 +8,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SeoSiteForm, type SeoTranslate } from './SeoSiteForm.tsx'
 import type { SeoTopicStatusKey } from './locales/seo.ts'
-import { fetchSeoStatus, postSeoAction, type SeoArticle, type SeoQuestion, type SeoRequest, type SeoStatus } from './seo-sites-model.ts'
+import {
+  fetchSeoStatus, postSeoAction, type SeoArticle, type SeoClipPermission, type SeoQuestion, type SeoRequest, type SeoStatus,
+} from './seo-sites-model.ts'
 import css from './seo.module.css'
 
 /** How often the open page re-reads the status. */
@@ -22,6 +24,72 @@ type Editing = { kind: 'new' } | { kind: 'site'; id: string } | undefined
 const day = (iso: string): string => iso.slice(0, 10)
 
 const defaultRequest: SeoRequest = (url, init) => fetch(url, init)
+
+/**
+ * The clips the owner allows in articles: add one with why it may be featured, or remove it.
+ * @param props - copy, the list, and the add and remove actions.
+ * @returns the section body.
+ */
+function ClipPermissions(props: {
+  t: SeoTranslate
+  permissions: SeoClipPermission[]
+  act: (body: Record<string, unknown>) => Promise<string | undefined>
+}) {
+  const { t } = props
+  const [sampleId, setSampleId] = useState('')
+  const [basis, setBasis] = useState<SeoClipPermission['basis']>('permission')
+  const [credit, setCredit] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const add = async (): Promise<void> => {
+    setBusy(true)
+    const failed = await props.act({ action: 'permit-clip', sampleId, basis, credit, note })
+    setBusy(false)
+    setError(failed)
+    if (failed === undefined) { setSampleId(''); setCredit(''); setNote('') }
+  }
+  return (
+    <>
+      <p className={css.hint}>{t('seoClipsHint')}</p>
+      {props.permissions.length === 0
+        ? <p className={css.hint}>{t('seoClipsEmpty')}</p>
+        : (
+          <ul className={css.list}>
+            {props.permissions.map(p => (
+              <li key={p.sampleId}>
+                <strong>{p.sampleId}</strong>
+                <span className={css.hint}>{` · ${t(`seoClipBasis.${p.basis}`)}${p.credit === '' ? '' : ` · ${p.credit}`}${p.note === '' ? '' : ` · ${p.note}`}`}</span>
+                {' '}
+                <Button variant="ghost" size="sm" onClick={() => { void props.act({ action: 'revoke-clip', sampleId: p.sampleId }) }}>{t('seoClipRemove')}</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      <div className={css.card}>
+        <label className={css.label} htmlFor="seo-clip-id">{t('seoClipId')}</label>
+        <input id="seo-clip-id" className={css.input} type="text" value={sampleId} onChange={(event) => { setSampleId(event.target.value) }} />
+        <label className={css.label} htmlFor="seo-clip-basis">{t('seoClipBasis')}</label>
+        <select id="seo-clip-basis" className={css.input} value={basis}
+          onChange={(event) => { setBasis(event.target.value === 'own' || event.target.value === 'cc' ? event.target.value : 'permission') }}>
+          {(['own', 'permission', 'cc'] as const).map(b => <option key={b} value={b}>{t(`seoClipBasis.${b}`)}</option>)}
+        </select>
+        {basis === 'own'
+          ? null
+          : (
+            <>
+              <label className={css.label} htmlFor="seo-clip-credit">{t('seoClipCredit')}</label>
+              <input id="seo-clip-credit" className={css.input} type="text" value={credit} onChange={(event) => { setCredit(event.target.value) }} />
+            </>
+          )}
+        <label className={css.label} htmlFor="seo-clip-note">{t('seoClipNote')}</label>
+        <input id="seo-clip-note" className={css.input} type="text" value={note} onChange={(event) => { setNote(event.target.value) }} />
+        <p><Button variant="outline" size="sm" disabled={busy || sampleId.trim() === ''} onClick={() => { void add() }}>{t('seoClipAdd')}</Button></p>
+        {error === undefined ? null : <p className={css.error} role="status">{error}</p>}
+      </div>
+    </>
+  )
+}
 
 /**
  * One open question set with its answer box.
@@ -212,6 +280,11 @@ export function SeoSites(props: { t: SeoTranslate; request?: SeoRequest }) {
               ))}
             </details>
           )}
+      </section>
+
+      <section className={css.section}>
+        <h3 className={css.title}>{t('seoClipsTitle')}</h3>
+        <ClipPermissions t={t} permissions={status.clipPermissions} act={act} />
       </section>
 
       <section className={css.section}>

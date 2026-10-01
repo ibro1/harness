@@ -117,6 +117,11 @@ describe('from question to published article', () => {
     t.inbox.push({ chat: 'owner', senderName: 'Dave', fromMe: false, ts: Date.parse('2026-10-05T10:00:00Z') / 1000, body: `${tag} The Lekki rent clip, it got 40k views.` })
     expect(await t.run('seo_check_answers')).toContain('The Lekki rent clip, it got 40k views.')
 
+    // The draft embeds ::clip[lekki_rent_52]: refused until the owner lists it, then it needs its credit line.
+    await expect(t.run('seo_submit_draft', args(baseDraft(), topicId))).rejects.toThrow('not on the owner\'s list of clips')
+    await t.store.update((s) => { s.clipPermissions = { lekki_rent_52: { basis: 'permission', note: 'WhatsApp yes, 1 Oct', credit: 'Clip from Lekki Talk, used with permission', at: 'x' } } })
+    await expect(t.run('seo_submit_draft', args(baseDraft(), topicId))).rejects.toThrow('must be credited')
+    await t.store.update((s) => { s.clipPermissions = { lekki_rent_52: { basis: 'own', note: '', credit: '', at: 'x' } } })
     const submitted = await t.run('seo_submit_draft', args(baseDraft(), topicId))
     const draftId = /Draft (d_[0-9a-f]+) passed/u.exec(submitted)?.[1] ?? ''
     expect(draftId).not.toBe('')

@@ -126,6 +126,27 @@ export interface SeoState {
   lastShiftSession?: string
   /** Signs the owner's unpublish links; made on first start and kept, so links outlive restarts. */
   linkKey?: string
+  /**
+   * Klipara samples the owner said may appear in articles, by sample id. Only the owner adds them (on the SEO
+   * sites page), never a shift: featuring a creator's clip in marketing needs their permission.
+   */
+  clipPermissions?: Record<string, ClipPermission>
+}
+
+/** Why a sample may be featured. */
+export interface ClipPermission {
+  /** `own`: the owner's own video; `cc`: Creative Commons licensed; `permission`: the creator agreed. */
+  basis: 'own' | 'cc' | 'permission'
+  /** Who made the source and how permission was given, for the record. */
+  note: string
+  /** Credit line the article shows with the clip; empty for the owner's own video. */
+  credit: string
+  at: string
+}
+
+/** The ids of every `::clip[id]` line in a Markdown body. */
+export function clipIds(markdown: string): string[] {
+  return [...new Set([...markdown.matchAll(/^\s*::clip\[([A-Za-z0-9_-]+)\]\s*$/gmu)].map(m => m[1] ?? '').filter(Boolean))]
 }
 
 /**

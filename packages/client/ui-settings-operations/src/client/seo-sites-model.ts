@@ -155,6 +155,17 @@ export interface SeoStatus {
   topics: SeoTopic[]
   drafts: SeoDraft[]
   articles: SeoArticle[]
+  /** Klipara samples the owner said may be featured in articles. */
+  clipPermissions: SeoClipPermission[]
+}
+
+/** One sample the owner permitted, and why. */
+export interface SeoClipPermission {
+  sampleId: string
+  basis: 'own' | 'cc' | 'permission'
+  note: string
+  credit: string
+  at: string
 }
 
 /** The markets the site form offers, keyed for the locale dictionary. */
@@ -299,6 +310,14 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
         })(),
       } satisfies SeoSite
     }),
+    clipPermissions: list(body['clipPermissions']).map((value) => {
+      const p = record(value)
+      const basis = p['basis']
+      return {
+        sampleId: str(p['sampleId']), basis: basis === 'own' || basis === 'cc' ? basis : 'permission',
+        note: str(p['note']), credit: str(p['credit']), at: str(p['at']),
+      } satisfies SeoClipPermission
+    }).filter(p => p.sampleId !== ''),
     questions: list(body['questions']).map((value) => {
       const q = record(value)
       const answer = optional(q['answer'])

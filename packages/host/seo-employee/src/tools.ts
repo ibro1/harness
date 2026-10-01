@@ -15,7 +15,7 @@ import { imageProblem, type ImageRequest, type MadeImage } from './images.ts'
 import { draftProblems } from './quality/draft.ts'
 import { editorPrompt, parseEditorReply } from './quality/editor.ts'
 import {
-  freshResearch, publishedThisWeek, recordResearch,
+  clipIds, freshResearch, publishedThisWeek, recordResearch,
   type Article, type Draft, type SeoState, type SeoStore, type Topic, type TopicStatus,
 } from './store.ts'
 import type { ArticleDraft, Faq, KeywordIdea, Market, Publisher, Site, Source } from './types.ts'
@@ -633,6 +633,9 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
             request = { kind: 'graphic', template, title, bars, unit: str(args['unit']), source: str(args['source']) }
           } else request = { kind: 'graphic', template: 'cover', title, subtitle: str(args['subtitle']) }
         }
+        if (request.kind === 'clip-cover' && (state.clipPermissions ?? {})[request.sampleId] === undefined) {
+          throw new Error(`The clip ${request.sampleId} is not on the owner's list of clips that may be featured; its cover cannot be used either.`)
+        }
         const problem = imageProblem(site, request)
         if (problem !== undefined) throw new Error(problem)
         const made = await deps.makeImage(site, request, exec.signal)
@@ -669,13 +672,25 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         if (articleId !== '' && refreshing === undefined) throw new Error(`No article ${articleId} on ${site.name}.`)
         const draft = draftFromArgs(args)
         const { urls, articles } = await sitePages(deps, site, exec.signal)
-        const problems = draftProblems(draft, {
+        const problems: { field: string; rule: string; reason: string }[] = draftProblems(draft, {
           siteBaseUrl: site.baseUrl,
           existing: articles,
           internalUrls: urls,
           ...refreshing === undefined ? {} : { updatingId: refreshing.remoteId },
           bannedPhrases: site.profile.voice.split(/\n/u).flatMap(line => /^avoid:/iu.test(line.trim()) ? line.replace(/^avoid:/iu, '').split(',').map(p => p.trim()).filter(Boolean) : []),
         })
+        const permitted = state.clipPermissions ?? {}
+        for (const id of clipIds(draft.bodyMarkdown)) {
+          const permission = permitted[id]
+          if (permission === undefined) {
+            problems.push({
+              field: 'body', rule: 'clip-not-permitted',
+              reason: `The clip ${id} is not on the owner's list of clips that may be featured (a creator's clip needs their permission). Remove it, or ask the owner with seo_ask_owner to add it on the SEO sites page.`,
+            })
+          } else if (permission.credit !== '' && !draft.bodyMarkdown.includes(permission.credit)) {
+            problems.push({ field: 'body', rule: 'clip-credit', reason: `The clip ${id} must be credited in the body with: "${permission.credit}".` })
+          }
+        }
         if (problems.length > 0) {
           throw new Error(`The draft is refused. Fix every one of these and submit again:\n${problems.map(p => `- ${p.field}: ${p.reason}`).join('\n')}`)
         }

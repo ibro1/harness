@@ -48,6 +48,8 @@ Read `writing-rules.md`, in the same folder as this skill file, before writing; 
 
 Every article has a cover, and every article over 1,200 words has at least one picture in the body. Make each with `seo_add_image`: it copies the image into the site's own media library and gives you the Markdown line. Choose, in this order:
 
+Clips: an article may embed a `::clip[<id>]` (and use its cover) only if the owner listed that sample under **Clips you may feature**; the check refuses any other, because featuring a creator's clip in marketing needs their permission and credit alone is not permission. Put the credit line the owner gave next to the clip. If a clip would make the article and it is not listed, ask the owner with `seo_ask_owner` whether they have permission; never pick a sample yourself.
+
 1. **`clip-cover`**: when the article embeds a Klipara clip (`::clip[<id>]`), use that clip's designed cover as the article cover. It is real output, which no competitor has.
 2. **`screenshot`**: for how-to steps, a screenshot of the site's own public page (for example `/free-clip`), cropped with a CSS selector to the part that matters; `mobile: true` when readers do it on a phone. Never screenshot other sites.
 3. **`graphic`**: `cover` when there is no clip; `steps` for a short procedure (2 to 8 steps); `chart` only for real numbers you can name the source of (Search Console, the owner's answer, a cited study). Graphics come out in the site's own colours and fonts.
