@@ -39,6 +39,13 @@ import { screenUrl, systemLookup } from './ssrf.ts'
 import type { HostLookup } from './ssrf.ts'
 
 /** The plugin name, for the Loader. */
+// For other plugins that render pages themselves (the SEO employee's article images): the same browser driver and URL screen.
+export { createChromiumDriver } from './chromium.ts'
+export type { ChromiumDriverOptions } from './chromium.ts'
+export type { CaptureDriver, CaptureRequest, CaptureResult } from './driver.ts'
+export { BlockedUrlError, screenUrl, systemLookup } from './ssrf.ts'
+export type { ScreenedUrl } from './ssrf.ts'
+
 export const name = 'capture'
 
 /** The services this plugin reads. `outputs` is optional and read per call. */

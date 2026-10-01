@@ -11,6 +11,7 @@ import type { ParameterSchemaSpec, ToolDefinition, ToolRunContext, ValueSchemaSp
 import type { WhatsAppMessage } from '@deepseek-ai/dsh-host-employee-kit'
 import { generateKeywordHistoricalMetrics, generateKeywordIdeas, isPlannableKeyword, type AdsAuth } from './google/ads.ts'
 import { cannibalization, gscWindow, queryAll, strikingDistance, submitSitemap } from './google/gsc.ts'
+import { imageProblem, type ImageRequest, type MadeImage } from './images.ts'
 import { draftProblems } from './quality/draft.ts'
 import { editorPrompt, parseEditorReply } from './quality/editor.ts'
 import {
@@ -47,6 +48,8 @@ export interface SeoDeps {
   editor: (prompt: string, signal: AbortSignal) => Promise<{ text: string; provider: string; model: string }>
   notify: (text: string) => Promise<string>
   readWhatsApp: (limit: number) => Promise<WhatsAppMessage[]>
+  /** Make one article image from a real source; the tool uploads it to the site. */
+  makeImage: (site: Site, request: ImageRequest, signal: AbortSignal) => Promise<MadeImage>
   /** The owner's one-tap unpublish link for an article. */
   unpublishLink: (articleId: string) => string
   reportFailure?: (stage: string, error: unknown) => void
@@ -575,6 +578,69 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
           ...readError === '' ? [] : [`WhatsApp could not be read (${readError}); answers given on the page still count.`],
           ...lines.length > 0 ? ['Answers (use them as the article\'s first-hand material, in the owner\'s own words where you quote):', ...lines] : [],
           ...waiting.length > 0 ? ['Still waiting:', ...waiting] : [],
+        ].join('\n')
+      },
+    }),
+    tool({
+      name: 'seo_add_image',
+      description: 'Make one image for an article and copy it into the site\'s media library; returns the site URL and the Markdown line to put in the body (or use as cover_image_url). Real sources only, in this order of preference: `clip-cover` (a Klipara sample\'s designed cover: the best cover for an article that embeds that clip), `screenshot` (one of the site\'s own public pages, optionally cropped to a CSS selector: for how-to steps), `graphic` with template `cover` (title card in the site\'s colours, when there is no clip), `steps` (numbered steps) or `chart` (bars of real numbers with their source). Never use an image to show a person, a screen or a result that does not exist.',
+      parameters: {
+        site_id: siteParameter,
+        kind: { type: 'string', required: true, enum: ['clip-cover', 'screenshot', 'graphic'] },
+        alt: { type: 'string', required: true, description: 'What the image shows, for screen readers and search: specific, under 125 characters, no "image of".' },
+        sample_id: { type: 'string', description: 'clip-cover: the id from the sample\'s /s/<id> link.' },
+        url: { type: 'string', description: 'screenshot: a page on the site.' },
+        selector: { type: 'string', description: 'screenshot: optional CSS selector to crop to.' },
+        mobile: { type: 'boolean', description: 'screenshot: render as a phone (390px wide).' },
+        template: { type: 'string', enum: ['cover', 'steps', 'chart'], description: 'graphic: which template.' },
+        title: { type: 'string', description: 'graphic: the headline on the image.' },
+        subtitle: { type: 'string', description: 'graphic cover: optional line under the title.' },
+        steps: { type: 'array', items: { type: 'string' }, description: 'graphic steps: 2 to 8 short steps.' },
+        bars: {
+          type: 'array',
+          description: 'graphic chart: 2 to 10 bars of real numbers.',
+          items: { type: 'object', additionalProperties: false, properties: { label: { type: 'string', required: true }, value: { type: 'number', required: true } } },
+        },
+        unit: { type: 'string', description: 'graphic chart: unit after each value, for example % or " views".' },
+        source: { type: 'string', description: 'graphic chart: where the numbers come from; required.' },
+      },
+      run: async (args, exec) => {
+        const state = await store.read()
+        refuseWhilePaused(state)
+        const site = findSite(state, str(args['site_id']))
+        const alt = str(args['alt'])
+        if (alt.length < 5 || alt.length > 125 || /^(?:an? )?(?:image|picture|photo|screenshot) of\b/iu.test(alt)) {
+          throw new Error('alt must say what the image shows in 5 to 125 characters, without "image of".')
+        }
+        const kind = str(args['kind'])
+        let request: ImageRequest
+        if (kind === 'clip-cover') request = { kind, sampleId: str(args['sample_id']) }
+        else if (kind === 'screenshot') {
+          const selector = str(args['selector'])
+          request = { kind, url: str(args['url']), mobile: args['mobile'] === true, ...selector === '' ? {} : { selector } }
+        } else {
+          const template = str(args['template'])
+          const title = str(args['title'])
+          if (template === 'steps') request = { kind: 'graphic', template, title, steps: strings(args['steps']) }
+          else if (template === 'chart') {
+            const bars = Array.isArray(args['bars'])
+              ? args['bars'].flatMap((b: unknown) => {
+                if (typeof b !== 'object' || b === null) return []
+                const row = b as Record<string, unknown>
+                return typeof row['value'] === 'number' ? [{ label: str(row['label']), value: row['value'] }] : []
+              })
+              : []
+            request = { kind: 'graphic', template, title, bars, unit: str(args['unit']), source: str(args['source']) }
+          } else request = { kind: 'graphic', template: 'cover', title, subtitle: str(args['subtitle']) }
+        }
+        const problem = imageProblem(site, request)
+        if (problem !== undefined) throw new Error(problem)
+        const made = await deps.makeImage(site, request, exec.signal)
+        const hosted = await (await deps.publisher(site)).uploadMedia(made.sourceUrl, alt, exec.signal)
+        return [
+          `Made ${made.description} and copied it to ${site.name}: ${hosted}`,
+          `In the body: ![${alt}](${hosted})`,
+          `As the cover: cover_image_url "${hosted}", cover_alt "${alt}"`,
         ].join('\n')
       },
     }),

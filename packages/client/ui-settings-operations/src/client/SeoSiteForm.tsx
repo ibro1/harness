@@ -241,6 +241,14 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
         <p className={css.hint}>{t('seoSite.articlesPerWeek.hint')}</p>
       </div>
 
+      <h4 className={css.subtitle}>{t('seoSiteBrand')}</h4>
+      <p className={css.hint}>{t('seoSiteBrand.hint')}</p>
+      {field('brandAccent', 'brandAccent')}
+      {field('brandPaper', 'brandPaper')}
+      {field('brandInk', 'brandInk')}
+      {field('brandDisplayFont', 'brandDisplayFont')}
+      {field('brandBodyFont', 'brandBodyFont')}
+
       <h4 className={css.subtitle}>{t('seoSiteGoogle')}</h4>
       <fieldset className={css.field}>
         <legend className={css.label}>{t('seoSite.googleAccess')}</legend>

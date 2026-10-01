@@ -9502,6 +9502,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../util/brand
+      '@deepseek-ai/dsh-host-capture':
+        specifier: workspace:*
+        version: link:../capture
       '@deepseek-ai/dsh-host-employee-kit':
         specifier: workspace:*
         version: link:../employee-kit

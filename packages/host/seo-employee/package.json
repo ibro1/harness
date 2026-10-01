@@ -21,6 +21,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-host-capture": "workspace:*",
     "@deepseek-ai/dsh-host-employee-kit": "workspace:*"
   },
   "peerDependencies": {

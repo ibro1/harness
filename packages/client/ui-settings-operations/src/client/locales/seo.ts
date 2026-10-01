@@ -13,6 +13,7 @@ export type SeoSiteFieldKey =
   | 'name' | 'baseUrl' | 'kind' | 'enabled' | 'business' | 'audience' | 'offer' | 'voice' | 'ctaText' | 'ctaUrl' | 'markets' | 'seeds'
   | 'gscProperty' | 'articlesPerWeek' | 'authorName' | 'authorUrl' | 'authorBio' | 'apiKey' | 'wpUser' | 'wpAppPassword'
   | 'googleAccess' | 'adsCustomerId' | 'adsLoginCustomerId'
+  | 'brandAccent' | 'brandPaper' | 'brandInk' | 'brandDisplayFont' | 'brandBodyFont'
 
 /** Where a topic is in the pipeline. */
 export type SeoTopicStatusKey = 'planned' | 'asked' | 'drafted' | 'published' | 'rejected'
@@ -22,7 +23,7 @@ export type SeoLocaleKey =
   | 'seoTitle' | 'seoDescription' | 'seoInvalid' | 'seoOpenSites'
   | 'seoGoogleTitle' | 'seoGoogleLoading' | 'seoGoogleUnknown' | 'seoGoogleNotSetUp' | 'seoGoogleNotConnected' | 'seoGoogleConnected' | 'seoGoogleServiceAccount' | 'seoGoogleServiceAccountBad' | 'seoRemoveServiceAccount'
   | 'seoGoogleRedirect' | 'seoGoogleConnect' | 'seoGoogleReconnect' | 'seoGoogleConnectHint' | 'seoGoogleDisconnect' | 'seoGoogleDisconnectFailed'
-  | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady' | 'seoAdsConfigured' | 'seoAdsFound' | 'seoAdsLookupFailed' | 'seoAdsNoneFound' | 'seoAdsNoAccounts' | 'seoAdsRecheck'
+  | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady' | 'seoAdsConfigured' | 'seoAdsFound' | 'seoAdsLookupFailed' | 'seoAdsNoneFound' | 'seoAdsNoAccounts' | 'seoAdsRecheck' | 'seoAdsChecking' | 'seoAdsCheckedAt'
   | 'seoSecretSaved' | 'seoSecretUnset'
   | `seo.${SeoFieldKey}` | `seo.${SeoFieldKey}.hint` | 'seo.shiftModel.none' | 'seo.fallbackModelPick.none' | 'seo.editorModelPick.none'
   | 'seoSitesPageTitle' | 'seoSitesDescription' | 'seoSitesLoading' | 'seoSitesFailed'
@@ -32,7 +33,7 @@ export type SeoLocaleKey =
   | 'seoSiteFormNew' | 'seoSiteFormEdit' | 'seoSiteProfile' | 'seoSiteResearch' | 'seoSiteAuthor' | 'seoSiteCredentials'
   | `seoSite.${SeoSiteFieldKey}` | `seoSite.${SeoSiteFieldKey}.hint` | `seoKind.${'klipara' | 'wordpress'}` | `seoMarket.${SeoMarketKey}`
   | 'seoGscLoad' | 'seoGscLoading' | 'seoGscChoose' | 'seoGscEmpty'
-  | 'seoSiteGoogle' | `seoGoogleAccess.${'shared' | 'own'}` | `seoGoogleAccess.${'shared' | 'own'}.hint` | 'seoSiteGoogleSaveFirst'
+  | 'seoSiteBrand' | 'seoSiteBrand.hint' | 'seoSiteGoogle' | `seoGoogleAccess.${'shared' | 'own'}` | `seoGoogleAccess.${'shared' | 'own'}.hint` | 'seoSiteGoogleSaveFirst'
   | 'seoSiteGoogleConnected' | 'seoSiteGoogleNotConnected' | 'seoSiteGoogleLink' | 'seoSiteGoogleConnectHere' | 'seoSiteGoogleSignInAgain'
   | 'seoSiteAdsPick' | 'seoSiteAdsPick.hint' | 'seoSiteAdsNone' | 'seoSiteAdsAutomatic' | 'seoSiteAdsOption' | 'seoSiteAdsManager' | 'seoSiteAdsClient'
   | 'seoSave' | 'seoSaving' | 'seoSaved' | 'seoClose' | 'seoTest' | 'seoTesting' | 'seoTestWordPress' | 'seoTestWordPressSignedIn' | 'seoTestNotWordPress' | 'seoTestKlipara'
@@ -77,6 +78,8 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoAdsNoneFound: 'Your Google sign-in reaches no active Google Ads account, so Keyword Planner is off: the employee researches from Search Console and search suggestions. What the sign-in reached: {seen}.',
   seoAdsNoAccounts: 'no Google Ads accounts at all (sign in with the Google account that has Ads access)',
   seoAdsRecheck: 'Check Ads accounts again',
+  seoAdsChecking: 'Checking with Google…',
+  seoAdsCheckedAt: 'Checked at {time}; the line above is the result.',
   seoSecretSaved: 'Saved',
   seoSecretUnset: 'Not set',
   'seo.enabled': 'Run the daily shift',
@@ -198,6 +201,18 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoGscLoading: 'Loading…',
   seoGscChoose: 'Choose a property',
   seoGscEmpty: 'This Google account has no Search Console properties.',
+  seoSiteBrand: 'Look of graphics',
+  'seoSiteBrand.hint': 'Optional. Article graphics (covers, steps, charts) use these. Leave them empty and they are read from the site\'s own stylesheets.',
+  'seoSite.brandAccent': 'Accent colour',
+  'seoSite.brandAccent.hint': 'A CSS colour, for example #a9241e: numbers, bars and rules.',
+  'seoSite.brandPaper': 'Background colour',
+  'seoSite.brandPaper.hint': 'A CSS colour for the card background.',
+  'seoSite.brandInk': 'Text colour',
+  'seoSite.brandInk.hint': 'A CSS colour for headings and text.',
+  'seoSite.brandDisplayFont': 'Heading font',
+  'seoSite.brandDisplayFont.hint': 'A Google Fonts family name, for example Fraunces.',
+  'seoSite.brandBodyFont': 'Body font',
+  'seoSite.brandBodyFont.hint': 'A Google Fonts family name, for example IBM Plex Sans.',
   seoSiteGoogle: 'Google access',
   'seoSite.googleAccess': 'How this site reaches Google',
   'seoSite.googleAccess.hint': '',
@@ -309,6 +324,8 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoAdsNoneFound: '你的 Google 登录没有可用的 Google Ads 账号，因此关键词规划师已关闭：员工依据 Search Console 和搜索建议研究。该登录可访问：{seen}。',
   seoAdsNoAccounts: '没有任何 Google Ads 账号（请用拥有 Ads 权限的 Google 账号登录）',
   seoAdsRecheck: '重新检查 Ads 账号',
+  seoAdsChecking: '正在向 Google 查询…',
+  seoAdsCheckedAt: '已于 {time} 检查；上方即为结果。',
   seoSecretSaved: '已保存',
   seoSecretUnset: '未设置',
   'seo.enabled': '运行每日班次',
@@ -430,6 +447,18 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoGscLoading: '加载中…',
   seoGscChoose: '选择资源',
   seoGscEmpty: '此 Google 账号没有 Search Console 资源。',
+  seoSiteBrand: '图形外观',
+  'seoSiteBrand.hint': '可选。文章图形（封面、步骤、图表）使用这些设置。留空则从站点自身的样式表读取。',
+  'seoSite.brandAccent': '强调色',
+  'seoSite.brandAccent.hint': 'CSS 颜色，例如 #a9241e：用于数字、柱条和分隔线。',
+  'seoSite.brandPaper': '背景色',
+  'seoSite.brandPaper.hint': '卡片背景的 CSS 颜色。',
+  'seoSite.brandInk': '文字颜色',
+  'seoSite.brandInk.hint': '标题和正文的 CSS 颜色。',
+  'seoSite.brandDisplayFont': '标题字体',
+  'seoSite.brandDisplayFont.hint': 'Google Fonts 字体名称，例如 Fraunces。',
+  'seoSite.brandBodyFont': '正文字体',
+  'seoSite.brandBodyFont.hint': 'Google Fonts 字体名称，例如 IBM Plex Sans。',
   seoSiteGoogle: 'Google 访问',
   'seoSite.googleAccess': '本站如何访问 Google',
   'seoSite.googleAccess.hint': '',

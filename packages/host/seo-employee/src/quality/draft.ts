@@ -367,6 +367,64 @@ function styleProblemsFor(field: DraftField, text: string, skip: readonly string
     .map(p => ({ field, rule: `style:${p.rule}`, reason: `${p.fix} Found: "${p.found}".` }))
 }
 
+/** Body words per image allowed beyond the first. */
+export const WORDS_PER_IMAGE = 300
+/** Articles longer than this need at least one picture (an image or an embedded clip). */
+export const WORDS_NEEDING_A_PICTURE = 1200
+
+/**
+ * Images must be copied to the site (made with seo_add_image), carry real alt
+ * text, and be few enough to support the text; a long article needs at least
+ * one picture, and every article a cover hosted on the site.
+ */
+function imageProblems(body: string, draft: ArticleDraft, words: number, siteBaseUrl: string): DraftProblem[] {
+  const problems: DraftProblem[] = []
+  const origin = new URL(siteBaseUrl).origin
+  const hosted = (url: string): boolean => {
+    try {
+      return new URL(url, origin).origin === origin
+    } catch {
+      return false
+    }
+  }
+  const images = [...body.matchAll(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)/gu)].map(m => ({ alt: (m[1] ?? '').trim(), url: m[2] ?? '' }))
+  for (const image of images) {
+    if (image.alt.length < 5) {
+      problems.push({ field: 'body', rule: 'image-alt', reason: `The image ${image.url} needs alt text that says what it shows.` })
+    }
+    if (!hosted(image.url)) {
+      problems.push({
+        field: 'body',
+        rule: 'image-not-hosted',
+        reason: `The image ${image.url} is not on the site; make it with seo_add_image so it is copied into the site's media.`,
+      })
+    }
+  }
+  const pictures = images.length + (/^\s*::clip\[/mu.test(body) ? 1 : 0)
+  if (words > WORDS_NEEDING_A_PICTURE && pictures === 0) {
+    problems.push({
+      field: 'body',
+      rule: 'images-missing',
+      reason: `At ${String(words)} words the article needs at least one picture: a Klipara clip, a screenshot of the site, or a steps or chart graphic (seo_add_image).`,
+    })
+  }
+  const allowed = 1 + Math.floor(words / WORDS_PER_IMAGE)
+  if (images.length > allowed) {
+    problems.push({
+      field: 'body',
+      rule: 'images-too-many',
+      reason: `${String(images.length)} images for ${String(words)} words; keep at most ${String(allowed)}, the ones that show something.`,
+    })
+  }
+  const cover = draft.coverImageUrl ?? ''
+  if (cover === '') {
+    problems.push({ field: 'cover', rule: 'cover-missing', reason: 'Give the article a cover: a clip cover, or a cover graphic from seo_add_image.' })
+  } else if (!hosted(cover)) {
+    problems.push({ field: 'cover', rule: 'cover-not-hosted', reason: 'The cover must be on the site; make it with seo_add_image.' })
+  }
+  return problems
+}
+
 /**
  * Every reason a draft cannot be published yet.
  * @param draft - the article as the writer submitted it.
@@ -424,6 +482,7 @@ export function draftProblems(draft: ArticleDraft, ctx: DraftContext): DraftProb
     }
   }
   problems.push(
+    ...imageProblems(body, draft, words, ctx.siteBaseUrl),
     ...clipProblems(draft.bodyMarkdown, ctx.requireClip === true),
     ...bannedProblems(draft, ctx.bannedPhrases ?? []),
     ...styleProblemsFor('title', draft.title, ['rhetorical-question']),

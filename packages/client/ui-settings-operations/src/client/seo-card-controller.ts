@@ -51,6 +51,10 @@ export interface SeoGoogleState {
   failed: boolean
   /** The last disconnect's error, if it failed. */
   actionError: string | undefined
+  /** An Ads account lookup the owner asked for is running. */
+  adsChecking: boolean
+  /** When the owner's last Ads account lookup finished, as an ISO time. */
+  adsCheckedAt: string | undefined
 }
 
 /** What the SEO employee card renders. */
@@ -103,7 +107,9 @@ function enabledField(): SettingsFieldSpec {
 export class SeoCardController {
   private readonly form: SettingsFormModel<SeoSettings>
   private readonly store: SnapshotStore<SeoCardState>
-  private readonly google = createSnapshotStore<SeoGoogleState>({ status: undefined, failed: false, actionError: undefined })
+  private readonly google = createSnapshotStore<SeoGoogleState>({
+    status: undefined, failed: false, actionError: undefined, adsChecking: false, adsCheckedAt: undefined,
+  })
 
   /**
    * @param scope - the bound settings scope for the `seo-employee` namespace.
@@ -140,14 +146,27 @@ export class SeoCardController {
 
   /** Read the Google connection from `/seo/status`. */
   refreshStatus(): void {
+    void this.loadStatus()
+  }
+
+  private async loadStatus(): Promise<void> {
+    try {
+      const status = await fetchSeoStatus(this.request)
+      this.google.update((draft) => { draft.status = { ...status.google, redirectUri: status.redirectUri }; draft.failed = false })
+    } catch {
+      // The plugin is not loaded or the session expired: the card says the status is unknown.
+      this.google.update((draft) => { draft.failed = true })
+    }
+  }
+
+  /** Look up the Ads accounts again, showing that it runs and when it finished. */
+  recheckAds(): void {
+    if (this.google.getSnapshot().adsChecking) return
+    this.google.update((draft) => { draft.adsChecking = true })
     void (async () => {
-      try {
-        const status = await fetchSeoStatus(this.request)
-        this.google.update((draft) => { draft.status = { ...status.google, redirectUri: status.redirectUri }; draft.failed = false })
-      } catch {
-        // The plugin is not loaded or the session expired: the card says the status is unknown.
-        this.google.update((draft) => { draft.failed = true })
-      }
+      await postSeoAction(this.request, { action: 'recheck-ads' })
+      await this.loadStatus()
+      this.google.update((draft) => { draft.adsChecking = false; draft.adsCheckedAt = new Date().toISOString() })
     })()
   }
 
@@ -191,9 +210,7 @@ export class SeoCardController {
       connectGoogle: () => { this.openWindow(SEO_OAUTH_START_PATH) },
       disconnectGoogle: () => { this.disconnectGoogle() },
       removeServiceAccount: () => { this.removeServiceAccount() },
-      recheckAds: () => {
-        void postSeoAction(this.request, { action: 'recheck-ads' }).then(() => { this.refreshStatus() })
-      },
+      recheckAds: () => { this.recheckAds() },
       refreshStatus: () => { this.refreshStatus() },
     }
   }

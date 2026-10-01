@@ -24,7 +24,11 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import {
   FallbackRouter, installFallback, localTime, parseShiftTime, shiftDue, startShift, whatsAppNotifier, whatsAppReader,
 } from '@deepseek-ai/dsh-host-employee-kit'
+import { createReadStream } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { createChromiumDriver, screenUrl } from '@deepseek-ai/dsh-host-capture'
 import { askEditor } from './editor-call.ts'
+import { makeImage, siteBrand } from './images.ts'
 import {
   GoogleTokens, ServiceAccountTokens, authorizationUrl, exchangeCode, parseServiceAccountKey, pkcePair, randomState, type ServiceAccountKey,
 } from './google/oauth.ts'
@@ -231,6 +235,7 @@ export function parseSite(input: unknown, existing: Site | undefined, now: strin
     : []
   const author = obj(r['author'])
   const google = obj(r['google'])
+  const brand = obj(r['brand'])
   const perWeek = typeof r['articlesPerWeek'] === 'number' ? Math.floor(r['articlesPerWeek']) : 2
   if (perWeek < 0 || perWeek > 7) return 'Articles per week must be 0 to 7.'
   const site: Site = {
@@ -251,6 +256,10 @@ export function parseSite(input: unknown, existing: Site | undefined, now: strin
     gscProperty: text(r['gscProperty']),
     articlesPerWeek: perWeek,
     author: { name: text(author['name']), url: text(author['url']), bio: text(author['bio']) },
+    brand: {
+      accent: text(brand['accent']), paper: text(brand['paper']), ink: text(brand['ink']),
+      displayFont: text(brand['displayFont']), bodyFont: text(brand['bodyFont']),
+    },
     google: {
       access: google['access'] === 'own' ? 'own' : 'shared',
       adsCustomerId: text(google['adsCustomerId']).replace(/\D/gu, ''),
@@ -347,6 +356,12 @@ export function apply(ctx: Context, config: Config): void {
     const selected = ctx.agentDefaultModel.currentSelection()
     return { provider: selected.provider, model: selected.model }
   }
+  // Article images: rendered by the same headless Chromium driver the capture plugin uses, kept under the
+  // data directory and served publicly so the site's publisher can copy them.
+  const mediaDir = join(dataDir, 'media')
+  const imageDriver = createChromiumDriver({
+    browserPath: '', launchTimeoutMs: 20_000, loadTimeoutMs: 30_000, hardTimeoutMs: 90_000, maxFullPageHeightPx: 8000, scrollStepMs: 120,
+  })
   // Ads accounts found for each sign-in when none is configured, rechecked hourly.
   const discovered = new Map<string, { at: number; customerId?: string; name?: string; error?: string; seen?: string }>()
   const deps: SeoDeps = {
@@ -396,6 +411,13 @@ export function apply(ctx: Context, config: Config): void {
     notify,
     readWhatsApp,
     unpublishLink: articleId => `${publicBase}${prefix}/unpublish/${encodeURIComponent(articleId)}?sig=${sign(articleId)}`,
+    makeImage: async (site, request, signal) => {
+      if (publicBase === '') throw new Error('The harness has no public address (DSH_PUBLIC_HOST), so the site cannot fetch a made image.')
+      const brand = await siteBrand(fetch, site, signal)
+      return makeImage({
+        driver: imageDriver, screen: url => screenUrl(url), fetch, mediaDir, publicUrl: file => `${publicBase}${prefix}/media/${file}`,
+      }, site, request, brand, signal)
+    },
     reportFailure: (stage, error) => {
       process.stderr.write(`seo-employee: ${stage} failed: ${error instanceof Error ? error.message : String(error)}\n`)
     },
@@ -760,6 +782,27 @@ export function apply(ctx: Context, config: Config): void {
       }
     },
   }), `seo-employee: ${prefix}/oauth/callback`)
+
+  // Made images, public so a site's publisher can copy them; only file names this plugin wrote are served.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: `${prefix}/media`,
+    authenticate: false,
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      const file = new URL(req.url ?? '/', 'http://x').pathname.slice(`${prefix}/media/`.length)
+      if (!/^[0-9a-f]{24}\.png$/u.test(file)) { res.writeHead(404); res.end(); return }
+      const path = join(mediaDir, file)
+      try {
+        const info = await stat(path)
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': String(info.size), 'Cache-Control': 'public, max-age=86400', 'X-Robots-Tag': 'noindex' })
+        if (req.method === 'HEAD') { res.end(); return }
+        createReadStream(path).pipe(res)
+      } catch {
+        res.writeHead(404)
+        res.end()
+      }
+    },
+  }), `seo-employee: ${prefix}/media`)
 
   // The owner's one-tap unpublish link from WhatsApp. GET only shows a button:
   // link previews fetch URLs, and a preview must not unpublish anything.

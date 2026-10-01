@@ -34,6 +34,8 @@ The session cwd comes from the calling agent. A caller with no agent — a comma
 
 Chromium is resolved on PATH as `chromium-browser`, then `chromium`, then `google-chrome` and `google-chrome-stable`, matching the `campaign-assets` skill so both surfaces pick the same browser; `browserPath` overrides it. A missing browser fails the call naming every candidate tried, rather than producing a blank file.
 
+The package also exports `createChromiumDriver` and `screenUrl` for plugins that render pages themselves; the SEO employee uses them for article screenshots and template graphics.
+
 ## Safety
 
 The URL comes from a model, so it is screened before any browser starts. Only `http` and `https` are accepted, credentials in the URL are refused, and the hostname is resolved first: every address it answers with must be publicly routable, which is why a public-looking name that resolves to `127.0.0.1` is refused. Loopback, `0.0.0.0/8`, RFC1918, CGNAT (`100.64.0.0/10`), link-local (`169.254.0.0/16`, carrying cloud instance metadata), documentation, benchmarking, multicast and reserved IPv4 ranges are all refused, as are `::`, `::1`, `fc00::/7`, `fe80::/10`, `ff00::/8`, and the IPv4-mapped, IPv4-compatible, NAT64 and 6to4 spellings of any refused IPv4 address. The screened address is pinned into the browser's own resolver with `--host-resolver-rules`, so a second lookup cannot move the capture somewhere the screen never saw. This matters because the harness runs its own web server and several bridges on loopback: a screenshot tool that can reach them is a credential-reading tool.

@@ -218,7 +218,16 @@ export function SeoCard(props: SeoCardProps) {
           : <p className={google.status.adsSet ? css.pickerValue : css.pickerUnknown} role="status">{adsLine(t, google.status.adsAccount)}</p>}
         {google.status === undefined || google.status.adsAccount.source === 'configured'
           ? null
-          : <p><Button variant="ghost" size="sm" onClick={props.recheckAds}>{t('seoAdsRecheck')}</Button></p>}
+          : (
+            <p>
+              <Button variant="outline" size="sm" disabled={google.adsChecking} onClick={props.recheckAds}>
+                {google.adsChecking ? t('seoAdsChecking') : t('seoAdsRecheck')}
+              </Button>
+              {google.adsCheckedAt === undefined || google.adsChecking
+                ? null
+                : <span className={css.pickerHint}>{` ${t('seoAdsCheckedAt', { time: new Date(google.adsCheckedAt).toLocaleTimeString() })}`}</span>}
+            </p>
+          )}
       </div>
       <SettingsSecretField
         id="plugin-config-seo-adsDeveloperToken"

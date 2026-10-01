@@ -70,6 +70,7 @@ function setup(now = new Date('2026-10-05T09:00:00Z')) {
     notify: (text) => { notes.push(text); return Promise.resolve('sent to Owner') },
     readWhatsApp: () => Promise.resolve(inbox),
     unpublishLink: id => `https://h.test/seo/unpublish/${id}?sig=x`,
+    makeImage: () => Promise.resolve({ sourceUrl: 'https://h.test/seo/media/a.png', width: 1200, height: 630, description: 'a cover graphic' }),
   }
   const tools = new Map(buildSeoTools(deps).map((t: ToolDefinition) => [t.name, t]))
   const run = async (name: string, a: Record<string, unknown> = {}): Promise<string> =>
@@ -204,6 +205,7 @@ describe('per-site Google access', () => {
       notify: () => Promise.resolve(''),
       readWhatsApp: () => Promise.resolve([]),
       unpublishLink: () => '',
+      makeImage: () => Promise.reject(new Error('unused')),
     }).map(x => [x.name, x]))
     await tools.get('seo_keyword_ideas')!.execute({ site_id: 'klipara' }, exec)
     expect(accounts[0]).toContain('/customers/999:generateKeywordIdeas')

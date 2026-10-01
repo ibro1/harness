@@ -325,3 +325,21 @@ describe('editorial review', () => {
     expect(() => parseEditorReply(text)).toThrow(/editor reply/u)
   })
 })
+
+describe('article images', () => {
+  const longBody = baseDraft().bodyMarkdown
+  it('passes images copied to the site with real alt text', () => {
+    const draft = { ...baseDraft(), bodyMarkdown: `${longBody}\n\n![The Klipara free-clip form on a phone](${BASE}/media/med_1.png)\n` }
+    expect(draftProblems(draft, ctx()).filter(p => p.rule.startsWith('image') || p.rule.startsWith('cover'))).toEqual([])
+  })
+
+  it('refuses hotlinked images, empty alt text, a missing or off-site cover, and too many images', () => {
+    const offsite = { ...baseDraft(), bodyMarkdown: `${longBody}\n\n![](https://i.imgur.com/x.png)\n` }
+    expect(draftProblems(offsite, ctx()).map(p => p.rule)).toEqual(expect.arrayContaining(['image-alt', 'image-not-hosted']))
+    const { coverImageUrl: _c, coverAlt: _a, ...noCover } = baseDraft()
+    expect(draftProblems(noCover, ctx()).map(p => p.rule)).toContain('cover-missing')
+    expect(draftProblems({ ...baseDraft(), coverImageUrl: 'https://cdn.example/cover.png' }, ctx()).map(p => p.rule)).toContain('cover-not-hosted')
+    const many = { ...baseDraft(), bodyMarkdown: `${longBody}\n\n${Array.from({ length: 12 }, (_, i) => `![Step ${String(i)} of the setup](${BASE}/media/${String(i)}.png)`).join('\n\n')}\n` }
+    expect(draftProblems(many, ctx()).map(p => p.rule)).toContain('images-too-many')
+  })
+})

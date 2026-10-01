@@ -57,6 +57,7 @@ function articleText(draft: ArticleDraft): string {
     `Meta description: ${draft.metaDescription}`,
     `Dek: ${draft.dek}`,
     `Tags: ${draft.tags.join(', ')}`,
+    `Cover image: ${draft.coverImageUrl === undefined ? '(none)' : draft.coverAlt ?? '(no alt text)'}`,
     '',
     draft.bodyMarkdown,
     '',
@@ -92,7 +93,10 @@ Score the article from 1 to 10 on each dimension. 10 is rare; 6 is the lowest sc
 1. directness: Does the first paragraph answer the query, or at least say plainly what the reader will get? Deduct for throat-clearing, \
 scene-setting, and sections that announce what they are about to say.
 2. specificity: Are there real examples, named products, numbers the owner could know, the owner's own experience, and embedded Klipara \
-clips where they help? Deduct for advice that would fit any site, and for generic filler that a reader has seen in every other article.
+clips where they help? Deduct for advice that would fit any site, and for generic filler that a reader has seen in every other article. \
+Judge the images by their alt text: credit images that show something real (a Klipara clip or its cover, a screenshot of the site, a \
+chart of cited numbers, the steps of a how-to); deduct for decoration, and treat an image that claims to show something it cannot \
+(a person, a result or a screen that does not exist) as a must-fix.
 3. voice: Does it read like one person wrote it? Look for varied sentence lengths, concrete nouns, named actors, and the site's voice. \
 Deduct for machine-writing tells: long dashes, stock words (delve, robust, seamless, leverage), "not just X but Y" contrasts, \
 three-item lists everywhere, bold-led bullets, questions answered in the next breath, summary conclusions.

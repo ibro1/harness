@@ -16,6 +16,7 @@ const site: SeoSite = {
   seeds: ['podcast clips', 'youtube shorts'], gscProperty: 'sc-domain:linkfa.de', articlesPerWeek: 3,
   author: { name: 'Dave', url: '', bio: '' }, createdAt: '2026-09-01T00:00:00.000Z',
   secretsSet: { apiKey: true, wpUser: false, wpAppPassword: false }, thisWeek: 1,
+  brand: { accent: '', paper: '', ink: '', displayFont: '', bodyFont: '' },
   google: { access: 'shared', adsCustomerId: '', adsLoginCustomerId: '' }, googleConnection: null,
 }
 
@@ -65,6 +66,7 @@ describe('the save-site body', () => {
       ],
       seeds: ['podcast clips', 'youtube shorts'], gscProperty: 'sc-domain:linkfa.de', articlesPerWeek: 3,
       author: { name: 'Dave', url: '', bio: '' },
+      brand: { accent: '', paper: '', ink: '', displayFont: '', bodyFont: '' },
       google: { access: 'shared', adsCustomerId: '', adsLoginCustomerId: '' },
     })
   })

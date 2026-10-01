@@ -50,6 +50,8 @@ export interface SeoSite {
   secretsSet: { apiKey: boolean; wpUser: boolean; wpAppPassword: boolean }
   /** Articles published this ISO week. */
   thisWeek: number
+  /** Colours and fonts for the site's graphics; empty fields are read from the site's own stylesheets. */
+  brand: { accent: string; paper: string; ink: string; displayFont: string; bodyFont: string }
   /** How the site reaches Google; sites saved before per-site access use the shared access. */
   google: { access: SeoGoogleAccess; adsCustomerId: string; adsLoginCustomerId: string }
   /** For a site on its owner's own sign-in: whether it is connected, and the link to send them. Null on the shared access. */
@@ -193,6 +195,11 @@ export interface SeoSiteForm {
   authorName: string
   authorUrl: string
   authorBio: string
+  brandAccent: string
+  brandPaper: string
+  brandInk: string
+  brandDisplayFont: string
+  brandBodyFont: string
   googleAccess: SeoGoogleAccess
   /** The site's own Google Ads account and its manager; empty uses the employee's account. */
   adsCustomerId: string
@@ -273,6 +280,10 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
         createdAt: str(site['createdAt']),
         secretsSet: { apiKey: secrets['apiKey'] === true, wpUser: secrets['wpUser'] === true, wpAppPassword: secrets['wpAppPassword'] === true },
         thisWeek: num(site['thisWeek']),
+        brand: (() => {
+          const brand = record(site['brand'])
+          return { accent: str(brand['accent']), paper: str(brand['paper']), ink: str(brand['ink']), displayFont: str(brand['displayFont']), bodyFont: str(brand['bodyFont']) }
+        })(),
         google: (() => {
           const google = record(site['google'])
           return { access: google['access'] === 'own' ? 'own' : 'shared', adsCustomerId: str(google['adsCustomerId']), adsLoginCustomerId: str(google['adsLoginCustomerId']) }
@@ -344,7 +355,7 @@ export function emptySiteForm(): SeoSiteForm {
     id: '', name: '', baseUrl: 'https://', kind: 'klipara', enabled: true,
     business: '', audience: '', offer: '', voice: '', ctaText: '', ctaUrl: '',
     markets: [], otherMarkets: [], seeds: '', gscProperty: '', articlesPerWeek: '2',
-    authorName: '', authorUrl: '', authorBio: '', googleAccess: 'shared', adsCustomerId: '', adsLoginCustomerId: '',
+    authorName: '', authorUrl: '', authorBio: '', brandAccent: '', brandPaper: '', brandInk: '', brandDisplayFont: '', brandBodyFont: '', googleAccess: 'shared', adsCustomerId: '', adsLoginCustomerId: '',
     apiKey: '', wpUser: '', wpAppPassword: '',
   }
 }
@@ -369,6 +380,8 @@ export function siteFormFrom(site: SeoSite): SeoSiteForm {
     markets, otherMarkets,
     seeds: site.seeds.join('\n'), gscProperty: site.gscProperty, articlesPerWeek: String(site.articlesPerWeek),
     authorName: site.author.name, authorUrl: site.author.url, authorBio: site.author.bio,
+    brandAccent: site.brand.accent, brandPaper: site.brand.paper, brandInk: site.brand.ink,
+    brandDisplayFont: site.brand.displayFont, brandBodyFont: site.brand.bodyFont,
     googleAccess: site.google.access, adsCustomerId: site.google.adsCustomerId, adsLoginCustomerId: site.google.adsLoginCustomerId,
     apiKey: '', wpUser: '', wpAppPassword: '',
   }
@@ -428,6 +441,10 @@ export function buildSaveSiteBody(form: SeoSiteForm): SeoSaveSiteBody | undefine
       gscProperty: form.gscProperty.trim(),
       articlesPerWeek,
       author: { name: form.authorName.trim(), url: form.authorUrl.trim(), bio: form.authorBio.trim() },
+      brand: {
+        accent: form.brandAccent.trim(), paper: form.brandPaper.trim(), ink: form.brandInk.trim(),
+        displayFont: form.brandDisplayFont.trim(), bodyFont: form.brandBodyFont.trim(),
+      },
       google: { access: form.googleAccess, adsCustomerId: form.adsCustomerId.trim(), adsLoginCustomerId: form.adsLoginCustomerId.trim() },
     },
     secrets,

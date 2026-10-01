@@ -62,6 +62,11 @@ export interface Site {
   gscProperty: string
   articlesPerWeek: number
   author: { name: string; url: string; bio: string }
+  /**
+   * Colours (CSS values) and Google Fonts families for the site's graphics. Empty fields are read from the
+   * site's own stylesheets.
+   */
+  brand?: { accent: string; paper: string; ink: string; displayFont: string; bodyFont: string }
   /** Absent on sites saved before per-site Google access: they use the shared access. */
   google?: SiteGoogle
   createdAt: string
