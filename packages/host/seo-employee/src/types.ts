@@ -30,6 +30,22 @@ export interface SiteProfile {
   cta: { text: string; url: string }
 }
 
+/**
+ * How a site reaches Google. `shared` uses the employee's own Google access
+ * (its service account, or the owner's sign-in on the settings page): right
+ * for the owner's sites, and for a client who added the service account as a
+ * user or linked their Ads account under the owner's manager account. `own`
+ * uses the site owner's sign-in, connected for this site alone through a link
+ * the owner sends them.
+ */
+export interface SiteGoogle {
+  access: 'shared' | 'own'
+  /** The Google Ads account Keyword Planner runs in for this site; empty uses the employee's account. */
+  adsCustomerId: string
+  /** The manager account that reaches `adsCustomerId`, when it is linked under one. */
+  adsLoginCustomerId: string
+}
+
 /** A site the employee researches and writes for. */
 export interface Site {
   id: string
@@ -46,6 +62,8 @@ export interface Site {
   gscProperty: string
   articlesPerWeek: number
   author: { name: string; url: string; bio: string }
+  /** Absent on sites saved before per-site Google access: they use the shared access. */
+  google?: SiteGoogle
   createdAt: string
 }
 

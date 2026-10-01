@@ -21,7 +21,6 @@ import type { ArticleDraft, Faq, KeywordIdea, Market, Publisher, Site, Source } 
 
 /** The settings the tools read, live. */
 export interface SeoToolSettings {
-  adsCustomerId: () => string
   adsApiVersion: () => string
   researchCacheDays: () => number
   answerWaitHours: () => number
@@ -35,10 +34,10 @@ export interface SeoDeps {
   settings: SeoToolSettings
   fetch: typeof fetch
   now: () => Date
-  /** A Google access token, or an error saying how to connect. */
-  googleToken: (signal: AbortSignal) => Promise<string>
-  /** Keyword Planner credentials, or undefined when Ads is not set up. */
-  adsAuth: () => AdsAuth | undefined
+  /** A Google access token for a site (its own sign-in, or the shared access), or an error saying how to connect. */
+  googleToken: (signal: AbortSignal, site: Site) => Promise<string>
+  /** Keyword Planner credentials and account for a site, or undefined when no Ads account is set for it. */
+  adsAuth: (site: Site) => (AdsAuth & { customerId: string }) | undefined
   /** The site's connector, with its stored credentials. */
   publisher: (site: Site) => Promise<Publisher>
   /** Run the editor model; returns its reply and which model answered. */
@@ -273,6 +272,9 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
             '',
             `## ${site.name} (id ${site.id}) ${site.enabled ? '' : '[DISABLED: do not write for it]'}`,
             `${site.baseUrl}, published with ${site.kind}; Search Console: ${site.gscProperty || 'not set'}; markets: ${site.markets.map(m => m.label).join(', ') || 'none'}.`,
+            site.google?.access === 'own'
+              ? `Google: the site owner's own sign-in (${state.siteGoogle[site.id] === undefined ? 'NOT connected yet: skip Google research for this site' : 'connected'}).`
+              : 'Google: the shared access.',
             `This week: ${String(publishedThisWeek(state, site.id, now))}/${String(site.articlesPerWeek)} articles.`,
             `Business: ${site.profile.business}`,
             `Readers: ${site.profile.audience}`,
@@ -310,7 +312,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const window = gscWindow(deps.now(), days)
         const dimensions = report === 'pages' ? ['page' as const] : report === 'queries' ? ['query' as const] : ['query' as const, 'page' as const]
         const { result: rows, cachedAt } = await cached('gsc', site.id, `${report} ${String(days)}d`, { dimensions, window }, 1, async () => {
-          const token = await deps.googleToken(exec.signal)
+          const token = await deps.googleToken(exec.signal, site)
           return queryAll(deps.fetch, token, site.gscProperty, { ...window, dimensions }, 5000, exec.signal)
         })
         const head = `${site.name}, ${window.startDate} to ${window.endDate}${cachedAt === undefined ? '' : ` (cached ${cachedAt})`}:`
@@ -342,16 +344,16 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const state = await store.read()
         const site = findSite(state, str(args['site_id']))
         const market = marketOf(site, str(args['market']))
-        const auth = deps.adsAuth()
-        const customerId = settings.adsCustomerId().trim()
-        if (auth === undefined || customerId === '') throw new Error('Keyword Planner is not set up (the Ads account id on the SEO employee page). Use seo_search_console and seo_autocomplete instead.')
+        const auth = deps.adsAuth(site)
+        if (auth === undefined) throw new Error(`Keyword Planner is not set up for ${site.name} (an Ads account id on the SEO employee page or the site). Use seo_search_console and seo_autocomplete instead.`)
+        const { customerId } = auth
         const seeds = (strings(args['seeds']).length > 0 ? strings(args['seeds']) : site.seeds).filter(isPlannableKeyword).slice(0, 10)
         const url = str(args['url'])
         if (seeds.length === 0 && url === '') throw new Error('Give seed keywords or a page URL; the site has no plannable seeds.')
         const limit = Math.min(Math.max(typeof args['limit'] === 'number' ? args['limit'] : 40, 10), 100)
         const request = { seeds, url, geo: market.geoId, language: market.languageId }
         const { result: ideas, cachedAt } = await cached('ideas', site.id, `ideas ${market.label}: ${seeds.join(', ')} ${url}`, request, settings.researchCacheDays(),
-          () => generateKeywordIdeas(deps.fetch, { ...auth, accessToken: deps.googleToken }, {
+          () => generateKeywordIdeas(deps.fetch, auth, {
             customerId,
             ...seeds.length > 0 ? { keywords: seeds } : {},
             ...url === '' ? {} : { url },
@@ -379,12 +381,12 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const state = await store.read()
         const site = findSite(state, str(args['site_id']))
         const market = marketOf(site, str(args['market']))
-        const auth = deps.adsAuth()
-        const customerId = settings.adsCustomerId().trim()
-        if (auth === undefined || customerId === '') throw new Error('Keyword Planner is not set up (the Ads account id on the SEO employee page).')
+        const auth = deps.adsAuth(site)
+        if (auth === undefined) throw new Error(`Keyword Planner is not set up for ${site.name} (an Ads account id on the SEO employee page or the site).`)
+        const { customerId } = auth
         const keywords = [...new Set(strings(args['keywords']).map(normalizeKeyword))].slice(0, 30)
         const { result: metrics, cachedAt } = await cached('metrics', site.id, `volumes ${market.label}: ${keywords.join(', ')}`, { keywords, market },
-          settings.researchCacheDays(), () => generateKeywordHistoricalMetrics(deps.fetch, { ...auth, accessToken: deps.googleToken }, {
+          settings.researchCacheDays(), () => generateKeywordHistoricalMetrics(deps.fetch, auth, {
             customerId, keywords, geoIds: market.geoId === '' ? [] : [market.geoId], ...market.languageId === '' ? {} : { languageId: market.languageId },
           }, exec.signal, settings.adsApiVersion()))
         const covered = coveredKeywords(state, site.id)
@@ -697,7 +699,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         let sitemap = 'Search Console not told (no property set).'
         if (site.gscProperty !== '') {
           try {
-            await submitSitemap(deps.fetch, await deps.googleToken(exec.signal), site.gscProperty, `${site.baseUrl.replace(/\/+$/u, '')}/sitemap.xml`, exec.signal)
+            await submitSitemap(deps.fetch, await deps.googleToken(exec.signal, site), site.gscProperty, `${site.baseUrl.replace(/\/+$/u, '')}/sitemap.xml`, exec.signal)
             sitemap = 'Sitemap resubmitted to Search Console.'
           } catch (error) {
             sitemap = `Sitemap not resubmitted (${error instanceof Error ? error.message : String(error)}).`
@@ -724,7 +726,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         let note = ''
         if (site.gscProperty !== '') {
           try {
-            const token = await deps.googleToken(exec.signal)
+            const token = await deps.googleToken(exec.signal, site)
             rows = await queryAll(deps.fetch, token, site.gscProperty, { ...gscWindow(deps.now(), 28), dimensions: ['page'] }, 5000, exec.signal)
           } catch (error) {
             note = `Search Console unavailable: ${error instanceof Error ? error.message : String(error)}`

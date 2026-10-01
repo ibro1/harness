@@ -12,6 +12,7 @@ export type SeoFieldKey =
 export type SeoSiteFieldKey =
   | 'name' | 'baseUrl' | 'kind' | 'enabled' | 'business' | 'audience' | 'offer' | 'voice' | 'ctaText' | 'ctaUrl' | 'markets' | 'seeds'
   | 'gscProperty' | 'articlesPerWeek' | 'authorName' | 'authorUrl' | 'authorBio' | 'apiKey' | 'wpUser' | 'wpAppPassword'
+  | 'googleAccess' | 'adsCustomerId' | 'adsLoginCustomerId'
 
 /** Where a topic is in the pipeline. */
 export type SeoTopicStatusKey = 'planned' | 'asked' | 'drafted' | 'published' | 'rejected'
@@ -31,6 +32,8 @@ export type SeoLocaleKey =
   | 'seoSiteFormNew' | 'seoSiteFormEdit' | 'seoSiteProfile' | 'seoSiteResearch' | 'seoSiteAuthor' | 'seoSiteCredentials'
   | `seoSite.${SeoSiteFieldKey}` | `seoSite.${SeoSiteFieldKey}.hint` | `seoKind.${'klipara' | 'wordpress'}` | `seoMarket.${SeoMarketKey}`
   | 'seoGscLoad' | 'seoGscLoading' | 'seoGscChoose' | 'seoGscEmpty'
+  | 'seoSiteGoogle' | `seoGoogleAccess.${'shared' | 'own'}` | `seoGoogleAccess.${'shared' | 'own'}.hint` | 'seoSiteGoogleSaveFirst'
+  | 'seoSiteGoogleConnected' | 'seoSiteGoogleNotConnected' | 'seoSiteGoogleLink' | 'seoSiteGoogleConnectHere'
   | 'seoSave' | 'seoSaving' | 'seoSaved' | 'seoClose' | 'seoTest' | 'seoTesting' | 'seoTestWordPress' | 'seoTestWordPressSignedIn' | 'seoTestNotWordPress' | 'seoTestKlipara'
   | 'seoDelete' | 'seoDeleteConfirm' | 'seoDeleteYes' | 'seoCancel' | 'seoPerWeekInvalid' | 'seoFailed'
   | 'seoQuestionsTitle' | 'seoQuestionsEmpty' | 'seoQuestionAsked' | 'seoAnswerLabel' | 'seoAnswerSend' | 'seoAnswerSending' | 'seoAnsweredTitle' | 'seoAnsweredOn'
@@ -187,6 +190,22 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoGscLoading: 'Loading…',
   seoGscChoose: 'Choose a property',
   seoGscEmpty: 'This Google account has no Search Console properties.',
+  seoSiteGoogle: 'Google access',
+  'seoSite.googleAccess': 'How this site reaches Google',
+  'seoSite.googleAccess.hint': '',
+  'seoGoogleAccess.shared': 'The SEO employee\'s own access (your service account or your sign-in)',
+  'seoGoogleAccess.shared.hint': 'For your own sites, and for a client who added your service account email as a user in their Search Console and either added it in their Google Ads or linked their Ads account under your manager account.',
+  'seoGoogleAccess.own': 'The site owner\'s own Google sign-in',
+  'seoGoogleAccess.own.hint': 'The site owner signs in with their own Google account through a link you send them; nobody adds any email. Until Google verifies your app, they see Google\'s "unverified app" screen and choose Advanced → Continue.',
+  seoSiteGoogleSaveFirst: 'Save the site to get the sign-in link for its owner.',
+  seoSiteGoogleConnected: 'Connected by the site owner on {date}.',
+  seoSiteGoogleNotConnected: 'Not connected yet: send the site owner the link below.',
+  seoSiteGoogleLink: 'Sign-in link for the site owner. It works without a harness login and only connects this site.',
+  seoSiteGoogleConnectHere: 'Sign in here instead',
+  'seoSite.adsCustomerId': 'Google Ads account for this site (optional)',
+  'seoSite.adsCustomerId.hint': 'The 10-digit Ads account Keyword Planner runs in for this site, for example the client\'s own account. Empty uses the account on the SEO employee page.',
+  'seoSite.adsLoginCustomerId': 'Manager account for that Ads account (optional)',
+  'seoSite.adsLoginCustomerId.hint': 'Your manager account id when the client\'s Ads account is linked under it (8152070364 for yours). Leave empty when the account is reached directly.',
   seoSave: 'Save',
   seoSaving: 'Saving…',
   seoSaved: 'Saved.',
@@ -388,6 +407,22 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoGscLoading: '加载中…',
   seoGscChoose: '选择资源',
   seoGscEmpty: '此 Google 账号没有 Search Console 资源。',
+  seoSiteGoogle: 'Google 访问',
+  'seoSite.googleAccess': '本站如何访问 Google',
+  'seoSite.googleAccess.hint': '',
+  'seoGoogleAccess.shared': 'SEO 员工自己的访问（你的服务账号或你的登录）',
+  'seoGoogleAccess.shared.hint': '用于你自己的网站，以及已将你的服务账号邮箱添加为其 Search Console 用户、并在其 Google Ads 中添加该邮箱或将其广告账号关联到你的经理账号下的客户。',
+  'seoGoogleAccess.own': '站点所有者自己的 Google 登录',
+  'seoGoogleAccess.own.hint': '站点所有者通过你发送的链接用自己的 Google 账号登录，无需添加任何邮箱。在 Google 验证你的应用之前，他们会看到 Google 的“未验证应用”页面，需选择“高级 → 继续”。',
+  seoSiteGoogleSaveFirst: '保存站点后即可获得给站点所有者的登录链接。',
+  seoSiteGoogleConnected: '站点所有者已于 {date} 连接。',
+  seoSiteGoogleNotConnected: '尚未连接：请将下方链接发送给站点所有者。',
+  seoSiteGoogleLink: '给站点所有者的登录链接。无需 harness 登录即可使用，且只连接本站。',
+  seoSiteGoogleConnectHere: '改为在此登录',
+  'seoSite.adsCustomerId': '本站的 Google Ads 账号（可选）',
+  'seoSite.adsCustomerId.hint': '为本站运行关键词规划师的 10 位广告账号，例如客户自己的账号。留空则使用 SEO 员工页面上的账号。',
+  'seoSite.adsLoginCustomerId': '该广告账号的经理账号（可选）',
+  'seoSite.adsLoginCustomerId.hint': '当客户的广告账号关联在你的经理账号下时，填写你的经理账号 ID（你的是 8152070364）。直接访问该账号时留空。',
   seoSave: '保存',
   seoSaving: '保存中…',
   seoSaved: '已保存。',

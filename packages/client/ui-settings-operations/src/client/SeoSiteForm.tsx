@@ -14,7 +14,7 @@ import css from './seo.module.css'
 export type SeoTranslate = (key: OperationsSettingsLocaleKey, params?: Record<string, unknown>) => string
 
 /** Fields the form renders as text controls. */
-type FormTextKey = Exclude<keyof SeoSiteForm, 'id' | 'kind' | 'enabled' | 'markets' | 'otherMarkets' | 'apiKey' | 'wpUser' | 'wpAppPassword'>
+type FormTextKey = Exclude<keyof SeoSiteForm, 'id' | 'kind' | 'enabled' | 'markets' | 'otherMarkets' | 'apiKey' | 'wpUser' | 'wpAppPassword' | 'googleAccess'>
 
 /** A transient message under the form's buttons. */
 type Notice = { tone: 'ok' | 'error'; message: string } | undefined
@@ -46,6 +46,7 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [gscSites, setGscSites] = useState<{ siteUrl: string; permissionLevel: string }[] | undefined>(undefined)
   const [gscError, setGscError] = useState<string | undefined>(undefined)
+  const [linkCopied, setLinkCopied] = useState(false)
   const set = <K extends keyof SeoSiteForm>(key: K, value: SeoSiteForm[K]): void => { setForm(previous => ({ ...previous, [key]: value })) }
 
   const field = (key: FormTextKey, labelKey: SeoSiteFieldKey, options: { multiline?: boolean; placeholder?: string } = {}) => {
@@ -127,7 +128,8 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
   const loadGsc = async (): Promise<void> => {
     setBusy('gsc')
     setNotice(undefined)
-    const result = await postSeoAction(props.request, { action: 'gsc-sites' })
+    // The properties this site's Google access can see: its owner's sign-in, or the shared access.
+    const result = await postSeoAction(props.request, { action: 'gsc-sites', id: form.id, site: buildSaveSiteBody(form)?.site ?? {} })
     setBusy(undefined)
     if (!result.ok) { setGscError(t('seoFailed', { error: result.error })); return }
     setGscError(undefined)
@@ -212,6 +214,57 @@ export function SeoSiteForm(props: SeoSiteFormProps) {
           value={form.articlesPerWeek} onChange={(event) => { set('articlesPerWeek', event.target.value) }} />
         <p className={css.hint}>{t('seoSite.articlesPerWeek.hint')}</p>
       </div>
+
+      <h4 className={css.subtitle}>{t('seoSiteGoogle')}</h4>
+      <fieldset className={css.field}>
+        <legend className={css.label}>{t('seoSite.googleAccess')}</legend>
+        {(['shared', 'own'] as const).map(access => (
+          <label key={access} className={css.choice}>
+            <input type="radio" name={`${base}-googleAccess`} checked={form.googleAccess === access} onChange={() => { set('googleAccess', access) }} />
+            <span>{t(`seoGoogleAccess.${access}`)}</span>
+          </label>
+        ))}
+        <p className={css.hint}>{t(`seoGoogleAccess.${form.googleAccess}.hint`)}</p>
+      </fieldset>
+      {form.googleAccess === 'own'
+        ? (
+          <div className={css.field}>
+            {props.site?.googleConnection === null || props.site?.googleConnection === undefined || props.site.google.access !== 'own'
+              ? <p className={css.hint} role="status">{t('seoSiteGoogleSaveFirst')}</p>
+              : (
+                <>
+                  <p className={props.site.googleConnection.connected ? css.ok : css.error} role="status">
+                    {props.site.googleConnection.connected
+                      ? t('seoSiteGoogleConnected', { date: (props.site.googleConnection.connectedAt ?? '').slice(0, 16).replace('T', ' ') })
+                      : t('seoSiteGoogleNotConnected')}
+                  </p>
+                  <p className={css.hint}>{t('seoSiteGoogleLink')}</p>
+                  <div className={css.row}>
+                    <code className={`${css.grow} ${css.link}`}>{props.site.googleConnection.connectLink}</code>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const link = props.site?.googleConnection?.connectLink ?? ''
+                      void navigator.clipboard.writeText(link).then(() => { setLinkCopied(true) }, () => undefined)
+                    }}>{linkCopied ? t('seoCopied') : t('seoCopy')}</Button>
+                  </div>
+                  <div className={css.row}>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      window.open(`/seo/oauth/start?site=${encodeURIComponent(form.id)}`, 'seo-google-connect', 'popup,width=560,height=720')
+                    }}>{t('seoSiteGoogleConnectHere')}</Button>
+                    {props.site.googleConnection.connected
+                      ? (
+                        <Button variant="ghost" size="sm" disabled={busy !== undefined} onClick={() => {
+                          void postSeoAction(props.request, { action: 'disconnect-site-google', id: form.id }).then(() => { props.onChanged() })
+                        }}>{t('seoGoogleDisconnect')}</Button>
+                      )
+                      : null}
+                  </div>
+                </>
+              )}
+          </div>
+        )
+        : null}
+      {field('adsCustomerId', 'adsCustomerId', { placeholder: '1234567890' })}
+      {field('adsLoginCustomerId', 'adsLoginCustomerId', { placeholder: '8152070364' })}
 
       <h4 className={css.subtitle}>{t('seoSiteAuthor')}</h4>
       {field('authorName', 'authorName')}

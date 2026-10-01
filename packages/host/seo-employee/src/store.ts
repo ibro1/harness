@@ -112,8 +112,10 @@ export interface SeoState {
   sites: Site[]
   secrets: Record<string, SiteSecrets>
   google: GoogleConnection | null
-  /** An OAuth flow in progress: its state and PKCE verifier. */
-  oauth: { state: string; verifier: string; at: string } | null
+  /** Sites' own Google sign-ins, by site id, for sites whose Google access is `own`. */
+  siteGoogle: Record<string, GoogleConnection>
+  /** OAuth flows in progress, newest last: state, PKCE verifier, and the site when a site owner is connecting. */
+  oauthFlows: { state: string; verifier: string; at: string; siteId?: string }[]
   research: ResearchEntry[]
   topics: Topic[]
   questions: OwnerQuestion[]
@@ -132,7 +134,8 @@ export interface SeoState {
  */
 export function emptyState(): SeoState {
   return {
-    version: 1, sites: [], secrets: {}, google: null, oauth: null, research: [], topics: [], questions: [], drafts: [], articles: [],
+    version: 1, sites: [], secrets: {}, google: null, siteGoogle: {}, oauthFlows: [],
+    research: [], topics: [], questions: [], drafts: [], articles: [],
     paused: null, lastShiftDate: null,
   }
 }

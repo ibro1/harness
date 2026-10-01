@@ -33,7 +33,7 @@ import { createPublisher } from './publishers/index.ts'
 import { probeWordPress } from './publishers/wordpress.ts'
 import { SeoStore, publishedThisWeek } from './store.ts'
 import { buildSeoTools, type SeoDeps } from './tools.ts'
-import type { Market, PublisherKind, Site, SiteSecrets } from './types.ts'
+import type { Market, PublisherKind, Site, SiteGoogle, SiteSecrets } from './types.ts'
 
 export { SeoStore, emptyState, isoWeek, publishedThisWeek } from './store.ts'
 export type { Article, Draft, OwnerQuestion, SeoState, Topic } from './store.ts'
@@ -145,6 +145,8 @@ export const Config = z.object({
 })
 
 const SITE_ID = /^[a-z0-9][a-z0-9-]{0,39}$/u
+/** How long a started Google sign-in may take. */
+const OAUTH_FLOW_MS = 15 * 60_000
 
 /**
  * Whether an agent drives one of the employee's Sessions.
@@ -227,6 +229,7 @@ export function parseSite(input: unknown, existing: Site | undefined, now: strin
     })
     : []
   const author = obj(r['author'])
+  const google = obj(r['google'])
   const perWeek = typeof r['articlesPerWeek'] === 'number' ? Math.floor(r['articlesPerWeek']) : 2
   if (perWeek < 0 || perWeek > 7) return 'Articles per week must be 0 to 7.'
   const site: Site = {
@@ -247,6 +250,11 @@ export function parseSite(input: unknown, existing: Site | undefined, now: strin
     gscProperty: text(r['gscProperty']),
     articlesPerWeek: perWeek,
     author: { name: text(author['name']), url: text(author['url']), bio: text(author['bio']) },
+    google: {
+      access: google['access'] === 'own' ? 'own' : 'shared',
+      adsCustomerId: text(google['adsCustomerId']).replace(/\D/gu, ''),
+      adsLoginCustomerId: text(google['adsLoginCustomerId']).replace(/\D/gu, ''),
+    } satisfies SiteGoogle,
     createdAt: existing?.createdAt ?? now,
   }
   if (site.profile.business === '' || site.profile.audience === '' || site.profile.offer === '') return 'Fill in the business, readers and offer: the writer works from them.'
@@ -278,6 +286,8 @@ export function apply(ctx: Context, config: Config): void {
     process.stderr.write(`seo-employee: the state file could not be read: ${error instanceof Error ? error.message : String(error)}\n`)
   })
   const sign = (articleId: string): string => createHmac('sha256', linkKey).update(articleId).digest('hex').slice(0, 32)
+  /** The sign-in link the owner sends a site's owner. */
+  const connectLink = (siteId: string): string => `${publicBase}${prefix}/connect/${encodeURIComponent(siteId)}?sig=${sign(`connect:${siteId}`)}`
 
   let refreshToken = ''
   void store.read().then((s) => { refreshToken = s.google?.refreshToken ?? '' }, () => undefined)
@@ -294,17 +304,40 @@ export function apply(ctx: Context, config: Config): void {
     if (key === undefined || typeof key === 'string') throw new Error(key ?? 'No service account key is saved.')
     return key
   })
-  const googleToken = async (signal: AbortSignal): Promise<string> => {
+  /** The employee's own Google access: its service account, or the owner's sign-in on the settings page. */
+  const sharedToken = async (signal: AbortSignal): Promise<string> => {
     const key = serviceAccount()
     if (typeof key === 'string') throw new Error(`The Google service account key on the SEO employee page is unusable: ${key}`)
     if (key !== undefined) return accountTokens.accessToken(signal)
     if (config.googleClientId.get().trim() === '' || config.googleClientSecret.get().trim() === '') {
-      throw new Error('Google is not set up: the owner enters the OAuth client id and secret on the SEO employee page.')
+      throw new Error('Google is not set up: the owner enters a service account key, or an OAuth client id and secret, on the SEO employee page.')
     }
     if (refreshToken === '') refreshToken = (await store.read()).google?.refreshToken ?? ''
     if (refreshToken === '') throw new Error('Google is not connected: the owner presses Connect Google on the SEO employee page.')
     return tokens.accessToken(signal)
   }
+  // Sites whose owners connected their own Google account: one token cache per site, refreshed from that site's sign-in.
+  const siteTokens = new Map<string, { refreshToken: string; tokens: GoogleTokens }>()
+  const ownToken = async (signal: AbortSignal, site: Site): Promise<string> => {
+    const connection = (await store.read()).siteGoogle[site.id]
+    if (connection === undefined) {
+      throw new Error(`${site.name} uses its owner's own Google sign-in, which is not connected yet: send them the sign-in link from the SEO sites page.`)
+    }
+    let entry = siteTokens.get(site.id)
+    if (entry?.refreshToken !== connection.refreshToken) {
+      const token = connection.refreshToken
+      entry = {
+        refreshToken: token,
+        tokens: new GoogleTokens(fetch, () => ({
+          clientId: config.googleClientId.get().trim(), clientSecret: config.googleClientSecret.get().trim(), refreshToken: token,
+        })),
+      }
+      siteTokens.set(site.id, entry)
+    }
+    return entry.tokens.accessToken(signal)
+  }
+  const googleToken = (signal: AbortSignal, site?: Site): Promise<string> =>
+    site?.google?.access === 'own' ? ownToken(signal, site) : sharedToken(signal)
   const editorRoute = (): { provider: string; model: string } => {
     const provider = config.editorProvider.get().trim()
     const model = config.editorModel.get().trim()
@@ -316,7 +349,6 @@ export function apply(ctx: Context, config: Config): void {
   const deps: SeoDeps = {
     store,
     settings: {
-      adsCustomerId: () => config.adsCustomerId.get(),
       adsApiVersion: () => config.adsApiVersion.get().trim() || 'v25',
       researchCacheDays: () => config.researchCacheDays.get(),
       answerWaitHours: () => config.answerWaitHours.get(),
@@ -328,13 +360,16 @@ export function apply(ctx: Context, config: Config): void {
     fetch,
     now: () => new Date(),
     googleToken,
-    adsAuth: () => {
-      // Keyword Planner needs only an Ads account to plan in; the developer token is a legacy, optional header.
-      if (config.adsCustomerId.get().trim() === '') return undefined
+    adsAuth: (site) => {
+      // A site's own Ads account (with its manager, if any) wins over the employee's; the developer token is legacy and optional.
+      const own = site.google?.adsCustomerId.trim() ?? ''
+      const customerId = own !== '' ? own : config.adsCustomerId.get().trim()
+      if (customerId === '') return undefined
+      const login = own !== '' ? site.google?.adsLoginCustomerId.trim() ?? '' : config.adsLoginCustomerId.get().trim()
       const developerToken = config.adsDeveloperToken.get().trim()
-      const login = config.adsLoginCustomerId.get().trim()
       return {
-        accessToken: googleToken,
+        customerId,
+        accessToken: (signal: AbortSignal) => googleToken(signal, site),
         ...developerToken === '' ? {} : { developerToken },
         ...login === '' ? {} : { loginCustomerId: login },
       }
@@ -398,6 +433,13 @@ export function apply(ctx: Context, config: Config): void {
           wpAppPassword: (state.secrets[site.id]?.wpAppPassword ?? '') !== '',
         },
         thisWeek: publishedThisWeek(state, site.id, now),
+        googleConnection: site.google?.access === 'own'
+          ? {
+            connected: state.siteGoogle[site.id] !== undefined,
+            connectedAt: state.siteGoogle[site.id]?.connectedAt ?? null,
+            connectLink: connectLink(site.id),
+          }
+          : null,
       })),
       questions: state.questions
         .filter(q => q.answer === undefined || Date.parse(q.answeredAt ?? q.askedAt) > now.getTime() - 14 * 86_400_000)
@@ -487,7 +529,23 @@ export function apply(ctx: Context, config: Config): void {
             return
           }
           case 'gsc-sites': {
-            json(res, 200, { sites: await listSites(fetch, await googleToken(AbortSignal.timeout(20_000)), AbortSignal.timeout(20_000)) })
+            // With a site id, the properties that site's Google access can see (its owner's sign-in, or the shared access).
+            const id = typeof body['id'] === 'string' ? body['id'] : ''
+            const state = await store.read()
+            const draft = parseSite(body['site'], state.sites.find(x => x.id === id), now)
+            const site = typeof draft === 'string' ? state.sites.find(x => x.id === id) : { ...draft, id: id || draft.id }
+            const token = await googleToken(AbortSignal.timeout(20_000), site)
+            json(res, 200, { sites: await listSites(fetch, token, AbortSignal.timeout(20_000)) })
+            return
+          }
+          case 'disconnect-site-google': {
+            const id = typeof body['id'] === 'string' ? body['id'] : ''
+            await store.update((s) => {
+              const { [id]: _removed, ...rest } = s.siteGoogle
+              s.siteGoogle = rest
+            })
+            siteTokens.delete(id)
+            json(res, 200, { ok: true })
             return
           }
           case 'answer': {
@@ -527,60 +585,116 @@ export function apply(ctx: Context, config: Config): void {
             json(res, 400, { error: 'unknown action' })
         }
       } catch (error) {
-        json(res, 502, { error: error instanceof Error ? error.message : String(error) })
+        // 422, not 502: a proxy in front of the harness may replace a 502's body, and the owner needs Google's own reason.
+        json(res, 422, { error: error instanceof Error ? error.message : String(error) })
       }
     },
   }), `seo-employee: ${prefix}/action`)
 
+  /** Start a Google sign-in: for the employee's own access, or for one site whose owner connects their own account. */
+  const beginOAuth = async (res: ServerResponse, siteId: string | undefined): Promise<void> => {
+    const clientId = config.googleClientId.get().trim()
+    if (clientId === '' || config.googleClientSecret.get().trim() === '' || publicBase === '') {
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(page('Google sign-in is not set up', '<p>The OAuth client id and secret are not saved on the SEO employee page yet.</p>'))
+      return
+    }
+    const state = randomState()
+    const { verifier, challenge } = pkcePair()
+    await store.update((s) => {
+      const fresh = s.oauthFlows.filter(f => Date.now() - Date.parse(f.at) < OAUTH_FLOW_MS)
+      s.oauthFlows = [...fresh.slice(-19), { state, verifier, at: new Date().toISOString(), ...siteId === undefined ? {} : { siteId } }]
+    })
+    res.writeHead(302, { Location: authorizationUrl({ clientId, redirectUri, state, codeChallenge: challenge }) })
+    res.end()
+  }
+
+  // The owner's own sign-in, or (with ?site=) connecting one site from the signed-in settings page.
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: `${prefix}/oauth/start`,
-    handler: async (_req: IncomingMessage, res: ServerResponse) => {
-      const clientId = config.googleClientId.get().trim()
-      if (clientId === '' || publicBase === '') {
-        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(page('Google is not set up', '<p>Enter the OAuth client id and secret on the SEO employee page and save, then press Connect Google again.</p>'))
-        return
-      }
-      const state = randomState()
-      const { verifier, challenge } = pkcePair()
-      await store.update((s) => { s.oauth = { state, verifier, at: new Date().toISOString() } })
-      res.writeHead(302, { Location: authorizationUrl({ clientId, redirectUri, state, codeChallenge: challenge }) })
-      res.end()
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      const siteId = new URL(req.url ?? '/', 'http://x').searchParams.get('site') ?? ''
+      if (siteId !== '' && !(await store.read()).sites.some(x => x.id === siteId)) { json(res, 404, { error: 'no such site' }); return }
+      await beginOAuth(res, siteId === '' ? undefined : siteId)
     },
   }), `seo-employee: ${prefix}/oauth/start`)
 
+  // The link the owner sends a site's owner: signed per site, usable without a harness login.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: `${prefix}/connect`,
+    authenticate: false,
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      const url = new URL(req.url ?? '/', 'http://x')
+      const siteId = decodeURIComponent(url.pathname.slice(`${prefix}/connect/`.length))
+      const sig = url.searchParams.get('sig') ?? ''
+      const expected = linkKey === '' ? '' : sign(`connect:${siteId}`)
+      const site = (await store.read()).sites.find(x => x.id === siteId)
+      if (expected === '' || site === undefined || site.google?.access !== 'own' || sig.length !== expected.length
+        || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex' })
+        res.end(page('Not found', '<p>This link is not valid. Ask for a new one.</p>'))
+        return
+      }
+      if (req.method !== 'POST') {
+        // A button, not a redirect: a link preview must not start a sign-in.
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' })
+        res.end(page(`Connect ${site.name} to Google`, `<p>This lets the SEO assistant for <strong>${html(site.name)}</strong> (${html(site.baseUrl)}) read the site's Google Search Console data, submit its sitemap, and look up keyword ideas in Google Ads. It cannot spend money, change campaigns or see anything else in your Google account, and you can remove its access at any time at myaccount.google.com/permissions.</p>
+<form method="post"><button type="submit">Continue to Google</button></form>`))
+        return
+      }
+      await beginOAuth(res, site.id)
+    },
+  }), `seo-employee: ${prefix}/connect`)
+
+  // Google returns here. Not behind the harness login: a site owner signing in has no harness account. The single-use state
+  // and its PKCE verifier tie the answer to a flow this harness started.
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: `${prefix}/oauth/callback`,
+    authenticate: false,
     handler: async (req: IncomingMessage, res: ServerResponse) => {
       const url = new URL(req.url ?? '/', 'http://x')
-      const answer = (status: number, title: string, body: string): void => {
-        res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
-        res.end(page(title, body))
+      const answer = (status: number, title: string, body: string, head = ''): void => {
+        res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' })
+        res.end(page(title, body, head))
       }
-      const pending = (await store.read()).oauth
+      const stateParam = url.searchParams.get('state') ?? ''
+      const flow = await store.update((s) => {
+        const found = s.oauthFlows.find(f => f.state === stateParam && Date.now() - Date.parse(f.at) < OAUTH_FLOW_MS)
+        s.oauthFlows = s.oauthFlows.filter(f => f.state !== stateParam)
+        return found
+      })
       if (url.searchParams.get('error') !== null) { answer(400, 'Not connected', `<p>Google said: ${html(url.searchParams.get('error') ?? '')}.</p>`); return }
-      if (pending === null || url.searchParams.get('state') !== pending.state || Date.now() - Date.parse(pending.at) > 15 * 60_000) {
-        answer(400, 'Not connected', '<p>This sign-in link is stale. Press Connect Google again.</p>')
+      if (stateParam === '' || flow === undefined) {
+        answer(400, 'Not connected', '<p>This sign-in has expired. Start again from the link you were given.</p>')
         return
       }
       try {
         const grant = await exchangeCode(fetch, {
           clientId: config.googleClientId.get().trim(), clientSecret: config.googleClientSecret.get().trim(),
-          code: url.searchParams.get('code') ?? '', redirectUri, codeVerifier: pending.verifier,
+          code: url.searchParams.get('code') ?? '', redirectUri, codeVerifier: flow.verifier,
         }, AbortSignal.timeout(20_000))
-        await store.update((s) => {
-          s.google = { refreshToken: grant.refreshToken, scope: grant.scope, connectedAt: new Date().toISOString() }
-          s.oauth = null
-        })
+        const connection = { refreshToken: grant.refreshToken, scope: grant.scope, connectedAt: new Date().toISOString() }
+        if (flow.siteId !== undefined) {
+          const siteId = flow.siteId
+          const name = await store.update((s) => {
+            s.siteGoogle[siteId] = connection
+            return s.sites.find(x => x.id === siteId)?.name ?? siteId
+          })
+          siteTokens.delete(siteId)
+          void notify(`SEO employee: Google is now connected for ${name}, by the site owner's own sign-in.`)
+          answer(200, 'Connected', `<p>Thank you. ${html(name)} is connected to Google. You can close this tab.</p>`, '<script>window.close()</script>')
+          return
+        }
+        await store.update((s) => { s.google = connection })
         refreshToken = grant.refreshToken
         tokens.clear()
         // The settings page opens this flow in a popup: close it, and the page re-reads the status on focus.
         // A popup that cannot close itself (or a tab) goes back to the harness instead.
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
-        res.end(page('Google connected', '<p>Search Console and Keyword Planner are connected. Taking you back to the harness…</p><p><a href="/">Back to the harness</a></p>',
-          '<meta http-equiv="refresh" content="3;url=/"><script>window.close()</script>'))
+        answer(200, 'Google connected', '<p>Search Console and Keyword Planner are connected. Taking you back to the harness…</p><p><a href="/">Back to the harness</a></p>',
+          '<meta http-equiv="refresh" content="3;url=/"><script>window.close()</script>')
       } catch (error) {
         answer(502, 'Not connected', `<p>${html(error instanceof Error ? error.message : String(error))}</p>`)
       }

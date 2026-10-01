@@ -60,11 +60,11 @@ function setup(now = new Date('2026-10-05T09:00:00Z')) {
   }
   const deps: SeoDeps = {
     store,
-    settings: { adsCustomerId: () => '123-456-7890', adsApiVersion: () => 'v25', researchCacheDays: () => 30, answerWaitHours: () => 48 },
+    settings: { adsApiVersion: () => 'v25', researchCacheDays: () => 30, answerWaitHours: () => 48 },
     fetch: fetcher,
     now: () => now,
     googleToken: () => Promise.resolve('token'),
-    adsAuth: () => ({ accessToken: () => Promise.resolve('token'), developerToken: 'dev' }),
+    adsAuth: () => ({ customerId: '1234567890', accessToken: () => Promise.resolve('token'), developerToken: 'dev' }),
     publisher: () => Promise.resolve(publisher),
     editor: () => Promise.resolve({ text: editorReply, provider: 'p', model: 'editor-model' }),
     notify: (text) => { notes.push(text); return Promise.resolve('sent to Owner') },
@@ -169,5 +169,46 @@ describe('a site from the SEO sites page', () => {
     expect(parseSite({ ...input, baseUrl: 'http://x.test' }, undefined, 'now')).toContain('https://')
     expect(parseSite({ ...input, kind: 'ghost' }, undefined, 'now')).toContain('klipara or wordpress')
     expect(parseSite({ ...input, profile: {} }, undefined, 'now')).toContain('business, readers and offer')
+  })
+})
+
+describe('per-site Google access', () => {
+  it('reads the site\'s Ads account and access from the sites page, keeping old sites on the shared access', () => {
+    const input = {
+      name: 'Client', baseUrl: 'https://client.test', kind: 'wordpress', profile: { business: 'b', audience: 'a', offer: 'o' }, author: { name: 'A' },
+      google: { access: 'own', adsCustomerId: '123-456-7890', adsLoginCustomerId: '815-207-0364' },
+    }
+    expect(parseSite(input, undefined, 'now')).toMatchObject({ google: { access: 'own', adsCustomerId: '1234567890', adsLoginCustomerId: '8152070364' } })
+    expect(parseSite({ ...input, google: undefined }, undefined, 'now')).toMatchObject({ google: { access: 'shared', adsCustomerId: '' } })
+  })
+
+  it('runs Keyword Planner with the site\'s own access and account', async () => {
+    const t = setup()
+    await t.store.update((s) => {
+      s.sites = [{ ...SITE, google: { access: 'own', adsCustomerId: '999', adsLoginCustomerId: '' } }]
+    })
+    const tokenSites: string[] = []
+    const accounts: string[] = []
+    const tools = new Map(buildSeoTools({
+      store: t.store,
+      settings: { adsApiVersion: () => 'v25', researchCacheDays: () => 30, answerWaitHours: () => 48 },
+      fetch: (input) => {
+        accounts.push(input instanceof Request ? input.url : input.toString())
+        return Promise.resolve(Response.json({ results: [] }))
+      },
+      now: () => new Date(),
+      googleToken: (_signal, site) => { tokenSites.push(site.id); return Promise.resolve('t') },
+      adsAuth: site => ({ customerId: site.google?.adsCustomerId ?? '', accessToken: () => Promise.resolve('t') }),
+      publisher: () => Promise.reject(new Error('unused')),
+      editor: () => Promise.reject(new Error('unused')),
+      notify: () => Promise.resolve(''),
+      readWhatsApp: () => Promise.resolve([]),
+      unpublishLink: () => '',
+    }).map(x => [x.name, x]))
+    await tools.get('seo_keyword_ideas')!.execute({ site_id: 'klipara' }, exec)
+    expect(accounts[0]).toContain('/customers/999:generateKeywordIdeas')
+    const status = ((await tools.get('seo_status')!.execute({}, exec)) as { text: string }).text
+    expect(status).toContain('the site owner\'s own sign-in (NOT connected yet')
+    void tokenSites
   })
 })

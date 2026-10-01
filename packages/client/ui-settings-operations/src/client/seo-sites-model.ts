@@ -50,7 +50,14 @@ export interface SeoSite {
   secretsSet: { apiKey: boolean; wpUser: boolean; wpAppPassword: boolean }
   /** Articles published this ISO week. */
   thisWeek: number
+  /** How the site reaches Google; sites saved before per-site access use the shared access. */
+  google: { access: SeoGoogleAccess; adsCustomerId: string; adsLoginCustomerId: string }
+  /** For a site on its owner's own sign-in: whether it is connected, and the link to send them. Null on the shared access. */
+  googleConnection: { connected: boolean; connectedAt: string | null; connectLink: string } | null
 }
+
+/** `shared`: the employee's own Google access. `own`: the site owner's sign-in. */
+export type SeoGoogleAccess = 'shared' | 'own'
 
 /** Questions the employee asked the owner about one topic. */
 export interface SeoQuestion {
@@ -184,6 +191,10 @@ export interface SeoSiteForm {
   authorName: string
   authorUrl: string
   authorBio: string
+  googleAccess: SeoGoogleAccess
+  /** The site's own Google Ads account and its manager; empty uses the employee's account. */
+  adsCustomerId: string
+  adsLoginCustomerId: string
   /** Write-only credentials: blank keeps what the Host holds. */
   apiKey: string
   wpUser: string
@@ -249,6 +260,19 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
         createdAt: str(site['createdAt']),
         secretsSet: { apiKey: secrets['apiKey'] === true, wpUser: secrets['wpUser'] === true, wpAppPassword: secrets['wpAppPassword'] === true },
         thisWeek: num(site['thisWeek']),
+        google: (() => {
+          const google = record(site['google'])
+          return { access: google['access'] === 'own' ? 'own' : 'shared', adsCustomerId: str(google['adsCustomerId']), adsLoginCustomerId: str(google['adsLoginCustomerId']) }
+        })() satisfies SeoSite['google'],
+        googleConnection: (() => {
+          if (site['googleConnection'] === null || site['googleConnection'] === undefined) return null
+          const connection = record(site['googleConnection'])
+          return {
+            connected: connection['connected'] === true,
+            connectedAt: typeof connection['connectedAt'] === 'string' ? connection['connectedAt'] : null,
+            connectLink: str(connection['connectLink']),
+          }
+        })(),
       } satisfies SeoSite
     }),
     questions: list(body['questions']).map((value) => {
@@ -307,7 +331,8 @@ export function emptySiteForm(): SeoSiteForm {
     id: '', name: '', baseUrl: 'https://', kind: 'klipara', enabled: true,
     business: '', audience: '', offer: '', voice: '', ctaText: '', ctaUrl: '',
     markets: [], otherMarkets: [], seeds: '', gscProperty: '', articlesPerWeek: '2',
-    authorName: '', authorUrl: '', authorBio: '', apiKey: '', wpUser: '', wpAppPassword: '',
+    authorName: '', authorUrl: '', authorBio: '', googleAccess: 'shared', adsCustomerId: '', adsLoginCustomerId: '',
+    apiKey: '', wpUser: '', wpAppPassword: '',
   }
 }
 
@@ -331,6 +356,7 @@ export function siteFormFrom(site: SeoSite): SeoSiteForm {
     markets, otherMarkets,
     seeds: site.seeds.join('\n'), gscProperty: site.gscProperty, articlesPerWeek: String(site.articlesPerWeek),
     authorName: site.author.name, authorUrl: site.author.url, authorBio: site.author.bio,
+    googleAccess: site.google.access, adsCustomerId: site.google.adsCustomerId, adsLoginCustomerId: site.google.adsLoginCustomerId,
     apiKey: '', wpUser: '', wpAppPassword: '',
   }
 }
@@ -389,6 +415,7 @@ export function buildSaveSiteBody(form: SeoSiteForm): SeoSaveSiteBody | undefine
       gscProperty: form.gscProperty.trim(),
       articlesPerWeek,
       author: { name: form.authorName.trim(), url: form.authorUrl.trim(), bio: form.authorBio.trim() },
+      google: { access: form.googleAccess, adsCustomerId: form.adsCustomerId.trim(), adsLoginCustomerId: form.adsLoginCustomerId.trim() },
     },
     secrets,
   }
