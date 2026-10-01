@@ -151,6 +151,14 @@ describe('cloudflare tools', () => {
       .rejects.toThrow('Cloudflare site has no API token: give this zone an apiToken')
   })
 
+  it('never repeats a token pasted into apiTokenEnv, and says to move it', async () => {
+    const pasted = 'cfut_pastedTokenValue1234567890abcdef'
+    const tools = mount([{ name: 'site', zoneId: 'z1', apiTokenEnv: pasted }])
+    const error: unknown = await tools.get('cloudflare_dns_list')!.execute({}, exec).then(() => undefined, (e: unknown) => e)
+    expect(String(error)).toContain('likely the token itself: move it to the apiToken field')
+    expect(String(error)).not.toContain(pasted)
+  })
+
   it('purges the given URLs and sends the bearer token', async () => {
     const seen: SeenRequest[] = []
     const base = await stubCloudflare(() => ok({ id: 'z1' }), seen)
@@ -470,6 +478,15 @@ describe('cloudflare account tools', () => {
 
     await expect(tools.get('cloudflare_dns_list')!.execute({ zone: 'shop.example' }, exec))
       .rejects.toThrow('Cloudflare account bare has no API token')
+  })
+
+  it('never repeats an account token pasted into apiTokenEnv', async () => {
+    const base = await stubCloudflare(() => ok([]))
+    const pasted = 'cfut_anotherPastedToken0987654321'
+    const tools = mount([], base, [{ name: 'main', id: 'acct-1', apiTokenEnv: pasted }])
+    const error: unknown = await tools.get('cloudflare_dns_list')!.execute({ zone: 'shop.example' }, exec).then(() => undefined, (e: unknown) => e)
+    expect(String(error)).toContain('move it to the apiToken field')
+    expect(String(error)).not.toContain(pasted)
   })
 
   it('says every account domain is reachable when listing zones', async () => {

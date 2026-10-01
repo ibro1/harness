@@ -213,6 +213,32 @@ interface Credential {
   token: string
 }
 
+/**
+ * An environment variable name in the conventional upper-case form. Only such
+ * a value in `apiTokenEnv` is repeated in an error: API tokens mix cases (and
+ * Cloudflare's also fit the shell's looser name rule), so anything else may be
+ * a token pasted into the wrong field.
+ */
+const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/u
+
+/**
+ * What to tell the owner when a token does not resolve. The `apiTokenEnv`
+ * value is repeated only when it looks like a variable name: a token pasted
+ * there by mistake would otherwise land in the error, the session log and the
+ * model's context.
+ * @param owner - `this zone's` or `this account's`.
+ * @param env - the configured `apiTokenEnv`.
+ * @returns the hint.
+ */
+function tokenHint(owner: string, env: string | undefined): string {
+  if (env === undefined || env === '') return `give ${owner.replace(/'s$/u, '')} an apiToken, or an apiTokenEnv naming a set environment variable`
+  if (!ENV_NAME.test(env)) {
+    return `${owner} apiTokenEnv holds something that is not an upper-case environment variable name, likely the token itself: move it to the apiToken field`
+      + ' (and roll it in Cloudflare if it was shown anywhere)'
+  }
+  return `set the ${env} environment variable, or put the token in ${owner} apiToken field`
+}
+
 function resolveToken(zone: CloudflareZone): string {
   const fromEnv = zone.apiTokenEnv !== undefined && zone.apiTokenEnv !== ''
     ? process.env[zone.apiTokenEnv]?.trim()
@@ -220,10 +246,7 @@ function resolveToken(zone: CloudflareZone): string {
   const inline = zone.apiToken !== undefined && zone.apiToken.trim() !== '' ? zone.apiToken.trim() : undefined
   const apiToken = fromEnv ?? inline
   if (apiToken === undefined || apiToken === '') {
-    const hint = zone.apiTokenEnv !== undefined && zone.apiTokenEnv !== ''
-      ? `set the ${zone.apiTokenEnv} environment variable, or put the token in this zone's apiToken field`
-      : 'give this zone an apiToken, or an apiTokenEnv naming a set environment variable'
-    throw new Error(`Cloudflare ${zone.name} has no API token: ${hint}.`)
+    throw new Error(`Cloudflare ${zone.name} has no API token: ${tokenHint('this zone\'s', zone.apiTokenEnv)}.`)
   }
   return apiToken
 }
@@ -348,10 +371,8 @@ function resolveAccount(
   const inline = account.apiToken !== undefined && account.apiToken.trim() !== '' ? account.apiToken.trim() : undefined
   const apiToken = fromEnv ?? inline
   if (apiToken === undefined || apiToken === '') {
-    const hint = account.apiTokenEnv !== undefined && account.apiTokenEnv !== ''
-      ? `set the ${account.apiTokenEnv} environment variable, or put the token in this account's apiToken field`
-      : 'give the account an apiToken, or an apiTokenEnv naming a set environment variable'
-    throw new Error(`Cloudflare account ${account.name} has no API token: ${hint}. It needs Zone: Edit across every zone in the account.`)
+    throw new Error(`Cloudflare account ${account.name} has no API token: ${tokenHint('this account\'s', account.apiTokenEnv)}.`
+      + ' It needs Zone: Edit across every zone in the account.')
   }
   return { id, credential: { name: account.name, token: apiToken } }
 }
