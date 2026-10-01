@@ -170,9 +170,15 @@ function html(value: string): string {
   return value.replace(/[&<>"']/gu, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c] ?? c)
 }
 
-/** A small page for the owner's browser: the OAuth result and the unpublish confirmation. */
-function page(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(title)}</title>
+/**
+ * A small page for the owner's browser: the OAuth result and the unpublish confirmation.
+ * @param title - the heading.
+ * @param body - HTML below it.
+ * @param head - extra head markup.
+ * @returns the document.
+ */
+function page(title: string, body: string, head = ''): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(title)}</title>${head}
 <style>:root{color-scheme:light dark;--bg:#fafafa;--fg:#111;--muted:#666;--accent:#b4232c}@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa}}
 body{margin:0;padding:24px 16px;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}main{max-width:560px;margin:0 auto}p{color:var(--muted)}
 button{font:inherit;padding:10px 18px;border:0;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer}a{color:inherit}</style></head>
@@ -537,7 +543,11 @@ export function apply(ctx: Context, config: Config): void {
         })
         refreshToken = grant.refreshToken
         tokens.clear()
-        answer(200, 'Google connected', '<p>Search Console and Keyword Planner are connected. You can close this tab and return to the SEO employee page.</p>')
+        // The settings page opens this flow in a popup: close it, and the page re-reads the status on focus.
+        // A popup that cannot close itself (or a tab) goes back to the harness instead.
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(page('Google connected', '<p>Search Console and Keyword Planner are connected. Taking you back to the harness…</p><p><a href="/">Back to the harness</a></p>',
+          '<meta http-equiv="refresh" content="3;url=/"><script>window.close()</script>'))
       } catch (error) {
         answer(502, 'Not connected', `<p>${html(error instanceof Error ? error.message : String(error))}</p>`)
       }

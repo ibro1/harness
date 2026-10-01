@@ -109,7 +109,7 @@ export class SeoCardController {
   constructor(
     scope: SettingsFormScope<SeoSettings>,
     private readonly request: SeoRequest = (url, init) => fetch(url, init),
-    private readonly openWindow: (url: string) => void = (url) => { window.open(url, '_blank', 'noopener') },
+    private readonly openWindow: (url: string) => void = (url) => { window.open(url, 'seo-google-connect', 'popup,width=560,height=720') },
   ) {
     this.form = new SettingsFormModel(scope, [
       enabledField(),
