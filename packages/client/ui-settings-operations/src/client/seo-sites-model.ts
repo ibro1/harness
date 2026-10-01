@@ -130,6 +130,8 @@ export interface SeoGoogleStatus {
   clientSet: boolean
   /** The Ads developer token and customer id are saved. */
   adsSet: boolean
+  /** The Ads account Keyword Planner runs in for shared-access sites: typed, found from the sign-in, none, or a lookup error. */
+  adsAccount: { source: 'configured' | 'found' | 'none' | 'error'; id: string | null; name: string; error: string | null }
   /** The service account Google is reached as, when its key is saved; `error` says why a saved key is unusable. */
   serviceAccount: { email: string | null; error: string | null } | null
   /** The OAuth client secret is saved; never the secret itself. */
@@ -226,6 +228,16 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
         email: typeof record(google['serviceAccount'])['email'] === 'string' ? str(record(google['serviceAccount'])['email']) : null,
         error: typeof record(google['serviceAccount'])['error'] === 'string' ? str(record(google['serviceAccount'])['error']) : null,
       },
+      adsAccount: (() => {
+        const ads = record(google['adsAccount'])
+        const source = ads['source']
+        return {
+          source: source === 'configured' || source === 'found' || source === 'error' ? source : 'none',
+          id: typeof ads['id'] === 'string' ? ads['id'] : null,
+          name: str(ads['name']),
+          error: typeof ads['error'] === 'string' ? ads['error'] : null,
+        }
+      })(),
       clientSecretSet: google['clientSecretSet'] === true,
       developerTokenSet: google['developerTokenSet'] === true,
       connected: google['connected'] === true,

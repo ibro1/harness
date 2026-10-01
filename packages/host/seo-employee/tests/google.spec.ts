@@ -4,7 +4,7 @@ import {
   authorizationUrl, exchangeCode, GoogleAuthError, GoogleTokens, parseServiceAccountKey, pkcePair, randomState, ServiceAccountTokens,
 } from '../src/google/oauth.ts'
 import {
-  AdsApiError, AdsQuotaError, ENGLISH, generateKeywordHistoricalMetrics, generateKeywordIdeas, isPlannableKeyword,
+  accessibleAccounts, AdsApiError, AdsQuotaError, ENGLISH, generateKeywordHistoricalMetrics, generateKeywordIdeas, isPlannableKeyword,
   KeywordPlanQueue, MARKETS, type AdsAuth,
 } from '../src/google/ads.ts'
 import {
@@ -275,6 +275,26 @@ describe('Keyword Planner without a developer token', () => {
     }, new AbortController().signal)
     expect(calls[0]?.headers['developer-token']).toBeUndefined()
     expect(calls[0]?.headers['authorization']).toBe('Bearer ya29.SECRET-ACCESS')
+  })
+})
+
+describe('finding the Ads account a sign-in reaches', () => {
+  it('lists the accounts, skips ones Google refuses to describe, and puts active client accounts first', async () => {
+    const calls: { url: string; login: string | null }[] = []
+    const fetcher: typeof fetch = (input, init) => {
+      const url = input instanceof Request ? input.url : input.toString()
+      calls.push({ url, login: new Headers(init?.headers).get('login-customer-id') })
+      if (url.endsWith('/customers:listAccessibleCustomers')) {
+        return Promise.resolve(Response.json({ resourceNames: ['customers/3133505423', 'customers/8152070364', 'customers/1112223333'] }))
+      }
+      const id = /customers\/(\d+)\/googleAds:search/u.exec(url)?.[1]
+      if (id === '3133505423') return Promise.resolve(Response.json({ error: { message: 'The customer account is cancelled.' } }, { status: 403 }))
+      const manager = id === '8152070364'
+      return Promise.resolve(Response.json({ results: [{ customer: { id, descriptiveName: manager ? 'Netlinkogrp' : 'Client', manager, status: 'ENABLED' } }] }))
+    }
+    const accounts = await accessibleAccounts(fetcher, { accessToken: () => Promise.resolve('t') }, new AbortController().signal)
+    expect(accounts.map(a => [a.customerId, a.manager])).toEqual([['1112223333', false], ['8152070364', true]])
+    expect(calls.find(c => c.url.includes('8152070364/googleAds:search'))?.login).toBe('8152070364')
   })
 })
 

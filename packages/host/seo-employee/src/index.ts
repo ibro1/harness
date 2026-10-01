@@ -28,6 +28,7 @@ import { askEditor } from './editor-call.ts'
 import {
   GoogleTokens, ServiceAccountTokens, authorizationUrl, exchangeCode, parseServiceAccountKey, pkcePair, randomState, type ServiceAccountKey,
 } from './google/oauth.ts'
+import { accessibleAccounts } from './google/ads.ts'
 import { listSites } from './google/gsc.ts'
 import { createPublisher } from './publishers/index.ts'
 import { probeWordPress } from './publishers/wordpress.ts'
@@ -346,6 +347,8 @@ export function apply(ctx: Context, config: Config): void {
     const selected = ctx.agentDefaultModel.currentSelection()
     return { provider: selected.provider, model: selected.model }
   }
+  // Ads accounts found for each sign-in when none is configured, rechecked hourly.
+  const discovered = new Map<string, { at: number; customerId?: string; name?: string; error?: string }>()
   const deps: SeoDeps = {
     store,
     settings: {
@@ -360,19 +363,27 @@ export function apply(ctx: Context, config: Config): void {
     fetch,
     now: () => new Date(),
     googleToken,
-    adsAuth: (site) => {
-      // A site's own Ads account (with its manager, if any) wins over the employee's; the developer token is legacy and optional.
-      const own = site.google?.adsCustomerId.trim() ?? ''
-      const customerId = own !== '' ? own : config.adsCustomerId.get().trim()
-      if (customerId === '') return undefined
-      const login = own !== '' ? site.google?.adsLoginCustomerId.trim() ?? '' : config.adsLoginCustomerId.get().trim()
+    adsAuth: async (site, signal) => {
+      // A site's own Ads account (with its manager, if any) wins over the employee's; with neither set, the first active
+      // account the site's sign-in reaches. The developer token is legacy and optional.
       const developerToken = config.adsDeveloperToken.get().trim()
-      return {
-        customerId,
-        accessToken: (signal: AbortSignal) => googleToken(signal, site),
+      const base = {
+        accessToken: (s: AbortSignal) => googleToken(s, site),
         ...developerToken === '' ? {} : { developerToken },
-        ...login === '' ? {} : { loginCustomerId: login },
       }
+      const own = site.google?.adsCustomerId.trim() ?? ''
+      const configured = own !== '' ? own : config.adsCustomerId.get().trim()
+      const login = own !== '' ? site.google?.adsLoginCustomerId.trim() ?? '' : config.adsLoginCustomerId.get().trim()
+      if (configured !== '') return { ...base, customerId: configured, ...login === '' ? {} : { loginCustomerId: login } }
+      const identity = site.google?.access === 'own' ? `site:${site.id}` : 'shared'
+      const known = discovered.get(identity)
+      if (known !== undefined && Date.now() - known.at < 3_600_000) {
+        return known.customerId === undefined ? undefined : { ...base, customerId: known.customerId, loginCustomerId: known.customerId }
+      }
+      const accounts = await accessibleAccounts(fetch, base, signal, config.adsApiVersion.get().trim() || 'v25')
+      const chosen = accounts.find(a => a.status === 'ENABLED')
+      discovered.set(identity, { at: Date.now(), ...chosen === undefined ? {} : { customerId: chosen.customerId, name: chosen.name } })
+      return chosen === undefined ? undefined : { ...base, customerId: chosen.customerId, loginCustomerId: chosen.customerId }
     },
     publisher: async (site) => {
       const secrets: SiteSecrets = (await store.read()).secrets[site.id] ?? {}
@@ -405,8 +416,27 @@ export function apply(ctx: Context, config: Config): void {
 
   // ----- The owner's routes -----
 
+  /** The account discovery for the shared access, run at most hourly (every 5 minutes after a failure). */
+  const sharedAds = async (): Promise<{ customerId?: string; name?: string; error?: string }> => {
+    if (config.adsCustomerId.get().trim() !== '') return {}
+    const known = discovered.get('shared')
+    if (known !== undefined && Date.now() - known.at < (known.error === undefined ? 3_600_000 : 300_000)) return known
+    try {
+      const accounts = await accessibleAccounts(fetch, { accessToken: s => sharedToken(s) }, AbortSignal.timeout(30_000), config.adsApiVersion.get().trim() || 'v25')
+      const chosen = accounts.find(a => a.status === 'ENABLED')
+      const entry = { at: Date.now(), ...chosen === undefined ? {} : { customerId: chosen.customerId, name: chosen.name } }
+      discovered.set('shared', entry)
+      return entry
+    } catch (error) {
+      const entry = { at: Date.now(), error: error instanceof Error ? error.message : String(error) }
+      discovered.set('shared', entry)
+      return entry
+    }
+  }
+
   const statusOf = async (): Promise<unknown> => {
     const state = await store.read()
+    const ads = await sharedAds()
     const now = new Date()
     return {
       redirectUri,
@@ -419,7 +449,11 @@ export function apply(ctx: Context, config: Config): void {
         clientSet: config.googleClientId.get().trim() !== '' && config.googleClientSecret.get().trim() !== '',
         clientSecretSet: config.googleClientSecret.get().trim() !== '',
         developerTokenSet: config.adsDeveloperToken.get().trim() !== '',
-        adsSet: config.adsCustomerId.get().trim() !== '',
+        adsSet: config.adsCustomerId.get().trim() !== '' || ads.customerId !== undefined,
+        // The Ads account Keyword Planner runs in for sites on the shared access: typed, or found from the sign-in.
+        adsAccount: config.adsCustomerId.get().trim() !== ''
+          ? { source: 'configured', id: config.adsCustomerId.get().trim(), name: '', error: null }
+          : { source: ads.customerId === undefined ? (ads.error === undefined ? 'none' : 'error') : 'found', id: ads.customerId ?? null, name: ads.name ?? '', error: ads.error ?? null },
         connected: state.google !== null,
         connectedAt: state.google?.connectedAt ?? null,
       },

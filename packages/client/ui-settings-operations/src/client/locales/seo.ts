@@ -22,7 +22,7 @@ export type SeoLocaleKey =
   | 'seoTitle' | 'seoDescription' | 'seoInvalid' | 'seoOpenSites'
   | 'seoGoogleTitle' | 'seoGoogleLoading' | 'seoGoogleUnknown' | 'seoGoogleNotSetUp' | 'seoGoogleNotConnected' | 'seoGoogleConnected' | 'seoGoogleServiceAccount' | 'seoGoogleServiceAccountBad' | 'seoRemoveServiceAccount'
   | 'seoGoogleRedirect' | 'seoGoogleConnect' | 'seoGoogleReconnect' | 'seoGoogleConnectHint' | 'seoGoogleDisconnect' | 'seoGoogleDisconnectFailed'
-  | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady'
+  | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady' | 'seoAdsConfigured' | 'seoAdsFound' | 'seoAdsLookupFailed' | 'seoAdsNoneFound'
   | 'seoSecretSaved' | 'seoSecretUnset'
   | `seo.${SeoFieldKey}` | `seo.${SeoFieldKey}.hint` | 'seo.shiftModel.none' | 'seo.fallbackModelPick.none' | 'seo.editorModelPick.none'
   | 'seoSitesPageTitle' | 'seoSitesDescription' | 'seoSitesLoading' | 'seoSitesFailed'
@@ -70,6 +70,10 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoAdsTitle: 'Keyword Planner',
   seoAdsReady: 'Keyword Planner is set up: search volumes come from Google Ads.',
   seoAdsNotReady: 'Keyword Planner is not set up: the employee works from Search Console and search suggestions only.',
+  seoAdsConfigured: 'Keyword Planner runs in Google Ads account {id}.',
+  seoAdsFound: 'Keyword Planner runs in {name} ({id}), found from your Google sign-in. Nothing to fill in below.',
+  seoAdsLookupFailed: 'Your Google Ads accounts could not be read: {error}',
+  seoAdsNoneFound: 'Your Google sign-in reaches no active Google Ads account, so Keyword Planner is off: the employee researches from Search Console and search suggestions.',
   seoSecretSaved: 'Saved',
   seoSecretUnset: 'Not set',
   'seo.enabled': 'Run the daily shift',
@@ -97,7 +101,7 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   'seo.adsLoginCustomerId': 'Manager account id',
   'seo.adsLoginCustomerId.hint': 'The 10-digit id of the manager account that holds the developer token, without dashes. Leave it empty when the account below is not under a manager account.',
   'seo.adsCustomerId': 'Ads account id',
-  'seo.adsCustomerId.hint': 'The 10-digit id of the Google Ads account to plan keywords with, without dashes (shown at the top right of Google Ads). It needs no running campaigns.',
+  'seo.adsCustomerId.hint': 'Optional: leave empty and the account is found from your Google sign-in. Set a 10-digit id only to choose a different account.',
   'seo.adsApiVersion': 'Google Ads API version',
   'seo.adsApiVersion.hint': 'For example v25. Change it only when Google retires the version in use; leave it empty for the built-in default.',
   'seo.shiftModel': 'Shift model',
@@ -204,7 +208,7 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoSiteGoogleLink: 'Sign-in link for the site owner. It works without a harness login and only connects this site.',
   seoSiteGoogleConnectHere: 'Sign in here instead',
   'seoSite.adsCustomerId': 'Google Ads account for this site (optional)',
-  'seoSite.adsCustomerId.hint': 'The 10-digit Ads account Keyword Planner runs in for this site, for example the client\'s own account. Empty uses the account on the SEO employee page.',
+  'seoSite.adsCustomerId.hint': 'Usually leave empty: the account is found from the site\'s Google sign-in. Set it only to pick a different 10-digit account, for example one client account under your manager account.',
   'seoSite.adsLoginCustomerId': 'Manager account for that Ads account (optional)',
   'seoSite.adsLoginCustomerId.hint': 'Your manager account id when the client\'s Ads account is linked under it (8152070364 for yours). Leave empty when the account is reached directly.',
   seoSave: 'Save',
@@ -288,6 +292,10 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoAdsTitle: '关键词规划师',
   seoAdsReady: '关键词规划师已设置：搜索量来自 Google Ads。',
   seoAdsNotReady: '关键词规划师未设置：员工仅依据 Search Console 和搜索建议工作。',
+  seoAdsConfigured: '关键词规划师在 Google Ads 账号 {id} 中运行。',
+  seoAdsFound: '关键词规划师在 {name}（{id}）中运行，由你的 Google 登录自动找到。下方无需填写。',
+  seoAdsLookupFailed: '无法读取你的 Google Ads 账号：{error}',
+  seoAdsNoneFound: '你的 Google 登录没有可用的 Google Ads 账号，因此关键词规划师已关闭：员工依据 Search Console 和搜索建议研究。',
   seoSecretSaved: '已保存',
   seoSecretUnset: '未设置',
   'seo.enabled': '运行每日班次',
@@ -315,7 +323,7 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   'seo.adsLoginCustomerId': '经理账号 ID',
   'seo.adsLoginCustomerId.hint': '持有开发者令牌的经理账号的 10 位 ID，不含短横线。若下方账号不在经理账号之下，请留空。',
   'seo.adsCustomerId': 'Ads 账号 ID',
-  'seo.adsCustomerId.hint': '用于规划关键词的 Google Ads 账号的 10 位 ID，不含短横线（显示在 Google Ads 右上角）。无需有正在投放的广告系列。',
+  'seo.adsCustomerId.hint': '可选：留空即可根据你的 Google 登录自动找到账号。仅在需要选择其他账号时填写 10 位 ID。',
   'seo.adsApiVersion': 'Google Ads API 版本',
   'seo.adsApiVersion.hint': '例如 v25。仅当 Google 停用当前版本时才修改；留空使用内置默认值。',
   'seo.shiftModel': '班次模型',
@@ -422,7 +430,7 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoSiteGoogleLink: '给站点所有者的登录链接。无需 harness 登录即可使用，且只连接本站。',
   seoSiteGoogleConnectHere: '改为在此登录',
   'seoSite.adsCustomerId': '本站的 Google Ads 账号（可选）',
-  'seoSite.adsCustomerId.hint': '为本站运行关键词规划师的 10 位广告账号，例如客户自己的账号。留空则使用 SEO 员工页面上的账号。',
+  'seoSite.adsCustomerId.hint': '通常留空：账号会根据本站的 Google 登录自动找到。仅在需要指定其他 10 位账号时填写，例如你经理账号下的某个客户账号。',
   'seoSite.adsLoginCustomerId': '该广告账号的经理账号（可选）',
   'seoSite.adsLoginCustomerId.hint': '当客户的广告账号关联在你的经理账号下时，填写你的经理账号 ID（你的是 8152070364）。直接访问该账号时留空。',
   seoSave: '保存',

@@ -427,3 +427,55 @@ export async function generateKeywordHistoricalMetrics(
     return keyword === '' ? [] : [toIdea(keyword, row['keywordMetrics'])]
   })
 }
+
+/** An Ads account a sign-in can reach, as account discovery reads it. */
+export interface AdsAccount {
+  customerId: string
+  name: string
+  manager: boolean
+  status: string
+}
+
+/**
+ * List the Ads accounts a sign-in can reach directly, with each one's status,
+ * so Keyword Planner can run without the owner typing an account id.
+ * Accounts Google refuses to describe (cancelled, closed) are left out.
+ * @param fetcher - HTTP.
+ * @param auth - the sign-in.
+ * @param signal - cancels the calls.
+ * @param apiVersion - Google Ads API version.
+ * @returns the accounts, enabled ones first and client accounts before managers.
+ */
+export async function accessibleAccounts(fetcher: typeof fetch, auth: AdsAuth, signal: AbortSignal, apiVersion = 'v25'): Promise<AdsAccount[]> {
+  const root = `https://googleads.googleapis.com/${apiVersion}`
+  const headers = async (login?: string): Promise<Record<string, string>> => ({
+    Authorization: `Bearer ${await auth.accessToken(signal)}`,
+    ...auth.developerToken === undefined || auth.developerToken === '' ? {} : { 'developer-token': auth.developerToken },
+    'Content-Type': 'application/json',
+    ...login === undefined ? {} : { 'login-customer-id': login },
+  })
+  const listed = await fetcher(`${root}/customers:listAccessibleCustomers`, {
+    headers: await headers(), signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+  })
+  const listedText = await listed.text()
+  if (!listed.ok) {
+    const error = parseError(listedText)
+    throw new AdsApiError(`Google Ads could not list the accounts this sign-in reaches (HTTP ${String(listed.status)}): ${error.message || 'no detail'}`,
+      listed.status, error.status, listed.headers.get('request-id') ?? undefined)
+  }
+  const ids = list(record(JSON.parse(listedText))['resourceNames']).map(text).map(name => name.replace(/^customers\//u, '')).filter(id => /^\d+$/u.test(id))
+  const accounts: AdsAccount[] = []
+  for (const id of ids.slice(0, 20)) {
+    const response = await fetcher(`${root}/customers/${id}/googleAds:search`, {
+      method: 'POST',
+      headers: await headers(id),
+      body: JSON.stringify({ query: 'SELECT customer.id, customer.descriptive_name, customer.manager, customer.status FROM customer LIMIT 1' }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+    })
+    if (!response.ok) continue
+    const row = record(record(list(record(JSON.parse(await response.text()))['results'])[0])['customer'])
+    accounts.push({ customerId: id, name: text(row['descriptiveName']), manager: row['manager'] === true, status: text(row['status']) || 'UNKNOWN' })
+  }
+  const rank = (a: AdsAccount): number => (a.status === 'ENABLED' ? 0 : 2) + (a.manager ? 1 : 0)
+  return accounts.sort((a, b) => rank(a) - rank(b))
+}

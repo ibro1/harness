@@ -36,8 +36,11 @@ export interface SeoDeps {
   now: () => Date
   /** A Google access token for a site (its own sign-in, or the shared access), or an error saying how to connect. */
   googleToken: (signal: AbortSignal, site: Site) => Promise<string>
-  /** Keyword Planner credentials and account for a site, or undefined when no Ads account is set for it. */
-  adsAuth: (site: Site) => (AdsAuth & { customerId: string }) | undefined
+  /**
+   * Keyword Planner credentials and account for a site: the account set for it, or else the first active account its
+   * sign-in reaches. Undefined when it reaches none.
+   */
+  adsAuth: (site: Site, signal: AbortSignal) => Promise<(AdsAuth & { customerId: string }) | undefined>
   /** The site's connector, with its stored credentials. */
   publisher: (site: Site) => Promise<Publisher>
   /** Run the editor model; returns its reply and which model answered. */
@@ -344,8 +347,8 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const state = await store.read()
         const site = findSite(state, str(args['site_id']))
         const market = marketOf(site, str(args['market']))
-        const auth = deps.adsAuth(site)
-        if (auth === undefined) throw new Error(`Keyword Planner is not set up for ${site.name} (an Ads account id on the SEO employee page or the site). Use seo_search_console and seo_autocomplete instead.`)
+        const auth = await deps.adsAuth(site, exec.signal)
+        if (auth === undefined) throw new Error(`Keyword Planner has no active Google Ads account for ${site.name}. Use seo_search_console and seo_autocomplete instead.`)
         const { customerId } = auth
         const seeds = (strings(args['seeds']).length > 0 ? strings(args['seeds']) : site.seeds).filter(isPlannableKeyword).slice(0, 10)
         const url = str(args['url'])
@@ -381,8 +384,8 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const state = await store.read()
         const site = findSite(state, str(args['site_id']))
         const market = marketOf(site, str(args['market']))
-        const auth = deps.adsAuth(site)
-        if (auth === undefined) throw new Error(`Keyword Planner is not set up for ${site.name} (an Ads account id on the SEO employee page or the site).`)
+        const auth = await deps.adsAuth(site, exec.signal)
+        if (auth === undefined) throw new Error(`Keyword Planner has no active Google Ads account for ${site.name}.`)
         const { customerId } = auth
         const keywords = [...new Set(strings(args['keywords']).map(normalizeKeyword))].slice(0, 30)
         const { result: metrics, cachedAt } = await cached('metrics', site.id, `volumes ${market.label}: ${keywords.join(', ')}`, { keywords, market },

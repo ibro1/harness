@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { formLabels } from './locales.ts'
 import { ScoutModelPicker } from './ScoutModelPicker.tsx'
 import { SEO_MODEL_PAIRS, SEO_NUMBER_FIELDS, type SeoCardFace, type SeoCardState, type SeoGoogleState } from './seo-card-controller.ts'
+import type { SeoGoogleStatus } from './seo-sites-model.ts'
 import css from './scout.module.css'
 import seoCss from './seo.module.css'
 
@@ -94,6 +95,21 @@ function GoogleStatus(props: {
  */
 function secretBadge(t: Translate, saved: boolean | undefined): { configured: boolean; stateLabel: string } {
   return saved === true ? { configured: true, stateLabel: t('seoSecretSaved') } : { configured: false, stateLabel: t('seoSecretUnset') }
+}
+
+/**
+ * Which Ads account Keyword Planner runs in, and how it was chosen.
+ * @param t - locale copy.
+ * @param ads - the Host's report.
+ * @returns the status line.
+ */
+function adsLine(t: Translate, ads: SeoGoogleStatus['adsAccount']): string {
+  switch (ads.source) {
+    case 'configured': return t('seoAdsConfigured', { id: ads.id ?? '' })
+    case 'found': return t('seoAdsFound', { id: ads.id ?? '', name: ads.name === '' ? ads.id ?? '' : ads.name })
+    case 'error': return t('seoAdsLookupFailed', { error: ads.error ?? '' })
+    case 'none': return t('seoAdsNoneFound')
+  }
 }
 
 /**
@@ -199,7 +215,7 @@ export function SeoCard(props: SeoCardProps) {
         <span className={css.pickerLabel}>{t('seoAdsTitle')}</span>
         {google.status === undefined
           ? null
-          : <p className={google.status.adsSet ? css.pickerValue : css.pickerUnknown} role="status">{google.status.adsSet ? t('seoAdsReady') : t('seoAdsNotReady')}</p>}
+          : <p className={google.status.adsSet ? css.pickerValue : css.pickerUnknown} role="status">{adsLine(t, google.status.adsAccount)}</p>}
       </div>
       <SettingsSecretField
         id="plugin-config-seo-adsDeveloperToken"
