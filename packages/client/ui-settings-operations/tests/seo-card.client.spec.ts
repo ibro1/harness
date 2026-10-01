@@ -72,3 +72,11 @@ describe('the SEO employee card', () => {
     })
   })
 })
+
+describe('removing the service account key', () => {
+  it('unsets the key so the employee falls back to the owner\'s Google sign-in', async () => {
+    const { form, face } = await card({ clientSet: true, adsSet: false, connected: true, connectedAt: '2026-10-01T08:00:00.000Z' })
+    face.removeServiceAccount()
+    await vi.waitFor(() => { expect(form.mutate.mock.calls.flatMap(call => call[0])).toContainEqual({ op: 'unset', path: ['googleServiceAccountKey'] }) })
+  })
+})

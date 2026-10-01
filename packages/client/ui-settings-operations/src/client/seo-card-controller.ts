@@ -71,6 +71,8 @@ export interface SeoCardFace extends SettingsFormActions {
   connectGoogle: () => void
   /** Forget the Google connection. */
   disconnectGoogle: () => void
+  /** Remove the saved service account key, so the employee uses the owner's own Google sign-in. */
+  removeServiceAccount: () => void
   /** Read the Google status again. */
   refreshStatus: () => void
   hooks: {
@@ -107,7 +109,7 @@ export class SeoCardController {
    * @param openWindow - opens a URL in a new window, injectable for tests.
    */
   constructor(
-    scope: SettingsFormScope<SeoSettings>,
+    private readonly scope: SettingsFormScope<SeoSettings>,
     private readonly request: SeoRequest = (url, init) => fetch(url, init),
     private readonly openWindow: (url: string) => void = (url) => { window.open(url, 'seo-google-connect', 'popup,width=560,height=720') },
   ) {
@@ -156,6 +158,14 @@ export class SeoCardController {
     })()
   }
 
+  /** Remove the saved service account key. */
+  removeServiceAccount(): void {
+    void (async () => {
+      await this.scope.mutate([{ op: 'unset', path: ['googleServiceAccountKey'] }])
+      this.refreshStatus()
+    })()
+  }
+
   /** Stop following the settings scope; the page is gone. */
   dispose(): void { this.form.dispose() }
 
@@ -178,6 +188,7 @@ export class SeoCardController {
       retryModels,
       connectGoogle: () => { this.openWindow(SEO_OAUTH_START_PATH) },
       disconnectGoogle: () => { this.disconnectGoogle() },
+      removeServiceAccount: () => { this.removeServiceAccount() },
       refreshStatus: () => { this.refreshStatus() },
     }
   }

@@ -20,7 +20,7 @@ export type SeoTopicStatusKey = 'planned' | 'asked' | 'drafted' | 'published' | 
 /** Locale keys the SEO employee card and sites page render. */
 export type SeoLocaleKey =
   | 'seoTitle' | 'seoDescription' | 'seoInvalid' | 'seoOpenSites'
-  | 'seoGoogleTitle' | 'seoGoogleLoading' | 'seoGoogleUnknown' | 'seoGoogleNotSetUp' | 'seoGoogleNotConnected' | 'seoGoogleConnected' | 'seoGoogleServiceAccount' | 'seoGoogleServiceAccountBad'
+  | 'seoGoogleTitle' | 'seoGoogleLoading' | 'seoGoogleUnknown' | 'seoGoogleNotSetUp' | 'seoGoogleNotConnected' | 'seoGoogleConnected' | 'seoGoogleServiceAccount' | 'seoGoogleServiceAccountBad' | 'seoRemoveServiceAccount'
   | 'seoGoogleRedirect' | 'seoGoogleConnect' | 'seoGoogleReconnect' | 'seoGoogleConnectHint' | 'seoGoogleDisconnect' | 'seoGoogleDisconnectFailed'
   | 'seoRefresh' | 'seoCopy' | 'seoCopied' | 'seoAdsTitle' | 'seoAdsReady' | 'seoAdsNotReady'
   | 'seoSecretSaved' | 'seoSecretUnset'
@@ -57,6 +57,7 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoGoogleConnected: 'Connected since {date}.',
   seoGoogleServiceAccount: 'Connected as the service account {email}. No sign-in screen, nothing for Google to expire; the OAuth fields below are not used.',
   seoGoogleServiceAccountBad: 'The saved service account key cannot be used: {error}',
+  seoRemoveServiceAccount: 'Remove service account key (use my Google sign-in instead)',
   seoGoogleRedirect: 'In Google Cloud, add this address under the OAuth client\'s Authorized redirect URIs:',
   seoGoogleConnect: 'Connect Google',
   seoGoogleReconnect: 'Connect again',
@@ -87,8 +88,8 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   'seo.answerWaitHours.hint': 'How long a topic waits for your answers to its questions. After this the employee writes without them, or skips the topic if it cannot be written well without first-hand detail. 0 never waits.',
   'seo.googleClientId': 'OAuth client id',
   'seo.googleClientId.hint': 'In Google Cloud Console: APIs & Services → Credentials → Create credentials → OAuth client ID, type Web application. Copy its Client ID (…apps.googleusercontent.com). Enable the Search Console API and Google Ads API on the same project. On the OAuth consent screen set Publishing status to "In production"; while it is "Testing", Google ends the connection after 7 days.',
-  'seo.googleServiceAccountKey': 'Service account key (recommended)',
-  'seo.googleServiceAccountKey.hint': 'Paste the whole JSON key of a service account created in the Google Cloud project that holds your Google Ads API access level (Google Cloud → IAM & Admin → Service accounts → Keys → Add key → JSON): the access level now comes from that project. Then add its email as a user in Google Ads (Admin → Access and security, Standard access) and in Search Console (Settings → Users and permissions, Full). With a key saved there is no Google sign-in screen and no unverified-app warning. Write-only.',
+  'seo.googleServiceAccountKey': 'Service account key (optional)',
+  'seo.googleServiceAccountKey.hint': 'Optional: leave it empty to use your own Google sign-in (Connect Google), which needs nothing added anywhere. A service account suits clients who prefer to add an email over signing in. Paste the whole JSON key of a service account created in the Google Cloud project that holds your Google Ads API access level (Google Cloud → IAM & Admin → Service accounts → Keys → Add key → JSON): the access level now comes from that project. Then add its email as a user in Google Ads (Admin → Access and security, Standard access) and in Search Console (Settings → Users and permissions, Full). With a key saved there is no Google sign-in screen and no unverified-app warning. Write-only.',
   'seo.googleClientSecret': 'OAuth client secret',
   'seo.googleClientSecret.hint': 'The Client secret of the same OAuth client. Write-only: it is never shown again; leave the field empty to keep the saved one.',
   'seo.adsDeveloperToken': 'Developer token (legacy, optional)',
@@ -193,8 +194,8 @@ export const seoEn: Record<SeoLocaleKey, string> = {
   seoSiteGoogle: 'Google access',
   'seoSite.googleAccess': 'How this site reaches Google',
   'seoSite.googleAccess.hint': '',
-  'seoGoogleAccess.shared': 'The SEO employee\'s own access (your service account or your sign-in)',
-  'seoGoogleAccess.shared.hint': 'For your own sites, and for a client who added your service account email as a user in their Search Console and either added it in their Google Ads or linked their Ads account under your manager account.',
+  'seoGoogleAccess.shared': 'Your Google access (your sign-in on the SEO employee page, or its service account)',
+  'seoGoogleAccess.shared.hint': 'For your own sites: nothing else to do once you have pressed Connect Google. Also for a client who added your service account email as a user in their Search Console and either added it in their Google Ads or linked their Ads account under your manager account.',
   'seoGoogleAccess.own': 'The site owner\'s own Google sign-in',
   'seoGoogleAccess.own.hint': 'The site owner signs in with their own Google account through a link you send them; nobody adds any email. Until Google verifies your app, they see Google\'s "unverified app" screen and choose Advanced → Continue.',
   seoSiteGoogleSaveFirst: 'Save the site to get the sign-in link for its owner.',
@@ -274,6 +275,7 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoGoogleConnected: '自 {date} 起已连接。',
   seoGoogleServiceAccount: '以服务账号 {email} 连接。无需登录页面，也不会被 Google 过期；下方的 OAuth 字段不再使用。',
   seoGoogleServiceAccountBad: '已保存的服务账号密钥无法使用：{error}',
+  seoRemoveServiceAccount: '移除服务账号密钥（改用我的 Google 登录）',
   seoGoogleRedirect: '在 Google Cloud 中，把此地址添加到该 OAuth 客户端的“已获授权的重定向 URI”：',
   seoGoogleConnect: '连接 Google',
   seoGoogleReconnect: '重新连接',
@@ -304,8 +306,8 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   'seo.answerWaitHours.hint': '某个主题等待你回答其问题的时长。超时后员工会在没有回答的情况下写作；若缺少一手细节就写不好，则跳过该主题。0 表示从不等待。',
   'seo.googleClientId': 'OAuth 客户端 ID',
   'seo.googleClientId.hint': '在 Google Cloud 控制台：API 和服务 → 凭据 → 创建凭据 → OAuth 客户端 ID，类型选“Web 应用”。复制其客户端 ID（…apps.googleusercontent.com）。在同一项目中启用 Search Console API 和 Google Ads API。在 OAuth 同意屏幕把发布状态设为“正式版”；处于“测试”状态时，Google 会在 7 天后终止连接。',
-  'seo.googleServiceAccountKey': '服务账号密钥（推荐）',
-  'seo.googleServiceAccountKey.hint': '粘贴服务账号的完整 JSON 密钥，该服务账号须建在持有你 Google Ads API 访问级别的 Google Cloud 项目中（Google Cloud → IAM 和管理 → 服务账号 → 密钥 → 添加密钥 → JSON）：访问级别现在来自该项目。然后将其邮箱添加为 Google Ads 用户（管理 → 访问权限和安全，标准权限）和 Search Console 用户（设置 → 用户和权限，完整权限）。保存密钥后不再有 Google 登录页面，也不会出现未验证应用警告。只写。',
+  'seo.googleServiceAccountKey': '服务账号密钥（可选）',
+  'seo.googleServiceAccountKey.hint': '可选：留空即使用你自己的 Google 登录（连接 Google），无需在任何地方添加邮箱。服务账号适合宁愿添加邮箱也不愿登录的客户。粘贴服务账号的完整 JSON 密钥，该服务账号须建在持有你 Google Ads API 访问级别的 Google Cloud 项目中（Google Cloud → IAM 和管理 → 服务账号 → 密钥 → 添加密钥 → JSON）：访问级别现在来自该项目。然后将其邮箱添加为 Google Ads 用户（管理 → 访问权限和安全，标准权限）和 Search Console 用户（设置 → 用户和权限，完整权限）。保存密钥后不再有 Google 登录页面，也不会出现未验证应用警告。只写。',
   'seo.googleClientSecret': 'OAuth 客户端密钥',
   'seo.googleClientSecret.hint': '同一 OAuth 客户端的客户端密钥。只写：保存后不再显示；留空则保留已保存的值。',
   'seo.adsDeveloperToken': '开发者令牌（旧版，可选）',
@@ -410,7 +412,7 @@ export const seoZh: Record<SeoLocaleKey, string> = {
   seoSiteGoogle: 'Google 访问',
   'seoSite.googleAccess': '本站如何访问 Google',
   'seoSite.googleAccess.hint': '',
-  'seoGoogleAccess.shared': 'SEO 员工自己的访问（你的服务账号或你的登录）',
+  'seoGoogleAccess.shared': '你的 Google 访问（你在 SEO 员工页面的登录，或其服务账号）',
   'seoGoogleAccess.shared.hint': '用于你自己的网站，以及已将你的服务账号邮箱添加为其 Search Console 用户、并在其 Google Ads 中添加该邮箱或将其广告账号关联到你的经理账号下的客户。',
   'seoGoogleAccess.own': '站点所有者自己的 Google 登录',
   'seoGoogleAccess.own.hint': '站点所有者通过你发送的链接用自己的 Google 账号登录，无需添加任何邮箱。在 Google 验证你的应用之前，他们会看到 Google 的“未验证应用”页面，需选择“高级 → 继续”。',

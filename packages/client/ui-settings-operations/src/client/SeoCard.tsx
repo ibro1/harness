@@ -182,6 +182,9 @@ export function SeoCard(props: SeoCardProps) {
         {...secretBadge(t, google.status === undefined ? undefined : google.status.serviceAccount !== null)}
         onEdit={(text) => { props.edit('googleServiceAccountKey', text) }}
       />
+      {google.status?.serviceAccount === null || google.status?.serviceAccount === undefined
+        ? null
+        : <p><Button variant="ghost" size="sm" disabled={disabled} onClick={props.removeServiceAccount}>{t('seoRemoveServiceAccount')}</Button></p>}
       {stringField('googleClientId')}
       <SettingsSecretField
         id="plugin-config-seo-googleClientSecret"
