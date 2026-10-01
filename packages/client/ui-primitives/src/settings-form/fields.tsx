@@ -160,6 +160,8 @@ export function SettingsSecretField(props: Pick<SettingsFieldProps, 'id' | 'labe
         className={css.input}
         type="password"
         autoComplete="new-password"
+        // A saved value never returns to the browser; the mask only shows that one is stored.
+        placeholder={props.configured ? '••••••••••••' : ''}
         value={props.text}
         disabled={props.disabled}
         onChange={(event) => { props.onEdit(event.target.value) }}

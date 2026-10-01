@@ -109,6 +109,15 @@ describe('SettingsSecretField', () => {
     expect(input).toHaveProperty('type', 'password')
   })
 
+  it('masks the empty field once a value is saved, without holding the value', () => {
+    const { rerender } = render(<SettingsSecretField {...secret} text="" configured={false} stateLabel="Not set" onEdit={vi.fn()} />)
+    expect(screen.getByLabelText('API key').getAttribute('placeholder')).toBe('')
+    rerender(<SettingsSecretField {...secret} text="" configured stateLabel="Saved" onEdit={vi.fn()} />)
+    const input = screen.getByLabelText('API key')
+    expect(input.getAttribute('placeholder')).toBe('••••••••••••')
+    expect(input).toHaveProperty('value', '')
+  })
+
   it('reports the configured state the Host holds', () => {
     const { rerender } = render(
       <SettingsSecretField
