@@ -39,11 +39,22 @@ The code checks reject these. Write around them from the start.
 - Long dashes (the em dash and the en dash) and `--` used as a dash. Use a comma, a full stop, or brackets. For a range write "2020 to 2024".
 - Stock words: delve, tapestry, realm, embark, robust, seamless, seamlessly, game-changer, "testament to", "harness the power of", "leverage" as a verb (write "use").
 - Stock openers and filler: "in today's fast-paced world", "navigate the landscape", "unlock your full potential", "elevate your", "it's important to note", "whether you're a beginner or a pro", "let's dive in".
-- Signposted endings: "in conclusion", "to sum up", "in summary".
+- Signposted endings: "in conclusion", "to sum up", "in summary", and wrap-ups that open with "Ultimately", "At the end of the day" or "All in all".
+- Empty transitions at the start of a sentence: "Moreover,", "Furthermore,", "Additionally,", "In addition,". Start with the point; if two points need joining, say how they connect ("That is also why ...").
+- Weak introductions: "In this article, we will ...", "Have you ever wondered ...", "Are you looking for ...", "Look no further". Answer the query in the first line instead.
+- "Ever-evolving landscape" and its cousins ("ever-changing world", "ever-growing industry"). Name what actually changed.
 - Questions answered in the next breath: "The result? Twice the views." Make the statement.
 - Double hedges ("may potentially", "could possibly") and stacked intensifiers ("really truly", "incredibly deeply").
 - Emoji.
 - Any phrase listed in the site's voice as one to avoid.
+
+## Fake professional tone
+
+The polished, safe register reads impressive once and empty the second time. Write the way the owner would explain it to a creator over WhatsApp: plain words, a definite opinion where they have one, and the specific detail a stranger could not have made up. If a sentence would fit in any company's blog unchanged, cut it or make it about this site's readers.
+
+## Check before you submit
+
+Before calling `seo_submit_draft`, read the draft once against this file, line by line, the way an editor would: every word and structure in the list above, the opening, the ending, and the tone. Fix what you find, keep the meaning, and cut filler. The plugin checks again and refuses what you missed, but a draft that needs no corrections is the goal.
 
 ## Links and sources
 

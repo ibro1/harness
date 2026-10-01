@@ -26,7 +26,7 @@ The plugin enforces the rules that matter: one page per topic, the wait for the 
 
    Group queries whose top results overlap into one topic: same intent, one page. Then call `seo_save_topic` with your numbers in `why` and your reading of the results in `serp_notes`. Reject weak ideas with `seo_reject_topic` and the reason, so they are not reconsidered.
 5. For each planned topic you will write this week, call `seo_ask_owner` with 1 to 3 specific questions that pull out material only the owner has. Good: "What was the first clip a client shared from Klipara, and what happened to it?" Bad: "Any thoughts on short-form video?" While answers are pending, research the next topic or refresh an article.
-6. **Write** (see below). Then `seo_submit_draft`: fix every problem it lists and submit again. Then `seo_review_draft`: on REVISE, fix every must-fix item, resubmit and review again. Then `seo_publish`.
+6. **Write** (see below), then check the draft line by line against `writing-rules.md` and fix what you find. Then `seo_submit_draft`: fix every problem it lists and submit again. Then `seo_review_draft`: on REVISE, fix every must-fix item, resubmit and review again. Then `seo_publish`.
 7. End with a short report: what you published or refreshed, topics added or rejected and why, questions waiting, and anything the owner should do.
 
 Do not publish more than the cap says, even when you have more drafts ready. Keep them for next week.

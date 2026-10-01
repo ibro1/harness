@@ -6,7 +6,7 @@ Parts of this package are ported from [open-seo](https://github.com/every-app/op
 | --- | --- |
 | `src/google/gsc.ts` (`strikingDistance`) | `src/server/features/gsc/searchPerformanceReport.ts` (`buildStrikingDistanceRows`) |
 | `src/quality/editor.ts` (five-dimension score out of 50, revise below 35) | `.agents/skills/deslop/SKILL.md` (Scoring) |
-| `src/quality/style.ts`, `skills/writing-rules.md` (choice of tells: phrase list, contrast and tricolon patterns, bold-first bullets) | `.agents/skills/deslop/SKILL.md`, `references/phrases.md`, `references/structures.md` |
+| `src/quality/style.ts`, `deploy/skills/seo-employee/writing-rules.md` (choice of tells: phrase list, contrast and tricolon patterns, bold-first bullets) | `.agents/skills/deslop/SKILL.md`, `references/phrases.md`, `references/structures.md` |
 
 ```
 MIT License

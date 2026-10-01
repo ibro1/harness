@@ -124,6 +124,31 @@ const HARD_TELLS: readonly Tell[] = [
     fix: 'Do not announce the ending; end on the last useful point or the call to action.',
   },
   {
+    rule: 'ultimately-conclusion',
+    pattern: /(?:^|[.!?]["')]?\s+)(?:#+\s+)?(?:Ultimately|At the end of the day|All in all)\b/gmu,
+    fix: 'A wrap-up that opens with "Ultimately" or "At the end of the day" is a stock AI ending; end on the last useful point.',
+  },
+  {
+    rule: 'empty-transition',
+    pattern: /(?:^|[.!?]["')]?\s+)(?:Moreover|Furthermore|Additionally|In addition),/gmu,
+    fix: 'A sentence opened with "Moreover/Furthermore/Additionally," is an empty transition; start with the point.',
+  },
+  {
+    rule: 'weak-intro',
+    pattern: new RegExp([
+      "in this (?:article|post|guide|blog post),? (?:we|I)(?:'ll| will| are going to)",
+      'have you ever wondered',
+      'are you looking for (?:a|an|the|ways)',
+      'look no further',
+    ].map(p => `\\b${p}\\b`).join('|'), 'giu'),
+    fix: 'Announcing the article or asking the reader a setup question is a stock intro; answer the query in the first line.',
+  },
+  {
+    rule: 'ever-evolving',
+    pattern: /\bever-(?:evolving|changing|growing) (?:landscape|world|industry|space)\b/giu,
+    fix: '"Ever-evolving landscape" is stock filler; name what actually changed.',
+  },
+  {
     rule: 'whether-youre-a',
     pattern: /\bwhether you(?:'re| are) an? [^.?!;\n]{1,50}?\bor (?:an? )?\w/giu,
     fix: '"Whether you\'re a X or a Y" is a stock opener; write for the one reader the article is for.',
