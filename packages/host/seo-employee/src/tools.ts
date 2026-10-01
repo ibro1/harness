@@ -25,6 +25,8 @@ export interface SeoToolSettings {
   adsApiVersion: () => string
   researchCacheDays: () => number
   answerWaitHours: () => number
+  /** The service account Google is reached as, when one is set instead of an OAuth sign-in. */
+  serviceAccountEmail?: () => string | undefined
 }
 
 /** Everything the tools read or call, injectable for tests. */
@@ -107,6 +109,13 @@ function formatIdea(idea: KeywordIdea, covered: Set<string>): string {
   const bids = idea.highTopOfPageBidMicros === undefined ? '' : `, top-of-page bid up to ${(idea.highTopOfPageBidMicros / 1e6).toFixed(2)}`
   const index = idea.competitionIndex === undefined ? '' : ` ${String(idea.competitionIndex)}/100`
   return `- ${idea.text}: ${volume}, ad competition ${idea.competition.toLowerCase()}${index}${bids}${covered.has(normalizeKeyword(idea.text)) ? ' [already covered]' : ''}`
+}
+
+/** How the employee reaches Google, for seo_status. */
+function googleLine(state: SeoState, serviceAccount: string | undefined): string {
+  if (serviceAccount !== undefined) return `Google reached as the service account ${serviceAccount}.`
+  if (state.google !== null) return `Google connected ${state.google.connectedAt}.`
+  return 'Google is NOT connected: Search Console and Keyword Planner tools will fail until the owner connects it on the SEO employee page.'
 }
 
 /** Keywords a site's live topics and articles already target. */
@@ -255,7 +264,7 @@ export function buildSeoTools(deps: SeoDeps): ToolDefinition[] {
         const now = deps.now()
         const lines = [
           state.paused === null ? 'Running.' : `PAUSED since ${state.paused.at}: ${state.paused.reason}. Stop the shift.`,
-          state.google === null ? 'Google is NOT connected: Search Console and Keyword Planner tools will fail until the owner presses Connect Google.' : `Google connected ${state.google.connectedAt}.`,
+          googleLine(state, settings.serviceAccountEmail?.()),
         ]
         for (const site of state.sites) {
           const topics = state.topics.filter(t => t.siteId === site.id)

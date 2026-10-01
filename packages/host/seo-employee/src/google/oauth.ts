@@ -5,7 +5,7 @@
  * google-auth-library.
  */
 
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, createSign, randomBytes } from 'node:crypto'
 
 /** Scopes the employee asks for: Keyword Planner (Ads) and Search Console, including sitemap submission. */
 export const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/adwords', 'https://www.googleapis.com/auth/webmasters'] as const
@@ -218,6 +218,92 @@ export class GoogleTokens {
     const token = text(body['access_token'])
     if (token === '') throw new GoogleAuthError('token-endpoint', 'Google\'s token endpoint returned no access token.')
     this.cached = { token, expiresAt: expiry(body, this.now()) }
+    return token
+  }
+}
+
+/** The fields of a service account's JSON key the token grant needs. */
+export interface ServiceAccountKey {
+  clientEmail: string
+  privateKey: string
+}
+
+/**
+ * Read a service account's JSON key, as Google Cloud downloads it.
+ * @param json - the key file's text.
+ * @returns the email and private key, or why the text is not a usable key.
+ */
+export function parseServiceAccountKey(json: string): ServiceAccountKey | string {
+  let body: Record<string, unknown>
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return 'The service account key is not a JSON object.'
+    body = parsed as Record<string, unknown>
+  } catch {
+    return 'The service account key is not valid JSON: paste the whole downloaded key file.'
+  }
+  if (body['type'] !== 'service_account') return 'This JSON is not a service account key ("type" must be "service_account").'
+  const clientEmail = text(body['client_email'])
+  const privateKey = text(body['private_key'])
+  if (clientEmail === '' || !privateKey.includes('PRIVATE KEY')) return 'The key has no client_email or private_key.'
+  return { clientEmail, privateKey }
+}
+
+/**
+ * Hands out access tokens for a service account, by the JWT bearer grant: no
+ * consent screen, so no "unverified app" warning and nothing for Google to
+ * expire. The service account must be added as a user on the Google Ads
+ * account and the Search Console property. A token is reused until one minute
+ * before it expires.
+ */
+export class ServiceAccountTokens {
+  private cached: { key: string; token: string; expiresAt: number } | undefined
+  private pending: Promise<string> | undefined
+
+  /**
+   * @param fetcher - HTTP.
+   * @param key - reads the parsed key at refresh time, so a new key takes effect without a restart.
+   * @param now - clock in epoch milliseconds.
+   */
+  constructor(
+    private readonly fetcher: typeof fetch,
+    private readonly key: () => ServiceAccountKey,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /**
+   * A valid access token for the Google Ads and Search Console scopes.
+   * @param signal - cancels a grant this call starts.
+   * @returns the bearer token.
+   */
+  async accessToken(signal: AbortSignal): Promise<string> {
+    const { clientEmail } = this.key()
+    if (this.cached?.key === clientEmail && this.now() < this.cached.expiresAt - EXPIRY_MARGIN_MS) return this.cached.token
+    this.pending ??= this.grant(signal).finally(() => {
+      this.pending = undefined
+    })
+    return this.pending
+  }
+
+  /** Drop the cached token, for example after the key changed. */
+  clear(): void {
+    this.cached = undefined
+  }
+
+  private async grant(signal: AbortSignal): Promise<string> {
+    const { clientEmail, privateKey } = this.key()
+    const issued = Math.floor(this.now() / 1000)
+    const header = base64url(Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })))
+    const claims = base64url(Buffer.from(JSON.stringify({
+      iss: clientEmail, scope: GOOGLE_SCOPES.join(' '), aud: TOKEN_ENDPOINT, iat: issued, exp: issued + 3600,
+    })))
+    const signer = createSign('RSA-SHA256')
+    signer.update(`${header}.${claims}`)
+    const assertion = `${header}.${claims}.${signer.sign(privateKey).toString('base64url')}`
+    const body = await tokenRequest(this.fetcher, { grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }, signal)
+    const token = text(body['access_token'])
+    if (token === '') throw new GoogleAuthError('token-endpoint', 'Google\'s token endpoint returned no access token.')
+    this.cached = { key: clientEmail, token, expiresAt: expiry(body, this.now()) }
     return token
   }
 }

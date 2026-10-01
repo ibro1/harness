@@ -41,11 +41,21 @@ function GoogleStatus(props: {
         ? <p className={css.pickerHint} role="status">{google.failed ? t('seoGoogleUnknown') : t('seoGoogleLoading')}</p>
         : (
           <>
-            <p className={status.connected ? css.pickerValue : css.pickerUnknown} role="status">
-              {status.connected
-                ? t('seoGoogleConnected', { date: (status.connectedAt ?? '').slice(0, 16).replace('T', ' ') })
-                : status.clientSet ? t('seoGoogleNotConnected') : t('seoGoogleNotSetUp')}
-            </p>
+            {status.serviceAccount === null
+              ? (
+                <p className={status.connected ? css.pickerValue : css.pickerUnknown} role="status">
+                  {status.connected
+                    ? t('seoGoogleConnected', { date: (status.connectedAt ?? '').slice(0, 16).replace('T', ' ') })
+                    : status.clientSet ? t('seoGoogleNotConnected') : t('seoGoogleNotSetUp')}
+                </p>
+              )
+              : (
+                <p className={status.serviceAccount.email === null ? css.pickerUnknown : css.pickerValue} role="status">
+                  {status.serviceAccount.email === null
+                    ? t('seoGoogleServiceAccountBad', { error: status.serviceAccount.error ?? '' })
+                    : t('seoGoogleServiceAccount', { email: status.serviceAccount.email })}
+                </p>
+              )}
             {status.redirectUri === ''
               ? null
               : (
@@ -163,6 +173,15 @@ export function SeoCard(props: SeoCardProps) {
       ))}
       <GoogleStatus t={t} google={google} disabled={disabled}
         onConnect={props.connectGoogle} onDisconnect={props.disconnectGoogle} onRefresh={props.refreshStatus} />
+      <SettingsSecretField
+        id="plugin-config-seo-googleServiceAccountKey"
+        label={t('seo.googleServiceAccountKey')}
+        hint={t('seo.googleServiceAccountKey.hint')}
+        disabled={disabled}
+        text={state.secrets.googleServiceAccountKey.text}
+        {...secretBadge(t, google.status === undefined ? undefined : google.status.serviceAccount !== null)}
+        onEdit={(text) => { props.edit('googleServiceAccountKey', text) }}
+      />
       {stringField('googleClientId')}
       <SettingsSecretField
         id="plugin-config-seo-googleClientSecret"

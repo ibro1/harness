@@ -19,6 +19,12 @@ const site: SeoSite = {
 }
 
 describe('parseSeoStatus', () => {
+  it('reads the service account the Host reaches Google as, or why its key is unusable', () => {
+    expect(parseSeoStatus({ google: { serviceAccount: { email: 'seo@p.iam.gserviceaccount.com', error: null } } }).google.serviceAccount)
+      .toEqual({ email: 'seo@p.iam.gserviceaccount.com', error: null })
+    expect(parseSeoStatus({ google: { serviceAccount: { email: null, error: 'not JSON' } } }).google.serviceAccount).toEqual({ email: null, error: 'not JSON' })
+  })
+
   it('reads every section and fills what a partial answer leaves out', () => {
     const status = parseSeoStatus({
       redirectUri: 'https://h.example/seo/oauth/callback',
@@ -29,7 +35,7 @@ describe('parseSeoStatus', () => {
       drafts: [{ id: 'd1', siteId: 'klipara', topicId: 't1', title: 'Draft', submittedAt: '2026-09-30T10:00:00.000Z', editor: null }],
       articles: [{ id: 'a1', siteId: 'klipara', title: 'A', url: 'https://x', publishedAt: '2026-09-30', editorTotal: 41, metrics: [{ at: 'x', days: 28, clicks: 3, impressions: 90, position: 12.4 }], unpublishUrl: 'https://h/u' }],
     })
-    expect(status.google).toEqual({ clientSet: true, adsSet: false, clientSecretSet: true, developerTokenSet: false, connected: true, connectedAt: '2026-09-30T08:00:00.000Z' })
+    expect(status.google).toEqual({ serviceAccount: null, clientSet: true, adsSet: false, clientSecretSet: true, developerTokenSet: false, connected: true, connectedAt: '2026-09-30T08:00:00.000Z' })
     expect(status.paused).toEqual({ reason: 'paused by the owner', at: '2026-09-30T09:00:00.000Z' })
     expect(status.lastShiftDate).toBeNull()
     expect(status.sites[0]!.secretsSet).toEqual({ apiKey: true, wpUser: false, wpAppPassword: false })

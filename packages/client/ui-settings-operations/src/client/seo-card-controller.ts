@@ -29,7 +29,7 @@ export const SEO_STRING_FIELDS = [
 /** Whole-number fields, in the order the card shows them. */
 export const SEO_NUMBER_FIELDS = ['fallbackCooldownMinutes', 'researchCacheDays', 'answerWaitHours'] as const
 /** Write-only credentials. */
-export const SEO_SECRET_FIELDS = ['googleClientSecret', 'adsDeveloperToken'] as const
+export const SEO_SECRET_FIELDS = ['googleServiceAccountKey', 'googleClientSecret', 'adsDeveloperToken'] as const
 
 /** Provider and model pairs the card sets through a model picker. */
 export const SEO_MODEL_PAIRS = [

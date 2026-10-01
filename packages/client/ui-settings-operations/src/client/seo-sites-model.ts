@@ -123,6 +123,8 @@ export interface SeoGoogleStatus {
   clientSet: boolean
   /** The Ads developer token and customer id are saved. */
   adsSet: boolean
+  /** The service account Google is reached as, when its key is saved; `error` says why a saved key is unusable. */
+  serviceAccount: { email: string | null; error: string | null } | null
   /** The OAuth client secret is saved; never the secret itself. */
   clientSecretSet: boolean
   /** The Ads developer token is saved; never the token itself. */
@@ -209,6 +211,10 @@ export function parseSeoStatus(raw: unknown): SeoStatus {
     google: {
       clientSet: google['clientSet'] === true,
       adsSet: google['adsSet'] === true,
+      serviceAccount: google['serviceAccount'] === null || google['serviceAccount'] === undefined ? null : {
+        email: typeof record(google['serviceAccount'])['email'] === 'string' ? str(record(google['serviceAccount'])['email']) : null,
+        error: typeof record(google['serviceAccount'])['error'] === 'string' ? str(record(google['serviceAccount'])['error']) : null,
+      },
       clientSecretSet: google['clientSecretSet'] === true,
       developerTokenSet: google['developerTokenSet'] === true,
       connected: google['connected'] === true,

@@ -1,6 +1,8 @@
-import { createHash } from 'node:crypto'
+import { createHash, createVerify, generateKeyPairSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { authorizationUrl, exchangeCode, GoogleAuthError, GoogleTokens, pkcePair, randomState } from '../src/google/oauth.ts'
+import {
+  authorizationUrl, exchangeCode, GoogleAuthError, GoogleTokens, parseServiceAccountKey, pkcePair, randomState, ServiceAccountTokens,
+} from '../src/google/oauth.ts'
 import {
   AdsApiError, AdsQuotaError, ENGLISH, generateKeywordHistoricalMetrics, generateKeywordIdeas, isPlannableKeyword,
   KeywordPlanQueue, MARKETS, type AdsAuth,
@@ -326,5 +328,42 @@ describe('Search Console', () => {
 
   it('ends the window three days back', () => {
     expect(gscWindow(new Date('2026-10-01T12:00:00Z'), 28)).toEqual({ startDate: '2026-09-01', endDate: '2026-09-28' })
+  })
+})
+
+describe('service account sign-in', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+  const keyJson = JSON.stringify({ type: 'service_account', client_email: 'seo@wookiee.iam.gserviceaccount.com', private_key: pem })
+
+  it('reads a downloaded key and refuses anything else', () => {
+    expect(parseServiceAccountKey(keyJson)).toEqual({ clientEmail: 'seo@wookiee.iam.gserviceaccount.com', privateKey: pem })
+    expect(parseServiceAccountKey('{"type":"authorized_user"}')).toContain('not a service account key')
+    expect(parseServiceAccountKey('not json')).toContain('not valid JSON')
+  })
+
+  it('signs a JWT for the Ads and Search Console scopes, and reuses the token until it nears expiry', async () => {
+    const forms: URLSearchParams[] = []
+    const fetcher: typeof fetch = (_input, init) => {
+      forms.push(new URLSearchParams(typeof init?.body === 'string' ? init.body : ''))
+      return Promise.resolve(Response.json({ access_token: `at${String(forms.length)}`, expires_in: 3600 }))
+    }
+    let now = 1_790_000_000_000
+    const key = parseServiceAccountKey(keyJson)
+    if (typeof key === 'string') throw new Error(key)
+    const tokens = new ServiceAccountTokens(fetcher, () => key, () => now)
+    expect(await tokens.accessToken(new AbortController().signal)).toBe('at1')
+    expect(await tokens.accessToken(new AbortController().signal)).toBe('at1')
+    const form = forms[0]!
+    expect(form.get('grant_type')).toBe('urn:ietf:params:oauth:grant-type:jwt-bearer')
+    const [header = '', claims = '', signature = ''] = (form.get('assertion') ?? '').split('.')
+    expect(createVerify('RSA-SHA256').update(`${header}.${claims}`).verify(publicKey, Buffer.from(signature, 'base64url'))).toBe(true)
+    expect(JSON.parse(Buffer.from(claims, 'base64url').toString())).toMatchObject({
+      iss: 'seo@wookiee.iam.gserviceaccount.com',
+      scope: 'https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/webmasters',
+      aud: 'https://oauth2.googleapis.com/token',
+    })
+    now += 3600_000
+    expect(await tokens.accessToken(new AbortController().signal)).toBe('at2')
   })
 })

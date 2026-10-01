@@ -25,7 +25,9 @@ import {
   FallbackRouter, installFallback, localTime, parseShiftTime, shiftDue, startShift, whatsAppNotifier, whatsAppReader,
 } from '@deepseek-ai/dsh-host-employee-kit'
 import { askEditor } from './editor-call.ts'
-import { GoogleTokens, authorizationUrl, exchangeCode, pkcePair, randomState } from './google/oauth.ts'
+import {
+  GoogleTokens, ServiceAccountTokens, authorizationUrl, exchangeCode, parseServiceAccountKey, pkcePair, randomState, type ServiceAccountKey,
+} from './google/oauth.ts'
 import { listSites } from './google/gsc.ts'
 import { createPublisher } from './publishers/index.ts'
 import { probeWordPress } from './publishers/wordpress.ts'
@@ -72,6 +74,8 @@ export interface Config {
   /** The editor model; empty uses the shift's model. */
   editorProvider: Volatile<string>
   editorModel: Volatile<string>
+  /** A service account's JSON key; when set, Google is reached as that account and the OAuth client is not used. */
+  googleServiceAccountKey: Volatile<string>
   googleClientId: Volatile<string>
   googleClientSecret: Volatile<string>
   adsDeveloperToken: Volatile<string>
@@ -115,6 +119,7 @@ export const Config = z.object({
   fallbackCooldownMinutes: z.natural().default(15).volatile(),
   editorProvider: z.string().default('').volatile(),
   editorModel: z.string().default('').volatile(),
+  googleServiceAccountKey: z.string().role('secret').default('').volatile(),
   googleClientId: z.string().default('').volatile(),
   googleClientSecret: z.string().role('secret').default('').volatile(),
   adsDeveloperToken: z.string().role('secret').default('').volatile(),
@@ -278,7 +283,20 @@ export function apply(ctx: Context, config: Config): void {
   const tokens = new GoogleTokens(fetch, () => ({
     clientId: config.googleClientId.get().trim(), clientSecret: config.googleClientSecret.get().trim(), refreshToken,
   }))
+  // A service account, when its key is saved, replaces the OAuth sign-in: no consent screen, nothing to expire.
+  const serviceAccount = (): ServiceAccountKey | string | undefined => {
+    const raw = config.googleServiceAccountKey.get().trim()
+    return raw === '' ? undefined : parseServiceAccountKey(raw)
+  }
+  const accountTokens = new ServiceAccountTokens(fetch, () => {
+    const key = serviceAccount()
+    if (key === undefined || typeof key === 'string') throw new Error(key ?? 'No service account key is saved.')
+    return key
+  })
   const googleToken = async (signal: AbortSignal): Promise<string> => {
+    const key = serviceAccount()
+    if (typeof key === 'string') throw new Error(`The Google service account key on the SEO employee page is unusable: ${key}`)
+    if (key !== undefined) return accountTokens.accessToken(signal)
     if (config.googleClientId.get().trim() === '' || config.googleClientSecret.get().trim() === '') {
       throw new Error('Google is not set up: the owner enters the OAuth client id and secret on the SEO employee page.')
     }
@@ -301,6 +319,10 @@ export function apply(ctx: Context, config: Config): void {
       adsApiVersion: () => config.adsApiVersion.get().trim() || 'v25',
       researchCacheDays: () => config.researchCacheDays.get(),
       answerWaitHours: () => config.answerWaitHours.get(),
+      serviceAccountEmail: () => {
+        const key = serviceAccount()
+        return key === undefined || typeof key === 'string' ? undefined : key.clientEmail
+      },
     },
     fetch,
     now: () => new Date(),
@@ -348,6 +370,11 @@ export function apply(ctx: Context, config: Config): void {
     return {
       redirectUri,
       google: {
+        serviceAccount: (() => {
+          const key = serviceAccount()
+          if (key === undefined) return null
+          return typeof key === 'string' ? { email: null, error: key } : { email: key.clientEmail, error: null }
+        })(),
         clientSet: config.googleClientId.get().trim() !== '' && config.googleClientSecret.get().trim() !== '',
         clientSecretSet: config.googleClientSecret.get().trim() !== '',
         developerTokenSet: config.adsDeveloperToken.get().trim() !== '',
