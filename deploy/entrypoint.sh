@@ -93,6 +93,9 @@ fi
 if [[ "${DSH_KLIPARA_SCOUT:-1}" != "0" && "${DSH_SCOUT_MCP:-1}" != "0" ]]; then
   export DSH_SCOUT_TOKEN="${DSH_SCOUT_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
+  export DSH_SEO_TOKEN="${DSH_SEO_TOKEN:-$(random_token)}"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -371,6 +374,18 @@ if [[ "${DSH_KLIPARA_SCOUT:-1}" != "0" ]]; then
     register_cli_mcp dsh-scout scout-mcp.mjs DSH_SCOUT_TOKEN DSH_SCOUT_COMMAND_URL \
       "http://127.0.0.1:$INTERNAL_PORT/scout/command" "Klipara Scout"
   fi
+fi
+
+# SEO employee (packages/host/seo-employee): researches keywords for the
+# owner's sites, writes and publishes articles, and reports rankings. Off
+# until switched on at Plugins -> SEO employee; sites are added there. CLI
+# models reach its tools over MCP.
+if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/seo-employee" "$HOME/.dsh/skills/seo-employee"
+  echo "[entrypoint] SEO employee available (Plugins -> SEO employee: settings, Google and sites)"
+  register_cli_mcp dsh-seo seo-mcp.mjs DSH_SEO_TOKEN DSH_SEO_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT/seo/command" "SEO employee"
 fi
 
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in

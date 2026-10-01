@@ -5,14 +5,15 @@
 // no tools and has every call refused.
 //
 // It exists for the DeerFlow browser. Its Google account is the one Klipara
-// downloads YouTube videos with, so Klipara Scout Sessions (ids `scout-…`)
-// must never drive it; they use the separate outreach browser. The CLIs pass
+// downloads YouTube videos with, so Klipara Scout (ids `scout-…`) and SEO
+// employee (ids `seo-…`) Sessions must never drive it; the scout uses the
+// separate outreach browser. The CLIs pass
 // each run's DSH_SESSION_ID to the servers they start, and a direct remote
 // registration cannot see it, so the CLIs reach DeerFlow through this relay.
 //
 //   RELAY_NAME                   server name, for messages
 //   RELAY_URL_VAR / RELAY_TOKEN_VAR   names of the variables holding the URL and bearer token
-//   RELAY_DENY_SESSION_PREFIX    e.g. "scout-"; empty relays everything
+//   RELAY_DENY_SESSION_PREFIX    comma-separated, e.g. "scout-,seo-"; empty relays everything
 //
 // Only JSON-RPC goes to stdout; diagnostics go to stderr.
 
@@ -21,9 +22,9 @@ import { createInterface } from 'node:readline'
 const NAME = process.env.RELAY_NAME ?? 'relay'
 const URL_ = process.env[process.env.RELAY_URL_VAR ?? 'RELAY_URL'] ?? ''
 const TOKEN = process.env[process.env.RELAY_TOKEN_VAR ?? 'RELAY_TOKEN'] ?? ''
-const DENY = process.env.RELAY_DENY_SESSION_PREFIX ?? ''
+const DENY = (process.env.RELAY_DENY_SESSION_PREFIX ?? '').split(',').map(prefix => prefix.trim()).filter(Boolean)
 const SESSION = process.env.DSH_SESSION_ID ?? ''
-const denied = DENY !== '' && SESSION.startsWith(DENY)
+const denied = DENY.some(prefix => SESSION.startsWith(prefix))
 
 let remoteSession
 const write = (message) => { process.stdout.write(`${JSON.stringify(message)}\n`) }

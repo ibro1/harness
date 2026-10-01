@@ -2623,6 +2623,9 @@ importers:
       '@deepseek-ai/dsh-host-postgres':
         specifier: workspace:*
         version: link:../../host/postgres
+      '@deepseek-ai/dsh-host-seo-employee':
+        specifier: workspace:*
+        version: link:../../host/seo-employee
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../host/webserver
@@ -9198,6 +9201,49 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
 
+  packages/host/employee-kit:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../util/brand
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: workspace:*
+        version: link:../../core/agent-default-model
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: workspace:*
+        version: link:../../core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: workspace:*
+        version: link:../../preset/agent-preset-registry
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-llm-retry':
+        specifier: workspace:*
+        version: link:../../llm/llm-retry
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../interaction/permission-presets
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-session-title':
+        specifier: workspace:*
+        version: link:../../session/session-title
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../workspace/workspace
+
   packages/host/error-reporting:
     dependencies:
       '@sentry/browser':
@@ -9262,6 +9308,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../util/brand
+      '@deepseek-ai/dsh-host-employee-kit':
+        specifier: workspace:*
+        version: link:../employee-kit
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -9444,6 +9493,58 @@ importers:
       '@deepseek-ai/dsh-loader-smoke':
         specifier: workspace:*
         version: link:../../test-support/loader-smoke
+
+  packages/host/seo-employee:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../util/atomic-write
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../util/brand
+      '@deepseek-ai/dsh-host-employee-kit':
+        specifier: workspace:*
+        version: link:../employee-kit
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: workspace:*
+        version: link:../../core/agent-default-model
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: workspace:*
+        version: link:../../preset/agent-preset-registry
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../webserver
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../interaction/permission-presets
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-session-title':
+        specifier: workspace:*
+        version: link:../../session/session-title
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:*
+        version: link:../../settings/settings
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../workspace/workspace
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
 
   packages/host/webserver:
     dependencies:

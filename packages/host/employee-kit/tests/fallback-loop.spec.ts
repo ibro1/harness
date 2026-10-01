@@ -52,7 +52,7 @@ async function load(): Promise<Context> {
   return context
 }
 
-describe('scout fallback in the agent loop', () => {
+describe('an employee fallback in the agent loop', () => {
   it('finishes a scout turn on the fallback after the harness retries give up, and returns to the shift model next turn', { timeout: 60_000 }, async () => {
     const loaded = await load()
     const agy = new NamedAdapter('from agy')

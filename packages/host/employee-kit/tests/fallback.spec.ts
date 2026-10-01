@@ -24,7 +24,7 @@ function router(fallback: Route | null = pickle) {
   return { r, switches, advance: (ms: number) => { clock += ms } }
 }
 
-describe('scout fallback model', () => {
+describe('an employee fallback model', () => {
   it('benches a spent quota until its stated reset, sending every turn meanwhile straight to the fallback', () => {
     const { r, switches, advance } = router()
     expect(r.request('s', 1, agy)).toEqual(agy)

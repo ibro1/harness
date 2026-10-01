@@ -65,6 +65,17 @@ describe('ui-settings-operations apply', () => {
     expect(slots.entries('plugins.item')[0]!.options.id).toBe('cloudflare')
   })
 
+  it('registers the SEO employee card and its sites page while the Host serves seo-employee', async () => {
+    const { ctx, slots } = await bench(['seo-employee'])
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(2) })
+    const entries = slots.entries('plugins.item')
+    expect(entries.map(entry => [entry.options.id, entry.options.order])).toEqual([['seo-employee', 82], ['seo-employee-sites', 83]])
+    expect(entries.map(entry => resolveSlotLabel(entry.options.label))).toEqual(['SEO employee', 'SEO sites'])
+  })
+
   it('removes its pages with the plugin', async () => {
     const { ctx, slots } = await bench(['dokploy', 'postgres', 'cloudflare'])
     const fiber = ctx.plugin({ inject: [...inject], apply })

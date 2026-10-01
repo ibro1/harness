@@ -826,6 +826,10 @@ Klipara's free-clip page tells the scout who asked for a clip themselves, so the
 
 The outreach browser on the DeerFlow sandbox (`/mnt/shared/outreach-browser`, outside this repo) starts with `--mute-audio` and a local `no-autoplay` extension that pauses every YouTube video as it starts, so shifts and reply checks never leave videos playing. The scout skill also tells the shift to close the tabs it opens.
 
+## SEO employee
+
+A second employee (`packages/host/seo-employee`), off until switched on at **Plugins → SEO employee**. It researches keywords for the sites added on **Plugins → SEO sites** (Search Console, Google Ads Keyword Planner, Google suggestions), plans one page per search intent, asks the owner for first-hand material on WhatsApp, writes articles that must pass the plugin's checks and an editor model's review, publishes them to Klipara's content API or a WordPress site (application password) within each site's weekly cap, and tracks how they rank. Google is connected from the settings page with **Connect Google** once the OAuth client id and secret are entered there; add `https://<this host>/seo/oauth/callback` as an authorised redirect URI on that client and set the consent screen to *In production*, or the connection expires after 7 days. Each published article is announced on WhatsApp with a one-tap unpublish link. `DSH_SEO_EMPLOYEE=0` leaves it out.
+
 ## Error reporting (GlitchTip)
 
 Production errors go to the self-hosted GlitchTip at https://bug.linkfa.de

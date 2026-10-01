@@ -23,7 +23,7 @@ Once a day this plugin starts a shift Session that works Klipara's outreach: it 
 
 Configure it on **Plugins → Klipara Scout**: switch the shift on, set the start time and time zone, the daily caps, search topics, channel size and Shorts limits, the Klipara API key (created on Klipara's API keys page), the WhatsApp chat that hears about replies and pauses, optionally the model the shift runs on, and the fallback model (default `opencode` / `big-pickle`) a turn moves to when the shift's model fails. The leads, with their stage, sample, pitch and replies, are on their own page, **Plugins → Klipara Scout leads**, which the settings page links with **View leads**; it reads `/scout/leads.json` and refreshes every 15 seconds. Samples finish without anyone asking: every two minutes the plugin checks Klipara for finished jobs, exports and hosts each finished sample, and sends the latest shift Session a message listing them so it pitches them; when that Session is no longer live they wait for the next shift. While any pitch awaits an answer, the plugin also asks the shift to check Gmail and YouTube notifications every `replyCheckMinutes` (default 15; 0 leaves replies to the daily shift), starting one reply Session for the day when the shift is gone; no check runs with nothing pitched, while the shift is busy, or while paused.
 
-When a scout Session's model request fails for a provider reason, the request moves to the fallback model and the shift's model is benched for every scout Session: until its quota resets when the failure says when ("Resets in 1h56m", or the provider's retry-after), otherwise for `fallbackCooldownMinutes` (default 15). A spent quota moves at once, skipping the harness's retries, which would only repeat the refusal; a server error or broken stream gets those retries first. While the model is benched, scout turns go straight to the fallback; the first turn after the bench ends tries it again. The owner hears once per outage on WhatsApp, with the time the shift's model is tried again. A failure another model would not fix is not moved: a context overflow, a cancel, or a run the CLI bridge's watchdog stopped because the page it drove hung. While a turn runs on the fallback, `scout_pitch` is refused unless **Pitch on the fallback model** is on, so pitches wait for the shift's model; reply checks and samples go on.
+When a scout Session's model request fails for a provider reason, the request moves to the fallback model and the shift's model is benched for every scout Session: until its quota resets when the failure says when ("Resets in 1h56m", or the provider's retry-after), otherwise for `fallbackCooldownMinutes` (default 15). A spent quota moves at once, skipping the harness's retries, which would only repeat the refusal; a server error or broken stream gets those retries first. While the model is benched, scout turns go straight to the fallback; the first turn after the bench ends tries it again. The owner hears once per outage on WhatsApp, with the time the shift's model is tried again. A failure another model would not fix is not moved: a context overflow, a cancel, or a run the CLI bridge's watchdog stopped because the page it drove hung. While a turn runs on the fallback, `scout_pitch` is refused unless **Pitch on the fallback model** is on, so pitches wait for the shift's model; reply checks and samples go on. The shift timer, this fallback router and the WhatsApp alerts live in `@deepseek-ai/dsh-host-employee-kit`, shared with the SEO employee.
 
 A lead moves `found → sampling → sampled → pitched → replied`, then `won` or `lost`; `skipped` records a channel passed over and why, so no later search reads it again.
 
@@ -61,11 +61,19 @@ State is one JSON file under `<DSH home>/klipara-scout`, replaced atomically wit
 <a id="model-experience"></a>
 ## Model Experience
 
-Shift Sessions see the eleven `scout_*` tools and the opening message naming the skill file; other Sessions see none of them. Each tool returns one text block.
+### Shift tools
+
+#### What the model sees
+
+Shift and reply-check Sessions (`scout-…`) see the `scout_*` tools and the opening message naming the skill file; other Sessions see none of them. Finished samples arrive as a user message listing them. Each tool returns one text block; a refusal is a tool error saying what to do instead.
+
+#### Token effect
+
+The tool schemas ride every request of a scout Session; lead lists and search results stay in that Session until compaction.
 
 #### KV Cache effect
 
-The tool definitions join a shift Session's prompt prefix once and stay stable across its turns.
+The tool definitions join a shift Session's prompt prefix once and stay stable across its turns; a turn moved to the fallback model starts that model's cache.
 
 ## Known Limitations and Deferred Work
 

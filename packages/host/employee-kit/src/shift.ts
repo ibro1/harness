@@ -1,7 +1,7 @@
 /**
- * The daily shift: deciding in the operator's time zone whether today's shift
- * is due, and starting it as an ordinary root Session with the shift prompt,
- * the same way the webhook ingress starts one.
+ * An employee's daily shift: deciding in the operator's time zone whether
+ * today's shift is due, and starting it as an ordinary root Session with the
+ * shift prompt, the same way the webhook ingress starts one.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -9,22 +9,11 @@ import { randomUUID } from 'node:crypto'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
-import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createUserMessage, type MessageSource } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-workspace'
-
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    /** The prompt that opens a Klipara Scout shift. */
-    'klipara-scout': {
-      readonly kind: 'klipara-scout'
-      readonly form: 'notice'
-      readonly summary: string
-    }
-  }
-}
 
 /** A wall-clock reading in one time zone. */
 export interface LocalTime {
@@ -84,6 +73,10 @@ export interface ShiftRequest {
   /** Empty provider or model uses the harness default model. */
   provider: string
   model: string
+  /** Session id prefix that marks the employee's Sessions, for example `scout-`. */
+  sessionPrefix: string
+  /** The opening message's source, declared by the employee in `MessageSourceMap`; receives the bounded title. */
+  source: (summary: string) => MessageSource
 }
 
 /**
@@ -105,7 +98,7 @@ export async function startShift(ctx: Context, request: ShiftRequest, signal: Ab
   void presetScope
   signal.throwIfAborted()
   const workspace = await ctx.workspaceRegistry.create(request.workspacePath)
-  const sessionId = brandString<SessionId>(`scout-${randomUUID()}`)
+  const sessionId = brandString<SessionId>(`${request.sessionPrefix}${randomUUID()}`)
   const handle = await ctx.agents.create({
     sessionId,
     signal,
@@ -121,7 +114,7 @@ export async function startShift(ctx: Context, request: ShiftRequest, signal: Ab
     ctx.sessionTitle.rename(handle.agent.session, request.title)
     handle.agent.followup(createUserMessage({
       content: [{ type: 'text', text: request.prompt }],
-      source: { kind: 'klipara-scout', form: 'notice', summary: boundContextSummary(request.title) },
+      source: request.source(boundContextSummary(request.title)),
     }))
   } catch (error: unknown) {
     if (attached) await workspace.detachSession(sessionId).catch(() => undefined)

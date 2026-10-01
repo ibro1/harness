@@ -1,8 +1,9 @@
 /**
- * The shift's fallback model. When the shift's model fails for a provider
- * reason, scout requests move to the fallback model and the shift's model is
- * benched: until its quota resets, when the provider said when that is, or for
- * a cooldown otherwise. While it is benched every scout turn goes straight to
+ * An employee shift's fallback model. When the shift's model fails for a
+ * provider reason, the employee's requests move to the fallback model and the
+ * shift's model is benched: until its quota resets, when the provider said
+ * when that is, or for a cooldown otherwise. While it is benched every turn of
+ * the employee's Sessions goes straight to
  * the fallback; the first turn after the bench ends tries the shift's model
  * again, and a new failure benches it again.
  *
@@ -11,8 +12,8 @@
  * own retries. A run the bridge's watchdog stopped is not a provider failure:
  * it means the page it was driving hung, which another model would hit too.
  *
- * While a turn runs on the fallback, pitching is held unless the owner allows
- * it, so what goes out under the outreach account's name is written by the
+ * An employee may hold outward-facing tools while a turn runs on the fallback
+ * (`onFallback`), so what goes out under the owner's name is written by the
  * model the owner chose.
  */
 
@@ -120,10 +121,10 @@ export interface FallbackOptions {
   now?: () => number
 }
 
-/** Decides each scout request's route and when a failure benches the shift's model. */
+/** Decides each employee request's route and when a failure benches the shift's model. */
 export class FallbackRouter {
   private readonly sessions = new Map<string, SessionRoute>()
-  /** Benched routes and when each may be tried again, shared by every scout Session. */
+  /** Benched routes and when each may be tried again, shared by every Session of the employee. */
   private readonly benched = new Map<string, number>()
   private readonly now: () => number
 

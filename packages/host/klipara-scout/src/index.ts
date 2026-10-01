@@ -27,17 +27,16 @@ import { samplePosterSource, serveSample, setSampleCover, storeSample } from './
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import { FallbackRouter, installFallback } from './fallback.ts'
 import { EVENT_ID, ownerNote, parseEvent, recordEvent, verifySignature } from './inbound.ts'
 import { readFeed, sameShow, searchPodcasts } from './podcasts.ts'
 import { styleProblems } from './style.ts'
-import { localTime, parseShiftTime, shiftDue, startShift } from './shift.ts'
+import { FallbackRouter, installFallback, localTime, parseShiftTime, shiftDue, startShift, whatsAppNotifier } from '@deepseek-ai/dsh-host-employee-kit'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
 import { channelFacts, execYtDlp, searchLongVideos, type ChannelFacts, type FoundVideo, type YtDlpRunner } from './youtube.ts'
 
 export { bestCandidate, KliparaError, kliparaClient } from './klipara.ts'
 export type { KliparaApi, KliparaCandidate, KliparaJob } from './klipara.ts'
-export { localTime, parseShiftTime, shiftDue } from './shift.ts'
+export { localTime, parseShiftTime, shiftDue } from '@deepseek-ai/dsh-host-employee-kit'
 export { ScoutStore, emptyState } from './store.ts'
 export type { Lead, LeadStage, ScoutState } from './store.ts'
 export type { YtDlpRunner } from './youtube.ts'
@@ -57,6 +56,17 @@ export interface ScoutFailure {
   sampleId?: string
   error: unknown
   redact: string[]
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** The prompt that opens a Klipara Scout shift or reply check. */
+    'klipara-scout': {
+      readonly kind: 'klipara-scout'
+      readonly form: 'notice'
+      readonly summary: string
+    }
+  }
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -857,22 +867,7 @@ export function apply(ctx: Context, config: Config): void {
   const samplesDir = join(dataDir, 'samples')
   const prefix = config.path.replace(/\/+$/u, '')
   const reportFailure = (failure: ScoutFailure): void => { ctx.emit('klipara-scout/failure', failure) }
-  const notify = async (text: string): Promise<string> => {
-    const to = config.notifyTo.get().trim()
-    if (to === '' || config.whatsappUrl === '' || config.whatsappToken === '') return 'not sent (no WhatsApp recipient or route configured)'
-    try {
-      const response = await fetch(config.whatsappUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${config.whatsappToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'whatsapp_send', args: { to, text, send_now: true } }),
-        signal: AbortSignal.timeout(20_000),
-      })
-      const body = await response.json() as { error?: string }
-      return body.error === undefined ? `sent to ${to}` : `failed: ${body.error}`
-    } catch (error) {
-      return `failed: ${error instanceof Error ? error.message : String(error)}`
-    }
-  }
+  const notify = whatsAppNotifier({ url: config.whatsappUrl, token: config.whatsappToken, to: () => config.notifyTo.get() })
   const deps: ScoutDeps = {
     store,
     config,
@@ -1109,6 +1104,8 @@ export function apply(ctx: Context, config: Config): void {
         permissionPreset: config.permissionPreset,
         provider: config.provider.get(),
         model: config.model.get(),
+        sessionPrefix: 'scout-',
+        source: summary => ({ kind: 'klipara-scout', form: 'notice', summary }),
       }, AbortSignal.timeout(120_000))
       await store.update((s) => { s.lastShiftSession = sessionId })
       process.stderr.write(`klipara-scout: started the ${now.date} shift as session ${sessionId}\n`)
@@ -1210,6 +1207,8 @@ export function apply(ctx: Context, config: Config): void {
         permissionPreset: config.permissionPreset,
         provider: config.provider.get(),
         model: config.model.get(),
+        sessionPrefix: 'scout-',
+        source: summary => ({ kind: 'klipara-scout', form: 'notice', summary }),
       }, AbortSignal.timeout(120_000))
       await store.update((s) => { s.lastShiftSession = sessionId })
     } catch (error) {
