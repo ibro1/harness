@@ -35,6 +35,8 @@ export interface Lead {
   source: string
   /** The podcast the lead was found through, when it came from a podcast feed. */
   podcast?: { title: string; feedUrl: string; directoryUrl: string }
+  /** Set when the creator asked for a free clip on Klipara's own page: never pitched. */
+  inbound?: { status: 'confirmed' | 'sent'; sourceUrl: string; sampleUrl?: string; at: string }
   /** Klipara analysis job for the sample. */
   jobId?: string
   /** The hosted sample's id and public page. */
@@ -65,6 +67,8 @@ export interface ScoutState {
   lastShiftSession?: string
   /** Podcast feeds already read, so no later search reads one again. Newest last, capped. */
   podcastsSeen?: string[]
+  /** Free-clip event ids already recorded, so Klipara's retries change nothing. Newest last, capped. */
+  inboundEvents?: string[]
 }
 
 /** A state with nothing in it. */

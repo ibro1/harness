@@ -70,6 +70,7 @@ The outreach account is new and closely watched by Google; when unsure, pause.
 ## Never
 
 - contact a creator who is not a lead, or one already pitched;
+- contact a creator whose lead says `source: free-clip` or has `inbound`: they asked Klipara for a clip themselves, and the owner follows them up;
 - negotiate, quote prices, or promise delivery times: the owner does that after a reply;
 - post the sample publicly anywhere other than the pitch;
 - resume a pause on your own. `scout_resume` is only for when the owner asks for it in the conversation.
