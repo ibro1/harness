@@ -313,6 +313,8 @@
       config:
         publicBaseUrl: !!js "process.env.DSH_PUBLIC_HOST ? 'https://' + process.env.DSH_PUBLIC_HOST : ''"
         token: !!js process.env.DSH_TTS_TOKEN || ''
+        envSocialCrawlApiKey: !!js process.env.SOCIALCRAWL_API_KEY || ''
+        envProxy: !!js process.env.TTS_PROXY_URL || process.env.HTTPS_PROXY || process.env.https_proxy || ''
         workspacePath: !!js process.env.DSH_TTS_WORKSPACE || '/workspace/tiktok-shop-employee'
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''

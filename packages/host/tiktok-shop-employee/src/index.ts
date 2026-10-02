@@ -25,6 +25,8 @@ import { reviewPage } from './pages.ts'
 import { renderVideo } from './render.ts'
 import { DEFAULT_BLOCKED_WORDS } from './rules.ts'
 import { socialCrawl } from './socialcrawl.ts'
+import { directShop, withFallback } from './direct.ts'
+import { resolveBrowserPath } from '@deepseek-ai/dsh-host-capture'
 import { ShopStore } from './store.ts'
 import { buildShopTools } from './tools.ts'
 import { createSpeaker, envKeys, VOICE_PROVIDERS, type VoiceProvider } from './voice.ts'
@@ -33,6 +35,8 @@ export { lineSpans, renderVideo, wrap } from './render.ts'
 export type { RenderJob, RenderTools, ScriptLine } from './render.ts'
 export { blockedWord, DEFAULT_BLOCKED_WORDS, finalCaption, scriptProblems } from './rules.ts'
 export { parseProduct, socialCrawl } from './socialcrawl.ts'
+export { DirectUnavailable, directShop, productsIn, proxyOption, withFallback } from './direct.ts'
+export type { DirectSettings, SourcedAnswer } from './direct.ts'
 export type { ShopProduct, SocialCrawl } from './socialcrawl.ts'
 export { emptyState, ShopStore } from './store.ts'
 export type { ShopState, TrackedProduct, VideoRecord } from './store.ts'
@@ -80,8 +84,20 @@ export interface Config {
   blockedWords: Volatile<string[]>
   /** TikTok Shop market, `GB` for the United Kingdom. */
   region: Volatile<string>
-  /** SocialCrawl API key; write-only on the settings page. */
+  /** SocialCrawl API key; write-only on the settings page. Wins over `envSocialCrawlApiKey`. */
   socialCrawlApiKey: Volatile<string>
+  /** The same key from the deployment environment (`SOCIALCRAWL_API_KEY`), used when the page has none. */
+  envSocialCrawlApiKey: string
+  /** Proxy for reading TikTok directly, `http://user:pass@host:port`; write-only. Wins over `envProxy`. */
+  directProxy: Volatile<string>
+  /** The proxy from the environment (`TTS_PROXY_URL`, else `HTTPS_PROXY`). */
+  envProxy: string
+  /** Direct search page; `{region}` and `{query}` are filled in. */
+  directSearchUrl: Volatile<string>
+  /** Direct product page; `{region}` and `{id}` are filled in. */
+  directProductUrl: Volatile<string>
+  /** Chromium for the direct read; empty searches PATH. */
+  browserPath: string
   /** `auto` (every Gemini key, then Groq as the last resort), `gemini`, `groq` or `elevenlabs`. */
   voiceProvider: Volatile<string>
   /** Gemini voice name, such as Puck. */
@@ -135,6 +151,12 @@ export const Config = z.object({
   blockedWords: z.array(z.string()).default([...DEFAULT_BLOCKED_WORDS]).volatile(),
   region: z.string().default('GB').volatile(),
   socialCrawlApiKey: z.string().role('secret').default('').volatile(),
+  envSocialCrawlApiKey: z.string().default(''),
+  directProxy: z.string().role('secret').default('').volatile(),
+  envProxy: z.string().default(''),
+  directSearchUrl: z.string().default('https://shop.tiktok.com/{region}/search?q={query}').volatile(),
+  directProductUrl: z.string().default('https://shop.tiktok.com/{region}/pdp/{id}').volatile(),
+  browserPath: z.string().default(''),
   voiceProvider: z.string().default('auto').volatile(),
   voice: z.string().default('Puck').volatile(),
   groqVoice: z.string().default('troy').volatile(),
@@ -214,6 +236,8 @@ export function apply(ctx: Context, config: Config): void {
   }
   const reviewLink = (videoId: string): string => `${publicBase}${prefix}/v/${videoId}?sig=${sign(videoId)}`
 
+  const dataKey = (): string => config.socialCrawlApiKey.get().trim() || config.envSocialCrawlApiKey.trim()
+  const proxy = (): string => config.directProxy.get().trim() || config.envProxy.trim()
   const speak = createSpeaker(() => ({
     provider: (VOICE_PROVIDERS as readonly string[]).includes(config.voiceProvider.get()) ? config.voiceProvider.get() as VoiceProvider : 'auto',
     geminiVoice: config.voice.get(),
@@ -287,7 +311,18 @@ export function apply(ctx: Context, config: Config): void {
 
   const tools = buildShopTools({
     store,
-    data: socialCrawl(() => config.socialCrawlApiKey.get(), () => config.region.get()),
+    data: withFallback(
+      directShop(() => ({
+        proxy: proxy(),
+        browserPath: resolveBrowserPath(config.browserPath),
+        region: config.region.get(),
+        searchUrl: config.directSearchUrl.get(),
+        productUrl: config.directProductUrl.get(),
+        timeoutMs: 45_000,
+      })),
+      socialCrawl(dataKey, () => config.region.get()),
+      () => proxy() !== '',
+    ),
     blockedWords: () => [...config.blockedWords.get()],
     videosPerDay: () => config.videosPerDay.get(),
     today,
@@ -376,7 +411,9 @@ export function apply(ctx: Context, config: Config): void {
         cap: config.videosPerDay.get(),
         paused: state.paused,
         lastShiftDate: state.lastShiftDate,
-        dataKey: config.socialCrawlApiKey.get().trim() !== '',
+        dataKey: dataKey() !== '',
+        dataKeySource: config.socialCrawlApiKey.get().trim() !== '' ? 'settings' : config.envSocialCrawlApiKey.trim() !== '' ? 'environment' : 'none',
+        proxy: proxy() !== '',
         groqKey: config.groqApiKey.get().trim() !== '',
         // How many keys of each the voice can use; never the keys.
         voiceKeys: { gemini: envKeys(process.env, 'GEMINI_API_KEY').length, groq: envKeys(process.env, 'GROQ_API_KEY').length },

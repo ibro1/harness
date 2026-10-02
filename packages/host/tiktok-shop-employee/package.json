@@ -20,7 +20,9 @@
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
-    "@deepseek-ai/dsh-host-employee-kit": "workspace:*"
+    "@deepseek-ai/dsh-host-capture": "workspace:*",
+    "@deepseek-ai/dsh-host-employee-kit": "workspace:*",
+    "playwright-core": "^1.49.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

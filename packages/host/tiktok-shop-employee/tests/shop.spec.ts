@@ -13,6 +13,7 @@ import {
   lineSpans, scriptProblems, ShopStore, socialCrawl, wrap,
 } from '../src/index.ts'
 import type { ShopProduct, SocialCrawl } from '../src/index.ts'
+import { DirectUnavailable, productsIn, proxyOption, withFallback } from '../src/index.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 const dirs: string[] = []
@@ -26,9 +27,12 @@ function setup(overrides: { videosPerDay?: number } = {}) {
   dirs.push(dir)
   const rendered: string[] = []
   const notes: string[] = []
-  const data: SocialCrawl = {
-    search: () => Promise.resolve([BALM, WINE]),
-    product: () => Promise.resolve({ ...BALM, description: 'Tinted balm with collagen. Adds shine.', images: [...BALM.images, 'https://img.test/d.jpg'] }),
+  const data = {
+    search: () => Promise.resolve({ value: [BALM, WINE], source: 'SocialCrawl' as const }),
+    product: () => Promise.resolve({
+      value: { ...BALM, description: 'Tinted balm with collagen. Adds shine.', images: [...BALM.images, 'https://img.test/d.jpg'] },
+      source: 'SocialCrawl' as const,
+    }),
   }
   const store = new ShopStore(join(dir, 'state.json'))
   const tools = new Map(buildShopTools({
@@ -210,5 +214,36 @@ describe('voice keys', () => {
   it('says which keys failed when none can speak', async () => {
     const speak = createSpeaker(() => ({ ...settings, provider: 'gemini' }), { GEMINI_API_KEY: 'g0' }, voiceFetch(['g0'], []))
     await expect(speak('x', '/tmp/never.wav', exec.signal)).rejects.toThrow(/GEMINI_API_KEY: daily quota spent/u)
+  })
+})
+
+describe('direct read with SocialCrawl as the fallback', () => {
+  const crawl: SocialCrawl = { search: () => Promise.resolve([BALM]), product: () => Promise.resolve(BALM) }
+
+  it('finds products anywhere in a page\'s JSON, ignoring ids that are not product ids', () => {
+    const page = { props: { data: { list: [{ product_id: '1729587769570529799', title: 'Lip balm', sale_price: { amount: '12.99' } }, { id: '7', title: 'Tab', price: 1 }] } } }
+    expect(productsIn(page).map(p => [p.id, p.price])).toEqual([['1729587769570529799', 12.99]])
+  })
+
+  it('reads the proxy\'s credentials for the browser', () => {
+    expect(proxyOption('http://user%40x:p%3Ass@proxy.test:8080')).toEqual({ server: 'http://proxy.test:8080', username: 'user@x', password: 'p:ss' })
+  })
+
+  it('uses TikTok directly when it answers, and SocialCrawl when it is blocked or no proxy is set', async () => {
+    const direct: SocialCrawl = { search: () => Promise.resolve([{ ...BALM, id: '99' }]), product: () => Promise.resolve(BALM) }
+    const blocked: SocialCrawl = { search: () => Promise.reject(new DirectUnavailable('TikTok showed "Security Check"')), product: () => Promise.resolve(undefined) }
+    expect(await withFallback(direct, crawl, () => true).search('balm', exec.signal)).toMatchObject({ source: 'TikTok directly' })
+    expect(await withFallback(blocked, crawl, () => true).search('balm', exec.signal))
+      .toMatchObject({ source: 'SocialCrawl', directFailed: 'TikTok showed "Security Check"' })
+    let called = false
+    const watched: SocialCrawl = { search: () => { called = true; return Promise.resolve([]) }, product: () => Promise.resolve(undefined) }
+    expect(await withFallback(watched, crawl, () => false).search('balm', exec.signal)).toMatchObject({ source: 'SocialCrawl' })
+    expect(called).toBe(false)
+  })
+
+  it('names both failures when neither source answers', async () => {
+    const blocked: SocialCrawl = { search: () => Promise.reject(new DirectUnavailable('blocked')), product: () => Promise.resolve(undefined) }
+    const broken: SocialCrawl = { search: () => Promise.reject(new Error('no key')), product: () => Promise.resolve(undefined) }
+    await expect(withFallback(blocked, broken, () => true).search('x', exec.signal)).rejects.toThrow('TikTok directly: blocked. SocialCrawl: no key')
   })
 })

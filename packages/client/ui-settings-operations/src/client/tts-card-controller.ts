@@ -18,13 +18,13 @@ import type { ScoutModelCatalogState } from './scout-model-catalog.ts'
 export const TTS_NS = 'tiktok-shop-employee'
 
 /** String fields, in the order the card shows them. */
-export const TTS_STRING_FIELDS = ['shiftTime', 'timeZone', 'notifyTo', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'region', 'voiceProvider', 'voice', 'groqVoice', 'voiceStyle'] as const
+export const TTS_STRING_FIELDS = ['shiftTime', 'timeZone', 'notifyTo', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'region', 'directSearchUrl', 'directProductUrl', 'voiceProvider', 'voice', 'groqVoice', 'voiceStyle'] as const
 /** Whole-number fields. */
 export const TTS_NUMBER_FIELDS = ['videosPerDay', 'fallbackCooldownMinutes'] as const
 /** One-per-line list fields. */
 export const TTS_LIST_FIELDS = ['themes', 'blockedWords'] as const
 /** Write-only keys. */
-export const TTS_SECRET_FIELDS = ['socialCrawlApiKey', 'groqApiKey'] as const
+export const TTS_SECRET_FIELDS = ['socialCrawlApiKey', 'directProxy', 'groqApiKey'] as const
 /** Provider and model pairs set through a model picker. */
 export const TTS_MODEL_PAIRS = [
   { key: 'shiftModel', provider: 'provider', model: 'model' },
@@ -60,6 +60,10 @@ export interface TtsStatus {
   paused: { reason: string } | null
   lastShiftDate: string | null
   dataKey: boolean
+  /** Where the SocialCrawl key comes from; absent on older Hosts. */
+  dataKeySource?: 'settings' | 'environment' | 'none'
+  /** Whether a proxy is set, so TikTok is read directly first. */
+  proxy?: boolean
   groqKey: boolean
   /** How many Gemini and Groq keys the deployment gives the voice. */
   voiceKeys?: { gemini: number; groq: number }

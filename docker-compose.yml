@@ -162,6 +162,10 @@ services:
       # More Gemini and Groq keys for the TikTok Shop employee's voice, which moves
       # to the next key when one is rate-limited (Groq after every Gemini key).
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # TikTok Shop employee: product data, and the proxy it reads TikTok directly
+      # through (SocialCrawl is the fallback when the direct read fails).
+      SOCIALCRAWL_API_KEY: ${SOCIALCRAWL_API_KEY:-}
+      TTS_PROXY_URL: ${TTS_PROXY_URL:-}
       GEMINI_API_KEY_1: ${GEMINI_API_KEY_1:-}
       GEMINI_API_KEY_2: ${GEMINI_API_KEY_2:-}
       GEMINI_API_KEY_3: ${GEMINI_API_KEY_3:-}

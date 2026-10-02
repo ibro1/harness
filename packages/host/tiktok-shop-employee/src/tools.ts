@@ -10,13 +10,18 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ParameterSchemaSpec, ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { ScriptLine } from './render.ts'
 import { blockedWord, finalCaption, scriptProblems } from './rules.ts'
-import type { SocialCrawl } from './socialcrawl.ts'
+import type { SourcedAnswer } from './direct.ts'
+import type { ShopProduct } from './socialcrawl.ts'
 import type { ShopState, ShopStore, TrackedProduct, VideoRecord } from './store.ts'
 
 /** What the tools read and call. */
 export interface ShopDeps {
   store: ShopStore
-  data: SocialCrawl
+  /** Product data: TikTok directly through the proxy when one is set, SocialCrawl otherwise or when that fails. */
+  data: {
+    search: (query: string, signal: AbortSignal) => Promise<SourcedAnswer<ShopProduct[]>>
+    product: (ref: string, signal: AbortSignal) => Promise<SourcedAnswer<ShopProduct | undefined>>
+  }
   /** Words that keep a product out. */
   blockedWords: () => string[]
   videosPerDay: () => number
@@ -133,7 +138,8 @@ export function buildShopTools(deps: ShopDeps): ToolDefinition[] {
       run: async (args, exec) => {
         const query = String(args['query']).trim()
         if (query === '') throw new Error('Give search words.')
-        const found = await deps.data.search(query, exec.signal)
+        const answer = await deps.data.search(query, exec.signal)
+        const found = answer.value
         const blocked: string[] = []
         const allowed = found.filter((p) => {
           const word = blockedWord(p, deps.blockedWords())
@@ -150,7 +156,7 @@ export function buildShopTools(deps: ShopDeps): ToolDefinition[] {
         })
         const listed = allowed.map(p => findProduct(state, p.id)).sort((a, b) => (b.sold ?? 0) - (a.sold ?? 0))
         return [
-          `"${query}": ${String(found.length)} products, ${String(allowed.length)} allowed.`,
+          `"${query}": ${String(found.length)} products, ${String(allowed.length)} allowed (from ${answer.source}${answer.directFailed === undefined ? '' : `; the direct read failed: ${answer.directFailed}`}).`,
           ...listed.map(p => describe(p, state)),
           ...blocked.length === 0 ? [] : [`Left out by the owner's blocked words: ${blocked.join('; ')}.`],
         ].join('\n')
@@ -163,7 +169,7 @@ export function buildShopTools(deps: ShopDeps): ToolDefinition[] {
       run: async (args, exec) => {
         const id = String(args['product_id'])
         const before = findProduct(await store.read(), id)
-        const details = await deps.data.product(before.url ?? id, exec.signal)
+        const details = (await deps.data.product(before.url ?? id, exec.signal)).value
         const product = await store.update((s) => {
           const p = findProduct(s, id)
           if (details !== undefined) {

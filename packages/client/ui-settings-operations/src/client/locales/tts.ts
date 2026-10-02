@@ -3,13 +3,13 @@
 /** The fields that carry a label and a hint. */
 export type TtsFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'notifyTo' | 'videosPerDay' | 'fallbackCooldownMinutes' | 'themes' | 'blockedWords' | 'region'
-  | 'voiceProvider' | 'voice' | 'groqVoice' | 'voiceStyle' | 'socialCrawlApiKey' | 'groqApiKey' | 'shiftModel' | 'fallbackModelPick'
+  | 'directProxy' | 'directSearchUrl' | 'directProductUrl' | 'voiceProvider' | 'voice' | 'groqVoice' | 'voiceStyle' | 'socialCrawlApiKey' | 'groqApiKey' | 'shiftModel' | 'fallbackModelPick'
 
 /** Locale keys the card renders. */
 export type TtsLocaleKey =
   | 'ttsTitle' | 'ttsDescription' | 'ttsInvalid'
   | 'ttsStatusTitle' | 'ttsStatusLoading' | 'ttsStatusUnknown' | 'ttsRunning' | 'ttsPaused' | 'ttsToday' | 'ttsLastShift' | 'ttsNoDataKey'
-  | 'ttsVoiceKeys' | 'ttsRunNow' | 'ttsPause' | 'ttsResume' | 'ttsRefresh' | 'ttsStarted' | 'ttsNoVideos' | 'ttsResults'
+  | 'ttsVoiceKeys' | 'ttsSourceDirect' | 'ttsSourceCrawl' | 'ttsDataKeyFromEnv' | 'ttsRunNow' | 'ttsPause' | 'ttsResume' | 'ttsRefresh' | 'ttsStarted' | 'ttsNoVideos' | 'ttsResults'
   | 'ttsVideo.rendering' | 'ttsVideo.failed' | 'ttsVideo.ready' | 'ttsVideo.posted' | 'ttsVideo.skipped'
   | `tts.${TtsFieldKey}` | `tts.${TtsFieldKey}.hint` | 'tts.shiftModel.none' | 'tts.fallbackModelPick.none'
 
@@ -58,6 +58,15 @@ export const ttsEn: Record<TtsLocaleKey, string> = {
   'tts.region.hint': 'TikTok Shop market as a two-letter code: GB for the United Kingdom.',
   'tts.voiceProvider': 'Voice provider',
   'tts.voiceProvider.hint': 'auto: every Gemini key in the deployment (GEMINI_API_KEY, then _1 to _9), then Groq as the last resort (the key below, GROQ_API_KEY, then _1 to _9); a busy key hands the line to the next. Or gemini, groq or elevenlabs alone.',
+  'ttsSourceDirect': 'Products: read from TikTok directly through the proxy, with SocialCrawl as the fallback.',
+  'ttsSourceCrawl': 'Products: from SocialCrawl. Set a proxy to read TikTok directly first.',
+  'ttsDataKeyFromEnv': 'Using SOCIALCRAWL_API_KEY from the deployment; a key saved here wins over it.',
+  'tts.directProxy': 'Proxy for reading TikTok directly',
+  'tts.directProxy.hint': 'http://user:pass@host:port or socks5://host:port. With one set, searches open TikTok Shop in the harness\'s own headless browser through it, and fall back to SocialCrawl when TikTok blocks or shows nothing. Empty uses TTS_PROXY_URL or HTTPS_PROXY from the deployment. Write-only.',
+  'tts.directSearchUrl': 'Direct search page',
+  'tts.directSearchUrl.hint': 'TikTok Shop search address; {region} and {query} are filled in.',
+  'tts.directProductUrl': 'Direct product page',
+  'tts.directProductUrl.hint': 'TikTok Shop product address; {region} and {id} are filled in.',
   'ttsVoiceKeys': 'The deployment gives the voice {gemini} Gemini and {groq} Groq keys.',
   'tts.voice': 'Gemini voice',
   'tts.voice.hint': 'A Gemini voice name, such as Puck, Kore or Charon.',
@@ -122,6 +131,15 @@ export const ttsZh: Record<TtsLocaleKey, string> = {
   'tts.region.hint': 'TikTok Shop 市场的两字母代码：英国为 GB。',
   'tts.voiceProvider': '配音服务',
   'tts.voiceProvider.hint': 'auto：先依次使用部署中的每个 Gemini 密钥（GEMINI_API_KEY，然后 _1 到 _9），最后才用 Groq（下方的密钥、GROQ_API_KEY，然后 _1 到 _9）；某个密钥繁忙时交给下一个。也可只用 gemini、groq 或 elevenlabs。',
+  'ttsSourceDirect': '商品：通过代理直接读取 TikTok，失败时改用 SocialCrawl。',
+  'ttsSourceCrawl': '商品：来自 SocialCrawl。设置代理后会先直接读取 TikTok。',
+  'ttsDataKeyFromEnv': '正在使用部署中的 SOCIALCRAWL_API_KEY；在此保存的密钥优先于它。',
+  'tts.directProxy': '直接读取 TikTok 的代理',
+  'tts.directProxy.hint': 'http://user:pass@host:port 或 socks5://host:port。设置后，搜索会在 harness 自己的无头浏览器中经此代理打开 TikTok Shop；TikTok 拦截或无结果时改用 SocialCrawl。留空则使用部署中的 TTS_PROXY_URL 或 HTTPS_PROXY。只写。',
+  'tts.directSearchUrl': '直接搜索页',
+  'tts.directSearchUrl.hint': 'TikTok Shop 搜索地址；会填入 {region} 和 {query}。',
+  'tts.directProductUrl': '直接商品页',
+  'tts.directProductUrl.hint': 'TikTok Shop 商品地址；会填入 {region} 和 {id}。',
   'ttsVoiceKeys': '部署为配音提供了 {gemini} 个 Gemini 密钥和 {groq} 个 Groq 密钥。',
   'tts.voice': 'Gemini 声音',
   'tts.voice.hint': 'Gemini 声音名称，例如 Puck、Kore 或 Charon。',

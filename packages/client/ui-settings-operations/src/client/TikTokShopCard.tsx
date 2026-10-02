@@ -39,7 +39,8 @@ function StatusBlock(props: {
         {' · '}{t('ttsToday', { made: status.today, cap: status.cap })}
         {status.lastShiftDate === null ? '' : ` · ${t('ttsLastShift', { date: status.lastShiftDate })}`}
       </p>
-      {status.dataKey ? null : <p className={css.pickerUnknown}>{t('ttsNoDataKey')}</p>}
+      {status.dataKey || status.proxy === true ? null : <p className={css.pickerUnknown}>{t('ttsNoDataKey')}</p>}
+      <p className={css.pickerHint}>{status.proxy === true ? t('ttsSourceDirect') : t('ttsSourceCrawl')}</p>
       <div className={css.pickerCurrent}>
         <Button variant="outline" size="sm" disabled={status.paused !== null || !status.dataKey} onClick={props.onRun}>{t('ttsRunNow')}</Button>
         {status.paused === null
@@ -86,10 +87,11 @@ export function TikTokShopCard(props: TikTokShopCardProps) {
     onReset: () => { props.resetField(field) },
     onEdit: (text: string) => { props.edit(field, text) },
   })
-  const text = (field: 'shiftTime' | 'timeZone' | 'notifyTo' | 'region' | 'voiceProvider' | 'voice' | 'groqVoice' | 'voiceStyle') => (
+  type TextField = 'shiftTime' | 'timeZone' | 'notifyTo' | 'region' | 'directSearchUrl' | 'directProductUrl' | 'voiceProvider' | 'voice' | 'groqVoice' | 'voiceStyle'
+  const text = (field: TextField) => (
     <SettingsValueField id={`plugin-config-tts-${field}`} label={t(`tts.${field}`)} hint={t(`tts.${field}.hint`)} {...state.strings[field]} {...common(field)} />
   )
-  const secret = (field: 'socialCrawlApiKey' | 'groqApiKey', saved: boolean | undefined) => (
+  const secret = (field: 'socialCrawlApiKey' | 'directProxy' | 'groqApiKey', saved: boolean | undefined) => (
     <SettingsSecretField
       id={`plugin-config-tts-${field}`}
       label={t(`tts.${field}`)}
@@ -116,6 +118,8 @@ export function TikTokShopCard(props: TikTokShopCardProps) {
         <p>{t('tts.enabled.hint')}</p>
       </div>
       {secret('socialCrawlApiKey', live.status?.dataKey)}
+      {live.status?.dataKeySource === 'environment' ? <p className={css.pickerHint}>{t('ttsDataKeyFromEnv')}</p> : null}
+      {secret('directProxy', live.status?.proxy)}
       {text('shiftTime')}
       {text('timeZone')}
       {text('notifyTo')}
@@ -126,6 +130,8 @@ export function TikTokShopCard(props: TikTokShopCardProps) {
         <SettingsValueField key={field} id={`plugin-config-tts-${field}`} label={t(`tts.${field}`)} hint={t(`tts.${field}.hint`)} multiline {...state.lists[field]} {...common(field)} />
       ))}
       {text('region')}
+      {text('directSearchUrl')}
+      {text('directProductUrl')}
       {text('voiceProvider')}
       {live.status?.voiceKeys === undefined
         ? null
