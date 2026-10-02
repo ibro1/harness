@@ -163,9 +163,12 @@ services:
       # to the next key when one is rate-limited (Groq after every Gemini key).
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # TikTok Shop employee: product data, and the proxy it reads TikTok directly
-      # through (SocialCrawl is the fallback when the direct read fails).
+      # through (SocialCrawl is the fallback when the direct read fails). The
+      # project's HTTPS_PROXY is passed only here, not as the container's
+      # HTTPS_PROXY: that would send the CLIs, yt-dlp and the voice and
+      # transcription calls through the proxy too.
       SOCIALCRAWL_API_KEY: ${SOCIALCRAWL_API_KEY:-}
-      TTS_PROXY_URL: ${TTS_PROXY_URL:-}
+      TTS_PROXY_URL: ${TTS_PROXY_URL:-${HTTPS_PROXY:-}}
       GEMINI_API_KEY_1: ${GEMINI_API_KEY_1:-}
       GEMINI_API_KEY_2: ${GEMINI_API_KEY_2:-}
       GEMINI_API_KEY_3: ${GEMINI_API_KEY_3:-}
