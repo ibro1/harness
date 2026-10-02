@@ -155,3 +155,15 @@ export function noticeText(notice: ManagerNotice, t: Translate): string {
     }
   }
 }
+
+/**
+ * Whether a card matches a search: every word of the query appears somewhere in its text, ignoring case and accents.
+ * @param text - everything the card says: title, description, package name.
+ * @param query - what the person typed.
+ * @returns true for an empty query, or when every word matches.
+ */
+export function matchesSearch(text: string, query: string): boolean {
+  const fold = (value: string): string => value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
+  const haystack = fold(text)
+  return fold(query).split(/\s+/u).filter(word => word !== '').every(word => haystack.includes(word))
+}

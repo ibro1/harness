@@ -62,6 +62,16 @@
 
 .status,
 .failure p,
+.search {
+  margin: 0 0 4px;
+}
+
+.search > span {
+  /* The Input atom's wrapper: full width on a phone, a comfortable line on a desktop. */
+  width: 100%;
+  max-width: 480px;
+}
+
 .empty {
   margin: 0;
   font-size: 13px;

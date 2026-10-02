@@ -9,13 +9,13 @@
  * the page declares.
  */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { PluginInstallFailureKind, Registry } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   Button, IconCheckCircleFillRegular, IconChevronDownOutlineRegular, IconChevronLeftOutlineMedium,
   IconChevronRightOutlineRegular, IconCloseOutlineMedium,
-  IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular,
+  IconPlusOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular, IconTrashOutlineRegular,
   IconWarningOutlineRegular, Input, Modal,
   PluginArtworkDefault, PluginArtworkLoop, PluginArtworkSearch, PluginArtworkSubagent, PluginArtworkTerminal,
   StateDot, Switch, Tag, TerminalBlock, Toast, useAnchoredPosition, useDismissOnOutsidePointer,
@@ -30,7 +30,7 @@ import {
   type InstallInputError, type InstallState, type InstallSubject, type PackageRow, type PackageView,
   type PluginManagerFace, type RegistryChoice,
 } from './manager-store.ts'
-import { managementText, noticeText, packageText, registryText, rowText, type Translate } from './presentation.ts'
+import { managementText, matchesSearch, noticeText, packageText, registryText, rowText, type Translate } from './presentation.ts'
 import type { PluginPackageRef, PluginRowRef, PluginsSubject } from './slot-contract.ts'
 import type { ConfigPageForm } from './slot-contract.ts'
 import css from './PluginManagerPage.module.css'
@@ -387,14 +387,20 @@ function PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnab
  * One official plugin as a card that opens its page: its icon, its title from
  * the registration, and the one-liner the entry renders in its summary view.
  */
-function ItemCard({ item, t, onOpen, renderSlot }: {
+function ItemCard({ item, t, onOpen, renderSlot, hidden, onText }: {
   readonly item: OfficialItem
   readonly t: Translate
   readonly onOpen: () => void
   readonly renderSlot: RenderConfig
+  /** Kept rendered while a search hides it, so its summary stays searchable. */
+  readonly hidden: boolean
+  /** Hears the card's rendered text: its summary comes from the registrant's component, not from data. */
+  readonly onText: (id: string, text: string) => void
 }): ReactNode {
+  const ref = useRef<HTMLLIElement>(null)
+  useLayoutEffect(() => { onText(item.id, ref.current?.textContent ?? '') })
   return (
-    <li className={`${css.card} ${css.cardLink}`} data-plugin-item={item.id}>
+    <li ref={ref} className={`${css.card} ${css.cardLink}`} data-plugin-item={item.id} hidden={hidden}>
       <CardHead title={item.label} t={t} onOpen={onOpen} icon={itemArtwork(item.id)} description={renderSlot('plugins.item', { view: 'summary' }, { only: item.id })} />
     </li>
   )
@@ -1158,6 +1164,12 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   // What is open; a package that leaves the list (uninstalled) drops back to the cards.
   const view = props.useStore(state => state.view), { setView } = props.actions
   const [activation, setActivation] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  // Each official item's rendered card text, for search; set only when it changes, so the effect that reports it settles.
+  const [itemTexts, setItemTexts] = useState<Record<string, string>>({})
+  const reportItemText = (id: string, text: string): void => {
+    setItemTexts(previous => previous[id] === text ? previous : { ...previous, [id]: text })
+  }
   useEffect(() => { ensure() }, [ensure])
   // A package an install just enabled: scroll it into view and mark it for a moment.
   const { highlight, clearHighlight } = { highlight: state.highlight, clearHighlight: props.clearHighlight }
@@ -1191,6 +1203,12 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
     has: row => ledger.rows.has(rowConfigKey(pkg.name, row.rowId)),
     open: (row) => { setView({ kind: 'row', name: pkg.name, rowId: row.rowId }) },
   })
+  const searching = query.trim() !== ''
+  const packageMatches = (pkg: PackageView): boolean => {
+    const { title, description } = packageText(pkg, resolveText)
+    return matchesSearch(`${title} ${description ?? ''} ${pkg.name}`, query)
+  }
+  const itemMatches = (item: OfficialItem): boolean => matchesSearch(`${item.label} ${item.id} ${itemTexts[item.id] ?? ''}`, query)
   const packageCard = (pkg: PackageView): ReactNode => (
     <PackageCard
       key={pkg.name}
@@ -1204,20 +1222,33 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
     />
   )
   // The Official group: the bundles the installation ships, then the plugins that registered their configuration.
+  // A search drops bundles that do not match; official items stay rendered but hidden, so their summaries stay searchable.
+  const officialPackages = official.filter(packageMatches)
+  const shownItems = ledger.items.filter(itemMatches)
   const officialCards = [
-    ...official.map(packageCard),
+    ...officialPackages.map(packageCard),
     ...ledger.items.map(item => (
-      <ItemCard key={`item:${item.id}`} item={item} t={t} renderSlot={renderSlot} onOpen={() => { setView({ kind: 'item', id: item.id }) }} />
+      <ItemCard
+        key={`item:${item.id}`}
+        item={item}
+        t={t}
+        renderSlot={renderSlot}
+        hidden={!shownItems.includes(item)}
+        onText={reportItemText}
+        onOpen={() => { setView({ kind: 'item', id: item.id }) }}
+      />
     )),
   ]
-  // One group of cards under its heading and count; the Official group comes first, and a group with nothing in it takes no room.
-  const renderGroup = (id: 'official' | 'bundles', heading: string, cards: readonly ReactNode[]): ReactNode => cards.length === 0
+  const officialCount = officialPackages.length + shownItems.length
+  const mineShown = mine.filter(packageMatches)
+  // One group of cards under its heading and count; the Official group comes first, and a group with nothing to show takes no room.
+  const renderGroup = (id: 'official' | 'bundles', heading: string, cards: readonly ReactNode[], count: number): ReactNode => cards.length === 0
     ? null
     : (
-      <section className={css.group} data-plugin-scope="global" data-plugin-group={id}>
+      <section className={css.group} data-plugin-scope="global" data-plugin-group={id} hidden={count === 0}>
         <div className={css.groupHead}>
           <h3 className={css.groupTitle}>{heading}</h3>
-          <span className={css.count} data-plugin-count={cards.length}>{cards.length}</span>
+          <span className={css.count} data-plugin-count={count}>{count}</span>
         </div>
         <ul className={css.cards}>{cards}</ul>
       </section>
@@ -1313,8 +1344,27 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
           ? <p className={css.empty}>{t('empty')}</p>
           : (
             <>
-              {renderGroup('official', t('officialTitle'), officialCards)}
-              {renderGroup('bundles', t('bundlesTitle'), mine.map(packageCard))}
+              <div className={css.search}>
+                <Input
+                  type="search"
+                  icon={<IconSearchOutlineRegular size={14} />}
+                  aria-label={t('searchLabel')}
+                  placeholder={t('searchPlaceholder')}
+                  value={query}
+                  onChange={(event) => { setQuery(event.target.value) }}
+                  onKeyDown={(event) => { if (event.key === 'Escape' && query !== '') { event.preventDefault(); setQuery('') } }}
+                />
+              </div>
+              {renderGroup('official', t('officialTitle'), officialCards, officialCount)}
+              {renderGroup('bundles', t('bundlesTitle'), mineShown.map(packageCard), mineShown.length)}
+              {searching && officialCount === 0 && mineShown.length === 0
+                ? (
+                  <p className={css.empty} role="status">
+                    {t('searchEmpty', { query: query.trim() })}{' '}
+                    <Button variant="ghost" size="sm" onClick={() => { setQuery('') }}>{t('searchClear')}</Button>
+                  </p>
+                )
+                : null}
               {/* A failed package read trails the groups it left incomplete: right under Official on a
                   first-load failure, and after the kept cards when a refresh fails over stale data. */}
               {state.status === 'error'
