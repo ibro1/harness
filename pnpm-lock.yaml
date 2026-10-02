@@ -9494,6 +9494,28 @@ importers:
         specifier: workspace:*
         version: link:../../test-support/loader-smoke
 
+  packages/host/psd-tools:
+    dependencies:
+      '@deepseek-ai/dsh-host-capture':
+        specifier: workspace:*
+        version: link:../capture
+      playwright-core:
+        specifier: ^1.49.0
+        version: 1.61.1
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+
   packages/host/seo-employee:
     dependencies:
       '@deepseek-ai/dsh-atomic-write':

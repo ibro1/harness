@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The harness's session outputs and page capture tools over MCP, for the agy and opencode CLIs; see
+// The harness's session outputs, page capture and PSD tools over MCP, for the agy and opencode CLIs; see
 // command-route-mcp.mjs.
 
 import { serveCommandRoute } from './command-route-mcp.mjs'

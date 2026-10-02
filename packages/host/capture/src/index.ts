@@ -40,9 +40,10 @@ import type { HostLookup } from './ssrf.ts'
 
 /** The plugin name, for the Loader. */
 // For other plugins that render pages themselves (the SEO employee's article images): the same browser driver and URL screen.
-export { createChromiumDriver } from './chromium.ts'
+export { createChromiumDriver, resolveBrowserPath } from './chromium.ts'
 export type { ChromiumDriverOptions } from './chromium.ts'
-export type { CaptureDriver, CaptureRequest, CaptureResult } from './driver.ts'
+export { isOutputsCapability } from './driver.ts'
+export type { CaptureDriver, CaptureRequest, CaptureResult, OutputsCapability } from './driver.ts'
 export { BlockedUrlError, screenUrl, systemLookup } from './ssrf.ts'
 export type { ScreenedUrl } from './ssrf.ts'
 
@@ -293,8 +294,8 @@ export function clampRequest(args: CaptureArgs, config: Config): ClampedRequest 
   }
 }
 
-/** Where the PNG ended up. */
-interface ImageRecord {
+/** Where a delivered file ended up. */
+export interface ImageRecord {
   name: string
   bytes: number
   published: boolean
@@ -311,25 +312,28 @@ function captureFileName(url: URL): string {
 }
 
 /**
- * Put the PNG where the person who asked can open it: through the `outputs`
+ * Put a file where the person who asked can open it: through the `outputs`
  * capability when one is mounted, otherwise in the session's own output
- * directory, saying which happened.
- * @param png - the image bytes.
+ * directory, saying which happened. Other plugins that produce files (the PSD
+ * tools) deliver through this too.
+ * @param png - the file bytes.
  * @param fileName - the name to give it.
  * @param cwd - the session working directory.
  * @param outputs - the capability, when mounted.
  * @param fallbackDir - directory under `cwd` used when it is not.
  * @param notes - collects a fallback explanation for the model.
+ * @param label - what the outputs drawer calls the file.
  * @returns where the file landed.
  * @throws when the file cannot be written at all.
  */
-async function deliverImage(
+export async function deliverFile(
   png: Uint8Array,
   fileName: string,
   cwd: string,
   outputs: OutputsCapability | undefined,
   fallbackDir: string,
   notes: string[],
+  label = 'page capture',
 ): Promise<ImageRecord> {
   if (outputs !== undefined) {
     // Staged inside the session cwd: `outputs` refuses a source outside it, so
@@ -339,7 +343,7 @@ async function deliverImage(
       staging = await mkdtemp(join(cwd, '.capture-staging-'))
       const staged = join(staging, fileName)
       await writeFile(staged, png)
-      const published = await outputs.publish(cwd, staged, 'page capture')
+      const published = await outputs.publish(cwd, staged, label)
       return {
         name: published.name,
         bytes: published.bytes,
@@ -490,7 +494,7 @@ export function buildCaptureTools(config: Config, deps: CaptureDeps = {}): ToolD
 
         const notes = [...result.notes]
         const cwd = resolveCwd(exec)
-        const image = await deliverImage(
+        const image = await deliverFile(
           result.png,
           captureFileName(screened.url),
           cwd,

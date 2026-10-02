@@ -1,0 +1,11 @@
+# PSD tools, layered over the shipped Web composition.
+#
+# psd_open, psd_edit, psd_script and psd_export open, change and export
+# Photoshop files through Photopea, loaded from photopea.com into the harness's
+# own headless Chromium (never the DeerFlow browser). Files come from the
+# session workspace; results go to the session outputs drawer. Needs `chromium`
+# on PATH and outbound HTTPS to www.photopea.com.
+- insert:
+    - id: psd-tools
+      name: '../../packages/host/psd-tools/lib/index.js'
+      config: {}

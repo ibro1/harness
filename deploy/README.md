@@ -564,6 +564,7 @@ plugin an overlay inserts can never take a saved edit.
 |---|---|---|---|
 | Session outputs | yes | `DSH_OUTPUTS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
 | Page capture | yes | `DSH_CAPTURE=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
+| PSD tools | yes | `DSH_PSD_TOOLS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
 | Agent Teams tools route | yes; lists tools only while Agent Teams is enabled under Plugins | `DSH_AGENT_TOOLS_MCP=0` | yes, unless `DSH_AGENT_TOOLS_MCP=0` |
 | Cloudflare | yes | `DSH_CLOUDFLARE=0` | yes, unless `DSH_CLOUDFLARE_MCP=0` |
 | Postgres | yes | `DSH_POSTGRES=0` | yes, unless `DSH_POSTGRES_MCP=0` |
@@ -640,6 +641,10 @@ is a warning and every capture fails. Loopback and private addresses are
 refused, because the harness's own services and bridges listen on loopback.
 Each capture starts from an empty browser profile, so a page behind a login
 renders logged out.
+
+### PSD tools
+
+`psd_open`, `psd_edit`, `psd_script` and `psd_export` open, change and export Photoshop files through Photopea, loaded from photopea.com into the harness's own headless Chromium (not the DeerFlow browser). Files come from the session workspace and results land in Session outputs with a preview PNG. The `psd-designer` skill describes the workflow. It needs Chromium in the image and outbound HTTPS to www.photopea.com; see `packages/host/psd-tools/README.md`.
 
 ### Cloudflare
 

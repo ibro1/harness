@@ -1,4 +1,4 @@
-// Session tools for the CLIs: `publish_output` and `capture_page` over one
+// Session tools for the CLIs: `publish_output`, `capture_page` and the PSD tools over one
 // token-guarded command route, for the agy and opencode CLIs' MCP clients.
 //
 // Those CLIs run their own agent loop and drop the harness's tools, so a model
@@ -24,7 +24,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
 import { buildOutputTools } from '../../packages/host/outputs/lib/index.js'
-import { buildCaptureTools, Config as CaptureConfig } from '../../packages/host/capture/lib/index.js'
+import { buildCaptureTools, Config as CaptureConfig, resolveBrowserPath } from '../../packages/host/capture/lib/index.js'
+import { buildPsdTools, Config as PsdConfig, createPhotopeaEngine } from '../../packages/host/psd-tools/lib/index.js'
 
 export const name = 'session-tools'
 export const inject = ['webServer', 'sessions']
@@ -33,6 +34,7 @@ export const Config = z.object({
   path: z.string().default('/session-tools'),
   token: z.string().default(''),
   capture: z.boolean().default(true),
+  psd: z.boolean().default(true),
 })
 
 /** Largest command body accepted: a tool call's arguments, never a file. */
@@ -76,6 +78,16 @@ export function apply(ctx, config) {
     return service !== undefined && typeof service.publish === 'function' ? service : undefined
   }
   const captureConfig = CaptureConfig({})
+  // One Photopea browser for every CLI call, closed when idle and on dispose.
+  const psdConfig = PsdConfig({})
+  const psdEngine = createPhotopeaEngine({
+    resolveBrowser: () => resolveBrowserPath(psdConfig.browserPath),
+    photopeaUrl: psdConfig.photopeaUrl,
+    loadTimeoutMs: psdConfig.loadTimeoutMs,
+    stepTimeoutMs: psdConfig.stepTimeoutMs,
+    idleCloseMs: psdConfig.idleCloseMs,
+  })
+  ctx.effect(() => () => { void psdEngine.close() }, 'session-tools: Photopea browser')
 
   /**
    * The session's working directory, from the session store only.
@@ -103,6 +115,7 @@ export function apply(ctx, config) {
     return [
       ...(outputs === undefined ? [] : buildOutputTools(outputs, resolveCwd)),
       ...(config.capture ? buildCaptureTools(captureConfig, { readOutputs, resolveCwd: () => resolveCwd() }) : []),
+      ...(config.psd ? buildPsdTools(psdConfig, { engine: psdEngine, readOutputs, resolveCwd: () => resolveCwd() }) : []),
     ]
   }
 

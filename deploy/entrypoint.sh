@@ -342,13 +342,27 @@ if [[ "${DSH_CAPTURE:-1}" != "0" ]]; then
   fi
 fi
 
-# Session tools for the CLIs: publish_output and capture_page over one route.
+# PSD tools: Photoshop files edited through Photopea in the same headless
+# Chromium page capture uses, started on the first call and closed when idle.
+if [[ "${DSH_PSD_TOOLS:-1}" != "0" ]]; then
+  patch_args+=(--patch "$APP_DIR/deploy/plugins/psd-tools.cordis.yml")
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/psd-designer" "$HOME/.dsh/skills/psd-designer"
+  if command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
+    || command -v google-chrome >/dev/null 2>&1; then
+    echo "[entrypoint] PSD tools enabled (psd_open, psd_edit, psd_script, psd_export; skill psd-designer)"
+  else
+    echo "[entrypoint] WARNING: PSD tools enabled but no chromium on PATH — every call will fail." >&2
+  fi
+fi
+
+# Session tools for the CLIs: publish_output, capture_page and the PSD tools over one route.
 # They act on a session's workspace, so the route resolves it from the session
 # id the bridge hands each CLI request (see deploy/plugins/session-tools.mjs).
 if [[ -n "${DSH_SESSION_TOOLS_TOKEN:-}" && "${DSH_SESSION_TOOLS_MCP:-1}" != "0" ]]; then
   patch_args+=(--patch "$APP_DIR/deploy/plugins/session-tools.cordis.yml")
   register_cli_mcp dsh-session-tools session-tools-mcp.mjs DSH_SESSION_TOOLS_TOKEN DSH_SESSION_TOOLS_COMMAND_URL \
-    "http://127.0.0.1:$INTERNAL_PORT${DSH_SESSION_TOOLS_PATH:-/session-tools}/command" "session outputs and page capture"
+    "http://127.0.0.1:$INTERNAL_PORT${DSH_SESSION_TOOLS_PATH:-/session-tools}/command" "session outputs, page capture and PSD tools"
 fi
 
 # Agent Teams tools for the CLIs: spawn_teammate, send_message, wait_agent and
