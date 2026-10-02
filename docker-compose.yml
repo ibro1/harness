@@ -144,13 +144,33 @@ services:
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
       ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_API_KEY_1: ${GROQ_API_KEY_1:-}
+      GROQ_API_KEY_2: ${GROQ_API_KEY_2:-}
+      GROQ_API_KEY_3: ${GROQ_API_KEY_3:-}
+      GROQ_API_KEY_4: ${GROQ_API_KEY_4:-}
+      GROQ_API_KEY_5: ${GROQ_API_KEY_5:-}
+      GROQ_API_KEY_6: ${GROQ_API_KEY_6:-}
+      GROQ_API_KEY_7: ${GROQ_API_KEY_7:-}
+      GROQ_API_KEY_8: ${GROQ_API_KEY_8:-}
+      GROQ_API_KEY_9: ${GROQ_API_KEY_9:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       TRANSCRIBE_PROVIDER: ${TRANSCRIBE_PROVIDER:-}
       # video-use TTS (speak.py): Gemini voiceover with prompt-steered accents.
       # Durable key from aistudio.google.com/apikey (starts AIzaSy); the
       # ELEVENLABS_API_KEY above doubles as the second TTS provider.
+      # More Gemini and Groq keys for the TikTok Shop employee's voice, which moves
+      # to the next key when one is rate-limited (Groq after every Gemini key).
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEY_1: ${GEMINI_API_KEY_1:-}
+      GEMINI_API_KEY_2: ${GEMINI_API_KEY_2:-}
+      GEMINI_API_KEY_3: ${GEMINI_API_KEY_3:-}
+      GEMINI_API_KEY_4: ${GEMINI_API_KEY_4:-}
+      GEMINI_API_KEY_5: ${GEMINI_API_KEY_5:-}
+      GEMINI_API_KEY_6: ${GEMINI_API_KEY_6:-}
+      GEMINI_API_KEY_7: ${GEMINI_API_KEY_7:-}
+      GEMINI_API_KEY_8: ${GEMINI_API_KEY_8:-}
+      GEMINI_API_KEY_9: ${GEMINI_API_KEY_9:-}
     volumes:
       # Harness state: sessions, settings.yaml, provider credentials, attachments.
       - dsh-state:/home/node/.dsh

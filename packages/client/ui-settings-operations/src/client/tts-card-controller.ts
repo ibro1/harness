@@ -18,7 +18,7 @@ import type { ScoutModelCatalogState } from './scout-model-catalog.ts'
 export const TTS_NS = 'tiktok-shop-employee'
 
 /** String fields, in the order the card shows them. */
-export const TTS_STRING_FIELDS = ['shiftTime', 'timeZone', 'notifyTo', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'region', 'voiceProvider', 'voice', 'voiceStyle'] as const
+export const TTS_STRING_FIELDS = ['shiftTime', 'timeZone', 'notifyTo', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'region', 'voiceProvider', 'voice', 'groqVoice', 'voiceStyle'] as const
 /** Whole-number fields. */
 export const TTS_NUMBER_FIELDS = ['videosPerDay', 'fallbackCooldownMinutes'] as const
 /** One-per-line list fields. */
@@ -61,6 +61,8 @@ export interface TtsStatus {
   lastShiftDate: string | null
   dataKey: boolean
   groqKey: boolean
+  /** How many Gemini and Groq keys the deployment gives the voice. */
+  voiceKeys?: { gemini: number; groq: number }
   products: number
   videos: TtsVideoRow[]
 }

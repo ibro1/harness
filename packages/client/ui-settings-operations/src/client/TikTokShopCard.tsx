@@ -86,7 +86,7 @@ export function TikTokShopCard(props: TikTokShopCardProps) {
     onReset: () => { props.resetField(field) },
     onEdit: (text: string) => { props.edit(field, text) },
   })
-  const text = (field: 'shiftTime' | 'timeZone' | 'notifyTo' | 'region' | 'voiceProvider' | 'voice' | 'voiceStyle') => (
+  const text = (field: 'shiftTime' | 'timeZone' | 'notifyTo' | 'region' | 'voiceProvider' | 'voice' | 'groqVoice' | 'voiceStyle') => (
     <SettingsValueField id={`plugin-config-tts-${field}`} label={t(`tts.${field}`)} hint={t(`tts.${field}.hint`)} {...state.strings[field]} {...common(field)} />
   )
   const secret = (field: 'socialCrawlApiKey' | 'groqApiKey', saved: boolean | undefined) => (
@@ -127,8 +127,12 @@ export function TikTokShopCard(props: TikTokShopCardProps) {
       ))}
       {text('region')}
       {text('voiceProvider')}
+      {live.status?.voiceKeys === undefined
+        ? null
+        : <p className={css.pickerHint}>{t('ttsVoiceKeys', { gemini: live.status.voiceKeys.gemini, groq: live.status.voiceKeys.groq })}</p>}
       {secret('groqApiKey', live.status?.groqKey)}
       {text('voice')}
+      {text('groqVoice')}
       {text('voiceStyle')}
       {TTS_MODEL_PAIRS.map(pair => (
         <ScoutModelPicker

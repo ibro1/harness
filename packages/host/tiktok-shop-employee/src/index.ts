@@ -27,9 +27,9 @@ import { DEFAULT_BLOCKED_WORDS } from './rules.ts'
 import { socialCrawl } from './socialcrawl.ts'
 import { ShopStore } from './store.ts'
 import { buildShopTools } from './tools.ts'
-import { createSpeaker, VOICE_PROVIDERS, type VoiceProvider } from './voice.ts'
+import { createSpeaker, envKeys, VOICE_PROVIDERS, type VoiceProvider } from './voice.ts'
 
-export { renderVideo, wrap } from './render.ts'
+export { lineSpans, renderVideo, wrap } from './render.ts'
 export type { RenderJob, RenderTools, ScriptLine } from './render.ts'
 export { blockedWord, DEFAULT_BLOCKED_WORDS, finalCaption, scriptProblems } from './rules.ts'
 export { parseProduct, socialCrawl } from './socialcrawl.ts'
@@ -38,7 +38,7 @@ export { emptyState, ShopStore } from './store.ts'
 export type { ShopState, TrackedProduct, VideoRecord } from './store.ts'
 export { buildShopTools, priceText } from './tools.ts'
 export type { ShopDeps } from './tools.ts'
-export { createSpeaker } from './voice.ts'
+export { createSpeaker, envKeys, pcmToWav } from './voice.ts'
 export { reviewPage } from './pages.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -82,21 +82,26 @@ export interface Config {
   region: Volatile<string>
   /** SocialCrawl API key; write-only on the settings page. */
   socialCrawlApiKey: Volatile<string>
+  /** `auto` (every Gemini key, then Groq as the last resort), `gemini`, `groq` or `elevenlabs`. */
   voiceProvider: Volatile<string>
-  /** Voice name or id; empty uses the provider's default. */
+  /** Gemini voice name, such as Puck. */
   voice: Volatile<string>
+  /** Groq Orpheus voice name, such as troy. */
+  groqVoice: Volatile<string>
+  /** ElevenLabs voice id; empty uses speak.py's default. */
+  elevenLabsVoice: Volatile<string>
+  /** Gemini speech model. */
+  geminiTtsModel: Volatile<string>
   /** Gemini only: how the line is delivered. */
   voiceStyle: Volatile<string>
-  /** Groq API key for the Groq voice; write-only. */
+  /** A Groq key for the voice, tried before the deployment's GROQ_API_KEY ones; write-only. */
   groqApiKey: Volatile<string>
-  /** Path of video-use's speak.py, for the Gemini and ElevenLabs voices. */
+  /** Path of video-use's speak.py, for the ElevenLabs voice. */
   speakScript: string
   ffmpeg: string
   ffprobe: string
   /** Bold font for burned-in text. */
   font: string
-  /** Pause between voice calls, in milliseconds. */
-  voicePauseMs: number
   dataDir: string
   /** Absolute origin review links are built on, for example `https://harness.example.com`. */
   publicBaseUrl: string
@@ -130,15 +135,17 @@ export const Config = z.object({
   blockedWords: z.array(z.string()).default([...DEFAULT_BLOCKED_WORDS]).volatile(),
   region: z.string().default('GB').volatile(),
   socialCrawlApiKey: z.string().role('secret').default('').volatile(),
-  voiceProvider: z.string().default('groq').volatile(),
-  voice: z.string().default('').volatile(),
-  voiceStyle: z.string().default('Read as an upbeat, natural British TikTok voiceover, quick and friendly.').volatile(),
+  voiceProvider: z.string().default('auto').volatile(),
+  voice: z.string().default('Puck').volatile(),
+  groqVoice: z.string().default('troy').volatile(),
+  elevenLabsVoice: z.string().default('').volatile(),
+  geminiTtsModel: z.string().default('gemini-3.1-flash-tts-preview').volatile(),
+  voiceStyle: z.string().default('Read as an upbeat, natural British TikTok voiceover, quick and friendly. Leave a clear one-second pause between paragraphs.').volatile(),
   groqApiKey: z.string().role('secret').default('').volatile(),
   speakScript: z.string().default('/opt/video-use/helpers/speak.py'),
   ffmpeg: z.string().default('ffmpeg'),
   ffprobe: z.string().default('ffprobe'),
   font: z.string().default('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
-  voicePauseMs: z.natural().default(4000),
   dataDir: z.string().default(''),
   publicBaseUrl: z.string().default(''),
   path: z.string().default('/tts'),
@@ -208,12 +215,14 @@ export function apply(ctx: Context, config: Config): void {
   const reviewLink = (videoId: string): string => `${publicBase}${prefix}/v/${videoId}?sig=${sign(videoId)}`
 
   const speak = createSpeaker(() => ({
-    provider: (VOICE_PROVIDERS as readonly string[]).includes(config.voiceProvider.get()) ? config.voiceProvider.get() as VoiceProvider : 'groq',
-    voice: config.voice.get(),
+    provider: (VOICE_PROVIDERS as readonly string[]).includes(config.voiceProvider.get()) ? config.voiceProvider.get() as VoiceProvider : 'auto',
+    geminiVoice: config.voice.get(),
+    groqVoice: config.groqVoice.get(),
+    elevenLabsVoice: config.elevenLabsVoice.get(),
     style: config.voiceStyle.get(),
+    geminiModel: config.geminiTtsModel.get().trim() || 'gemini-3.1-flash-tts-preview',
     groqApiKey: config.groqApiKey.get(),
     speakScript: config.speakScript,
-    pauseMs: config.voicePauseMs,
   }))
 
   // Renders run one at a time, in the order they were asked for.
@@ -245,7 +254,11 @@ export function apply(ctx: Context, config: Config): void {
       const file = `${videoId}.mp4`
       const seconds = await renderVideo({
         images, lines: video.lines, hook: video.hook, endCard: video.endCard, workDir, outPath: join(mediaDir, file),
-      }, { ffmpeg: config.ffmpeg, ffprobe: config.ffprobe, font: config.font, speak }, AbortSignal.timeout(900_000))
+      }, {
+        ffmpeg: config.ffmpeg, ffprobe: config.ffprobe, font: config.font, speak,
+        // One request for the whole script: lines on their own paragraphs, read with a pause between them.
+        speakAll: (lines, out, signal) => speak(lines.join('\n\n'), out, signal),
+      }, AbortSignal.timeout(900_000))
       await store.update((s) => {
         const v = s.videos.find(x => x.id === videoId)
         if (v !== undefined) Object.assign(v, { status: 'ready', file, seconds })
@@ -365,6 +378,8 @@ export function apply(ctx: Context, config: Config): void {
         lastShiftDate: state.lastShiftDate,
         dataKey: config.socialCrawlApiKey.get().trim() !== '',
         groqKey: config.groqApiKey.get().trim() !== '',
+        // How many keys of each the voice can use; never the keys.
+        voiceKeys: { gemini: envKeys(process.env, 'GEMINI_API_KEY').length, groq: envKeys(process.env, 'GROQ_API_KEY').length },
         products: state.products.length,
         videos: [...state.videos].reverse().slice(0, 50).map(v => ({
           id: v.id, status: v.status, format: v.format, hook: v.hook, createdAt: v.createdAt,

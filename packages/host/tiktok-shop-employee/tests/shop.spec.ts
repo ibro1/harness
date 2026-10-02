@@ -3,13 +3,14 @@
  * service's answers are read, and what the tools refuse and record. Rendering is tested elsewhere with real ffmpeg.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import {
-  blockedWord, buildShopTools, DEFAULT_BLOCKED_WORDS, finalCaption, parseProduct, reviewPage, scriptProblems, ShopStore, socialCrawl, wrap,
+  blockedWord, buildShopTools, createSpeaker, DEFAULT_BLOCKED_WORDS, envKeys, finalCaption, parseProduct, reviewPage,
+  lineSpans, scriptProblems, ShopStore, socialCrawl, wrap,
 } from '../src/index.ts'
 import type { ShopProduct, SocialCrawl } from '../src/index.ts'
 
@@ -73,6 +74,12 @@ describe('script rules', () => {
 
   it('puts the advertising label first in every caption', () => {
     expect(finalCaption('Worth a look.', ['#tiktokmademebuyit', 'ad'])).toBe('#ad Worth a look.\n\n#tiktokmademebuyit')
+  })
+
+  it('splits one recording into lines at its longest pauses', () => {
+    const pauses = [{ start: 1.0, end: 1.1 }, { start: 2.1, end: 3.0 }, { start: 4.6, end: 5.6 }]
+    expect(lineSpans(pauses, 3, 8)).toEqual([{ start: 0, end: 2.1 }, { start: 3.0, end: 4.6 }, { start: 5.6, end: 8 }])
+    expect(lineSpans([{ start: 2, end: 3 }], 3, 8)).toBeUndefined()
   })
 
   it('wraps captions at word boundaries', () => {
@@ -150,5 +157,58 @@ describe('review page', () => {
     expect(page).toContain('#ad &lt;b&gt;Worth it&lt;/b&gt;')
     expect(page).toContain('AI-generated content')
     expect(page).toContain('value="posted"')
+  })
+})
+
+describe('voice keys', () => {
+  const settings = {
+    provider: 'auto' as const, geminiVoice: 'Puck', groqVoice: 'troy', elevenLabsVoice: '', style: 'Upbeat.',
+    geminiModel: 'gemini-3.1-flash-tts-preview', groqApiKey: '', speakScript: '',
+  }
+  const pcm = Buffer.alloc(4800).toString('base64')
+  /** Gemini keys named in `busy` answer 429; Groq always answers. Records which key was used for each call. */
+  function voiceFetch(busy: string[], used: string[]) {
+    return (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
+      const headers = new Headers(init?.headers)
+      const key = headers.get('x-goog-api-key') ?? (headers.get('authorization') ?? '').replace('Bearer ', '')
+      used.push(key)
+      if (url.includes('generativelanguage') && busy.includes(key)) {
+        return Promise.resolve(new Response('{"error":{"message":"Quota exceeded for GenerateRequestsPerDayPerProjectPerModel"}}', { status: 429 }))
+      }
+      if (url.includes('generativelanguage')) {
+        return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;codec=pcm;rate=24000', data: pcm } }] } }] })))
+      }
+      return Promise.resolve(new Response(new Uint8Array([82, 73, 70, 70])))
+    }
+  }
+
+  it('reads GEMINI_API_KEY then _1 to _9, skipping blanks and repeats', () => {
+    expect(envKeys({ GEMINI_API_KEY: 'a', GEMINI_API_KEY_1: 'b', GEMINI_API_KEY_2: '', GEMINI_API_KEY_3: 'a', GEMINI_API_KEY_9: 'c' }, 'GEMINI_API_KEY').map(k => k.name))
+      .toEqual(['GEMINI_API_KEY', 'GEMINI_API_KEY_1', 'GEMINI_API_KEY_9'])
+  })
+
+  it('moves to the next Gemini key when one is out of quota, uses Groq only when every Gemini key is, and rests a spent key', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tts-voice-'))
+    dirs.push(dir)
+    const env = { GEMINI_API_KEY: 'g0', GEMINI_API_KEY_1: 'g1', GROQ_API_KEY: 'q0' }
+    const used: string[] = []
+    const speak = createSpeaker(() => settings, env, voiceFetch(['g0'], used))
+    await speak('Hello there.', join(dir, 'a.wav'), exec.signal)
+    expect(used).toEqual(['g0', 'g1'])
+    await speak('Again.', join(dir, 'b.wav'), exec.signal)
+    // g0 rests after its daily quota, so the next line goes straight to g1.
+    expect(used).toEqual(['g0', 'g1', 'g1'])
+    const header = readFileSync(join(dir, 'a.wav')).subarray(0, 4).toString()
+    expect(header).toBe('RIFF')
+
+    const used2: string[] = []
+    await createSpeaker(() => settings, env, voiceFetch(['g0', 'g1'], used2))('Last resort.', join(dir, 'c.wav'), exec.signal)
+    expect(used2).toEqual(['g0', 'g1', 'q0'])
+  })
+
+  it('says which keys failed when none can speak', async () => {
+    const speak = createSpeaker(() => ({ ...settings, provider: 'gemini' }), { GEMINI_API_KEY: 'g0' }, voiceFetch(['g0'], []))
+    await expect(speak('x', '/tmp/never.wav', exec.signal)).rejects.toThrow(/GEMINI_API_KEY: daily quota spent/u)
   })
 })

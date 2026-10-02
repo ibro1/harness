@@ -3,13 +3,13 @@
 /** The fields that carry a label and a hint. */
 export type TtsFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'notifyTo' | 'videosPerDay' | 'fallbackCooldownMinutes' | 'themes' | 'blockedWords' | 'region'
-  | 'voiceProvider' | 'voice' | 'voiceStyle' | 'socialCrawlApiKey' | 'groqApiKey' | 'shiftModel' | 'fallbackModelPick'
+  | 'voiceProvider' | 'voice' | 'groqVoice' | 'voiceStyle' | 'socialCrawlApiKey' | 'groqApiKey' | 'shiftModel' | 'fallbackModelPick'
 
 /** Locale keys the card renders. */
 export type TtsLocaleKey =
   | 'ttsTitle' | 'ttsDescription' | 'ttsInvalid'
   | 'ttsStatusTitle' | 'ttsStatusLoading' | 'ttsStatusUnknown' | 'ttsRunning' | 'ttsPaused' | 'ttsToday' | 'ttsLastShift' | 'ttsNoDataKey'
-  | 'ttsRunNow' | 'ttsPause' | 'ttsResume' | 'ttsRefresh' | 'ttsStarted' | 'ttsNoVideos' | 'ttsResults'
+  | 'ttsVoiceKeys' | 'ttsRunNow' | 'ttsPause' | 'ttsResume' | 'ttsRefresh' | 'ttsStarted' | 'ttsNoVideos' | 'ttsResults'
   | 'ttsVideo.rendering' | 'ttsVideo.failed' | 'ttsVideo.ready' | 'ttsVideo.posted' | 'ttsVideo.skipped'
   | `tts.${TtsFieldKey}` | `tts.${TtsFieldKey}.hint` | 'tts.shiftModel.none' | 'tts.fallbackModelPick.none'
 
@@ -57,15 +57,18 @@ export const ttsEn: Record<TtsLocaleKey, string> = {
   'tts.region': 'Market',
   'tts.region.hint': 'TikTok Shop market as a two-letter code: GB for the United Kingdom.',
   'tts.voiceProvider': 'Voice provider',
-  'tts.voiceProvider.hint': 'groq (free tier; accept the Orpheus terms once in the Groq console), gemini or elevenlabs (keys from the video tools\' settings).',
-  'tts.voice': 'Voice',
-  'tts.voice.hint': 'Voice name or id; empty uses the provider\'s default (Groq: troy).',
+  'tts.voiceProvider.hint': 'auto: every Gemini key in the deployment (GEMINI_API_KEY, then _1 to _9), then Groq as the last resort (the key below, GROQ_API_KEY, then _1 to _9); a busy key hands the line to the next. Or gemini, groq or elevenlabs alone.',
+  'ttsVoiceKeys': 'The deployment gives the voice {gemini} Gemini and {groq} Groq keys.',
+  'tts.voice': 'Gemini voice',
+  'tts.voice.hint': 'A Gemini voice name, such as Puck, Kore or Charon.',
+  'tts.groqVoice': 'Groq voice',
+  'tts.groqVoice.hint': 'An Orpheus voice name on Groq, such as troy, autumn or hannah. Groq needs its Orpheus terms accepted once in the Groq console.',
   'tts.voiceStyle': 'Voice style',
   'tts.voiceStyle.hint': 'Gemini only: how the lines are read.',
   'tts.socialCrawlApiKey': 'SocialCrawl API key',
   'tts.socialCrawlApiKey.hint': 'From socialcrawl.dev (100 free credits; £15 for 2,500). Each product search or listing read costs one. Write-only: leave empty to keep the saved key.',
   'tts.groqApiKey': 'Groq API key',
-  'tts.groqApiKey.hint': 'For the groq voice. Write-only: leave empty to keep the saved key.',
+  'tts.groqApiKey.hint': 'Optional: tried before the deployment\'s GROQ_API_KEY ones. Write-only: leave empty to keep the saved key.',
   'tts.shiftModel': 'Shift model',
   'tts.shiftModel.hint': 'The model that picks products and writes the scripts.',
   'tts.shiftModel.none': 'Default model',
@@ -118,15 +121,18 @@ export const ttsZh: Record<TtsLocaleKey, string> = {
   'tts.region': '市场',
   'tts.region.hint': 'TikTok Shop 市场的两字母代码：英国为 GB。',
   'tts.voiceProvider': '配音服务',
-  'tts.voiceProvider.hint': 'groq（免费额度；需在 Groq 控制台接受一次 Orpheus 条款）、gemini 或 elevenlabs（密钥来自视频工具的设置）。',
-  'tts.voice': '声音',
-  'tts.voice.hint': '声音名称或 ID；留空使用该服务的默认声音（Groq：troy）。',
+  'tts.voiceProvider.hint': 'auto：先依次使用部署中的每个 Gemini 密钥（GEMINI_API_KEY，然后 _1 到 _9），最后才用 Groq（下方的密钥、GROQ_API_KEY，然后 _1 到 _9）；某个密钥繁忙时交给下一个。也可只用 gemini、groq 或 elevenlabs。',
+  'ttsVoiceKeys': '部署为配音提供了 {gemini} 个 Gemini 密钥和 {groq} 个 Groq 密钥。',
+  'tts.voice': 'Gemini 声音',
+  'tts.voice.hint': 'Gemini 声音名称，例如 Puck、Kore 或 Charon。',
+  'tts.groqVoice': 'Groq 声音',
+  'tts.groqVoice.hint': 'Groq 上的 Orpheus 声音名称，例如 troy、autumn 或 hannah。需在 Groq 控制台接受一次 Orpheus 条款。',
   'tts.voiceStyle': '配音风格',
   'tts.voiceStyle.hint': '仅 Gemini：台词的朗读方式。',
   'tts.socialCrawlApiKey': 'SocialCrawl API 密钥',
   'tts.socialCrawlApiKey.hint': '来自 socialcrawl.dev（100 个免费额度；£15 可买 2,500）。每次商品搜索或读取一个商品消耗一个。只写：留空则保留已保存的密钥。',
   'tts.groqApiKey': 'Groq API 密钥',
-  'tts.groqApiKey.hint': '用于 groq 配音。只写：留空则保留已保存的密钥。',
+  'tts.groqApiKey.hint': '可选：在部署中的 GROQ_API_KEY 之前尝试。只写：留空则保留已保存的密钥。',
   'tts.shiftModel': '班次模型',
   'tts.shiftModel.hint': '挑选商品并撰写脚本的模型。',
   'tts.shiftModel.none': '默认模型',

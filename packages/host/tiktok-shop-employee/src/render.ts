@@ -46,6 +46,12 @@ export interface RenderTools {
   font: string
   /** Speak one line into a WAV file. */
   speak: (text: string, outWav: string, signal: AbortSignal) => Promise<void>
+  /**
+   * Speak every line in one request, with a pause between lines, into one WAV file. Optional: when given, the
+   * renderer splits that file at its pauses, and falls back to one request per line only when it cannot find a
+   * pause for every boundary. One request per video matters on quotas counted in requests.
+   */
+  speakAll?: (lines: string[], outWav: string, signal: AbortSignal) => Promise<void>
 }
 
 /** Output size and frame rate: TikTok's full-screen vertical format. */
@@ -61,6 +67,69 @@ const END_HOLD = 1.2
 const CAPTION_CHARS = 20
 /** Characters per headline line at the headline size. */
 const HEADLINE_CHARS = 17
+
+/** Quietest level counted as a pause, and the shortest pause that can separate two lines. */
+const SILENCE_DB = -35
+const SILENCE_MIN = 0.25
+
+/** ffmpeg's stderr, where filters such as silencedetect report. */
+function runStderr(program: string, args: string[], signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(program, args, { signal, maxBuffer: 16 * 1024 * 1024 }, (error, _stdout, stderr) => {
+      if (error) reject(new Error(`${program} failed: ${(stderr || error.message).trim().split('\n').slice(-3).join(' ')}`))
+      else resolve(stderr)
+    })
+  })
+}
+
+/** A stretch of a recording, in seconds. */
+export interface Span {
+  start: number
+  end: number
+}
+
+/**
+ * Where each line lies in one recording of several: the longest pauses, one per boundary, separate the lines, and
+ * each line runs from the end of the pause before it to the start of the pause after it.
+ * @param pauses - every pause inside the speech.
+ * @param lines - how many lines were spoken.
+ * @param total - the recording's length.
+ * @returns one span per line, or undefined when there are fewer pauses than boundaries.
+ */
+export function lineSpans(pauses: readonly Span[], lines: number, total: number): Span[] | undefined {
+  if (lines < 1 || pauses.length < lines - 1) return undefined
+  const gaps = [...pauses].sort((a, b) => (b.end - b.start) - (a.end - a.start)).slice(0, lines - 1).sort((a, b) => a.start - b.start)
+  return Array.from({ length: lines }, (_, i) => ({
+    start: i === 0 ? 0 : gaps[i - 1]?.end ?? 0,
+    end: i === lines - 1 ? total : gaps[i]?.start ?? total,
+  }))
+}
+
+/**
+ * Speak all lines in one request and cut the recording into one file per line.
+ * @returns the line files, or undefined when the pauses could not be found and each line must be spoken alone.
+ */
+async function speakInOne(job: RenderJob, tools: RenderTools, signal: AbortSignal): Promise<string[] | undefined> {
+  if (tools.speakAll === undefined || job.lines.length < 2) return undefined
+  const full = join(job.workDir, 'all-lines.wav')
+  await tools.speakAll(job.lines.map(l => l.voice), full, signal)
+  const detect = `silencedetect=noise=${String(SILENCE_DB)}dB:d=${String(SILENCE_MIN)}`
+  const report = await runStderr(tools.ffmpeg, ['-hide_banner', '-i', full, '-af', detect, '-f', 'null', '-'], signal)
+  const starts = [...report.matchAll(/silence_start: ([\d.]+)/gu)].map(m => Number(m[1]))
+  const ends = [...report.matchAll(/silence_end: ([\d.]+)/gu)].map(m => Number(m[1]))
+  const total = await duration(tools, full, signal)
+  // Pauses inside the speech only: not the silence before the first word or after the last.
+  const pauses = starts.map((start, i) => ({ start, end: ends[i] ?? total })).filter(p => p.start > 0.2 && p.end < total - 0.2)
+  const spans = lineSpans(pauses, job.lines.length, total)
+  if (spans === undefined) return undefined
+  const files: string[] = []
+  for (const [i, span] of spans.entries()) {
+    const file = join(job.workDir, `line-${String(i)}.wav`)
+    await run(tools.ffmpeg, ['-y', '-loglevel', 'error', '-i', full, '-ss', span.start.toFixed(3), '-to', span.end.toFixed(3), file], signal)
+    files.push(file)
+  }
+  return files
+}
 
 function run(program: string, args: string[], signal: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -139,11 +208,12 @@ export async function renderVideo(job: RenderJob, tools: RenderTools, signal: Ab
   if (job.images.length === 0) throw new Error('a video needs at least one image')
   if (job.lines.length === 0) throw new Error('a video needs at least one line')
   await mkdir(job.workDir, { recursive: true })
+  const spoken = await speakInOne(job, tools, signal)
   const segments: string[] = []
   let total = 0
   for (const [i, line] of job.lines.entries()) {
-    const wav = join(job.workDir, `line-${String(i)}.wav`)
-    await tools.speak(line.voice, wav, signal)
+    const wav = spoken?.[i] ?? join(job.workDir, `line-${String(i)}.wav`)
+    if (spoken === undefined) await tools.speak(line.voice, wav, signal)
     const last = i === job.lines.length - 1
     const seconds = (await duration(tools, wav, signal)) + LINE_GAP + (last ? END_HOLD : 0)
     const frames = Math.ceil(seconds * FPS)
