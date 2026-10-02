@@ -14,6 +14,7 @@ import { createWriteStream, createReadStream } from 'node:fs'
 import { rename, rm, mkdir, readdir, stat } from 'node:fs/promises'
 import { basename, join, resolve, relative, extname, isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+import { mountSwitch } from '../../packages/host/plugin-switch/lib/index.js'
 
 export const name = 'composer-tools'
 export const inject = ['webServer', 'sessions']
@@ -224,6 +225,26 @@ export function apply(ctx, config) {
   announce(`voice route ${config.voicePath} (max ${config.voiceMaxBytes} bytes, Groq Whisper)`)
   announce(`files route ${config.filesPath}; download route ${config.downloadPath}`)
 
+  // The switch (Plugins → Composer tools) covers uploads and voice notes. The
+  // files and download routes stay on: the outputs drawer lists and downloads
+  // through them.
+  const toggle = mountSwitch(ctx, {
+    id: 'composer-tools',
+    defaultEnabled: true,
+    health: () => ({
+      healthy: true,
+      facts: [
+        { key: 'maxUpload', value: `${Math.round(config.maxBytes / 1_000_000)} MB` },
+        { key: 'voice', flag: (process.env.GROQ_API_KEY ?? '').trim() !== '' },
+      ],
+    }),
+  })
+  const switchedOff = (res) => {
+    if (toggle.isOn()) return false
+    json(res, 503, { error: 'Composer tools are switched off on the Plugins page' })
+    return true
+  }
+
   /** The session's authoritative workspace directory, or undefined with the
    *  response already written. */
   const resolveCwd = (res, sessionId) => {
@@ -244,6 +265,7 @@ export function apply(ctx, config) {
     path: config.path,
     // authenticate defaults true — the operator's password/session gates it.
     handler: async (req, res) => {
+      if (switchedOff(res)) return
       if (req.method !== 'POST') {
         json(res, 405, { error: 'method not allowed; use POST' })
         return
@@ -326,6 +348,7 @@ export function apply(ctx, config) {
     // authenticate defaults true — behind the password gate. Relays recorded
     // audio to Groq Whisper so the browser never holds the API key.
     handler: async (req, res) => {
+      if (switchedOff(res)) return
       if (req.method !== 'POST') {
         json(res, 405, { error: 'method not allowed; use POST' })
         return

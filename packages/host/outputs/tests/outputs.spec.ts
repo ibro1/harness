@@ -240,6 +240,8 @@ function mount(sessionCwd: string | undefined): Map<string, RecordedTool> {
     agents: { list: () => [agent] },
     on() {},
     effect(fn: () => unknown) { fn() },
+    // The switch routes need the web server, which this stub does not have.
+    inject() { return { dispose: () => Promise.resolve() } },
   }
   apply(ctx as unknown as Context, DEFAULTS)
   return tools

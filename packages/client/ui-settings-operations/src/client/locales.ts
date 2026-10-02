@@ -1,8 +1,9 @@
-/** Locale bundles for the Dokploy, Cloudflare, Postgres, Klipara Scout, Error reporting, SEO employee and ads employee settings pages. */
+/** Locale bundles for the operations settings pages (Dokploy, Cloudflare, Postgres, employees, Error reporting) and the switch cards. */
 
 import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import { adsEn, adsZh, type AdsLocaleKey } from './locales/ads.ts'
 import { seoEn, seoZh, type SeoLocaleKey } from './locales/seo.ts'
+import { switchesEn, switchesZh, type SwitchLocaleKey } from './locales/switches.ts'
 
 /** The Klipara Scout fields that carry a label and a hint. */
 export type ScoutFieldKey =
@@ -33,11 +34,13 @@ export type OperationsSettingsLocaleKey =
   | 'save' | 'saving' | 'saveFailed'
   | SeoLocaleKey
   | AdsLocaleKey
+  | SwitchLocaleKey
 
 /** English copy. */
 export const en: Record<OperationsSettingsLocaleKey, string> = {
   ...seoEn,
   ...adsEn,
+  ...switchesEn,
   dokployTitle: 'Dokploy',
   dokployDescription: 'The Dokploy servers an agent may query and deploy through.',
   dokployServers: 'Servers',
@@ -203,6 +206,7 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
 export const zh: Record<OperationsSettingsLocaleKey, string> = {
   ...seoZh,
   ...adsZh,
+  ...switchesZh,
   dokployTitle: 'Dokploy',
   dokployDescription: 'Agent 可查询并通过其部署的 Dokploy 服务器。',
   dokployServers: '服务器',

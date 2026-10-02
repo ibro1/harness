@@ -367,6 +367,7 @@ export function customScripts(
     : `var D = app.documents.add(${String(create.width)}, ${String(create.height)}, 72, ${JSON.stringify(create.name)}); app.activeDocument = D;`
   try {
     // Compiled only, never called: Node checks the syntax.
+    // oxlint-disable-next-line typescript/no-implied-eval -- compiled to check the syntax, never called
     new Function('D', body)
   } catch (error) {
     throw new SyntaxError(`The script does not parse, so nothing ran: ${error instanceof Error ? error.message : String(error)}`, { cause: error })

@@ -9079,6 +9079,10 @@ importers:
         version: 8.18.1
 
   packages/host/capture:
+    dependencies:
+      '@deepseek-ai/dsh-host-plugin-switch':
+        specifier: workspace:*
+        version: link:../plugin-switch
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -9387,6 +9391,10 @@ importers:
         version: link:../webserver
 
   packages/host/outputs:
+    dependencies:
+      '@deepseek-ai/dsh-host-plugin-switch':
+        specifier: workspace:*
+        version: link:../plugin-switch
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -9431,6 +9439,15 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../typert/protocol
+
+  packages/host/plugin-switch:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../webserver
 
   packages/host/postgres:
     dependencies:
@@ -9499,6 +9516,9 @@ importers:
       '@deepseek-ai/dsh-host-capture':
         specifier: workspace:*
         version: link:../capture
+      '@deepseek-ai/dsh-host-plugin-switch':
+        specifier: workspace:*
+        version: link:../plugin-switch
       playwright-core:
         specifier: ^1.49.0
         version: 1.61.1

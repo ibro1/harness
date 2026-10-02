@@ -25,6 +25,7 @@
 
 import { Readable } from 'node:stream'
 import { timingSafeEqual } from 'node:crypto'
+import { mountSwitch } from '../../packages/host/plugin-switch/lib/index.js'
 
 export const name = 'llm-gateway'
 export const inject = ['webServer']
@@ -166,6 +167,33 @@ export function apply(ctx) {
     announce(`serving ${Object.entries(UPSTREAMS).map(([k, v]) => `${k}=${v}`).join(' ')}`)
   }
 
+  // Off (Plugins → LLM gateway): every gateway route answers 503.
+  const toggle = mountSwitch(ctx, {
+    id: 'llm-gateway',
+    defaultEnabled: true,
+    health: () => TOKEN === ''
+      ? { healthy: false, facts: [{ key: 'token', flag: false }], problem: 'DSH_LLM_GATEWAY_TOKEN is not set, so the gateway serves nothing.' }
+      : { healthy: true, facts: [{ key: 'token', flag: true }, ...Object.entries(UPSTREAMS).map(([cli, url]) => ({ key: `bridge.${cli}`, value: url }))] },
+    // Asks each bridge for its model list, the call the gateway forwards.
+    test: async () => {
+      const lines = []
+      let ok = true
+      for (const [cli, upstream] of Object.entries(UPSTREAMS)) {
+        try {
+          const response = await fetch(`${upstream}/v1/models`, { signal: AbortSignal.timeout(10_000) })
+          const body = await response.json().catch(() => ({}))
+          const count = Array.isArray(body?.data) ? body.data.length : 0
+          if (!response.ok) ok = false
+          lines.push(`${cli}: HTTP ${response.status}, ${count} models`)
+        } catch (error) {
+          ok = false
+          lines.push(`${cli}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      return { ok, message: lines.join('; ') }
+    },
+  })
+
   for (const [cli, upstream] of Object.entries(UPSTREAMS)) {
     for (const [suffix, method] of [['/chat/completions', 'POST'], ['/models', 'GET']]) {
       const path = `/llm/${cli}/v1${suffix}`
@@ -177,6 +205,7 @@ export function apply(ctx) {
         authenticate: false,
         handler: async (req, res) => {
           if (TOKEN === '') { json(res, 503, { error: 'LLM gateway not configured' }); return }
+          if (!toggle.isOn()) { json(res, 503, { error: 'LLM gateway switched off' }); return }
           if (!presentedTokenIsValid(req.headers['authorization'] ?? '')) {
             announce(`refused ${req.method} ${path}: bad or missing token`)
             json(res, 401, { error: 'unauthorized' })

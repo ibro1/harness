@@ -17,6 +17,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+import { mountSwitch } from '../../packages/host/plugin-switch/lib/index.js'
 
 export const name = 'bg-notify'
 export const inject = ['webServer', 'sessions', 'agents']
@@ -88,6 +89,16 @@ export function apply(ctx, config) {
     announce(`notify route ${config.path} (loopback + token)`)
   }
 
+  // Off (Plugins → Background-job notifier): a finished job's ping is refused,
+  // so its session is not woken.
+  const toggle = mountSwitch(ctx, {
+    id: 'bg-notify',
+    defaultEnabled: true,
+    health: () => TOKEN === ''
+      ? { healthy: false, facts: [{ key: 'token', flag: false }], problem: 'DSH_BG_TOKEN is not set, so no job can reach the route.' }
+      : { healthy: true, facts: [{ key: 'token', flag: true }, { key: 'route', value: config.path }] },
+  })
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: config.path,
@@ -98,6 +109,7 @@ export function apply(ctx, config) {
       try {
         if (req.method !== 'POST') { json(res, 405, { error: 'use POST' }); return }
         if (TOKEN === '') { json(res, 503, { error: 'DSH_BG_TOKEN not configured' }); return }
+        if (!toggle.isOn()) { json(res, 503, { error: 'switched off on the Plugins page' }); return }
 
         const remote = req.socket?.remoteAddress ?? ''
         const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1'
@@ -118,17 +130,19 @@ export function apply(ctx, config) {
         // the session with a fresh follow-up turn. Lazy import so a resolution
         // problem degrades to a logged no-op instead of failing plugin boot.
         const { createUserMessage } = await import('@deepseek-ai/dsh-llm')
-        const found = await ctx.agents.resolveAgent(sessionId)
-        if ('error' in found) {
-          announce(`cannot wake session ${sessionId}: ${String(found.error?.message ?? found.error)}`)
-          json(res, 202, { accepted: false, reason: 'session unavailable' })
+        // Only a live agent can take a follow-up turn; a session nobody has
+        // open is not reloaded for a notification.
+        const agent = ctx.agents.get(sessionId)
+        if (agent === undefined) {
+          announce(`cannot wake session ${sessionId}: it has no live agent (not open in the harness)`)
+          json(res, 202, { accepted: false, reason: 'session not loaded' })
           return
         }
         const message = createUserMessage({
           content: [{ type: 'text', text: notificationText(label, exit, rows) }],
           source: { kind: 'user' },
         })
-        found.agent.followup(message)
+        agent.followup(message)
         announce(`woke session ${sessionId} for job "${label}" (exit ${exit}, ${rows.length} file(s))`)
         json(res, 200, { accepted: true })
       } catch (error) {

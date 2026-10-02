@@ -20,6 +20,7 @@
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-host-capture": "workspace:*",
+    "@deepseek-ai/dsh-host-plugin-switch": "workspace:*",
     "playwright-core": "^1.49.0"
   },
   "peerDependencies": {

@@ -23,6 +23,8 @@ Four tools edit Photoshop files on request: `psd_open` lists a file's layers and
 
 The deploy entrypoint layers `deploy/plugins/psd-tools.cordis.yml` over the Web composition unless `DSH_PSD_TOOLS=0`, and links the `psd-designer` skill (`deploy/skills/psd-designer/`). The tools are on every Session; agy and opencode reach them through the session-tools route (`deploy/plugins/session-tools.mjs`). The box needs `chromium` on PATH (the image installs it for page capture) and outbound HTTPS to www.photopea.com.
 
+**Plugins → PSD tools** switches them on or off, shows the browser, Photopea's address and the last call, and its **Test** loads Photopea (`@deepseek-ai/dsh-host-plugin-switch`). Off, new agents are not given the tools and calls from existing ones (and from the CLIs) are refused.
+
 Files must be inside the Session's working directory. Results go through the `outputs` capability when it is mounted, otherwise to `<cwd>/.outputs`; the original file is never written.
 
 | Tool | What it does and refuses |

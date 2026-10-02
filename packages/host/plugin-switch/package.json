@@ -1,6 +1,6 @@
 {
-  "name": "@deepseek-ai/dsh-host-capture",
-  "description": "Fork-local page capture: screenshot a URL through the DevTools Protocol and return the geometry read back from the live DOM alongside the image",
+  "name": "@deepseek-ai/dsh-host-plugin-switch",
+  "description": "Fork-local on/off switches and status routes for deployment plugins that have no settings form, shown as cards on the Plugins page",
   "version": "0.1.2-rc.1",
   "private": true,
   "type": "module",
@@ -18,18 +18,13 @@
     "bundle": "tsdown"
   },
   "license": "MIT",
-  "dependencies": {
-    "@deepseek-ai/dsh-host-plugin-switch": "workspace:*"
-  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-agent": "workspace:*"
+    "@deepseek-ai/dsh-host-webserver": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-agent": "workspace:*",
-    "@deepseek-ai/dsh-tools": "workspace:*",
-    "@deepseek-ai/schemastery": "workspace:~"
+    "@deepseek-ai/dsh-host-webserver": "workspace:*"
   },
   "files": [
     "lib/index.js",

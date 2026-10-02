@@ -1,6 +1,7 @@
 /**
  * The Dokploy, Cloudflare, Postgres, Klipara Scout, Error reporting, SEO employee and ads employee settings pages, browser
- * half: the servers, zones, accounts and databases an agent may act on, and the employees' shifts. Each page
+ * half: the servers, zones, accounts and databases an agent may act on, and the employees' shifts. It also draws an
+ * on/off card for each deployment plugin that answers `/plugin-switch/<id>` (PSD tools, page capture, the CLI routes). Each page
  * registers into the Plugins page's `plugins.item` slot while the Host serves
  * its namespace, so a deployment that leaves a plugin out shows no trace of it.
  */
@@ -26,6 +27,8 @@ import { ScoutCard } from './ScoutCard.tsx'
 import { ScoutLeadsPage } from './ScoutLeadsPage.tsx'
 import { SeoCard } from './SeoCard.tsx'
 import { SeoSitesPage } from './SeoSitesPage.tsx'
+import { hostServesSwitch, SwitchCard } from './SwitchCard.tsx'
+import { SWITCH_IDS } from './locales/switches.ts'
 import { CLOUDFLARE_NS, CloudflareCardController } from './cloudflare-card-controller.ts'
 import { DOKPLOY_NS, DokployCardController } from './dokploy-card-controller.ts'
 import { POSTGRES_NS, PostgresCardController } from './postgres-card-controller.ts'
@@ -44,6 +47,7 @@ export type { SeoCardFace, SeoCardState, SeoSettings } from './seo-card-controll
 export type { AdsCardFace, AdsCardState, AdsSettings } from './ads-card-controller.ts'
 export type { ErrorReportingCardFace, ErrorReportingCardState, ErrorReportingSettings } from './error-reporting-card-controller.ts'
 export type { OperationsSettingsLocaleKey } from './locales.ts'
+export type { SwitchCardFace, SwitchStatus } from './SwitchCard.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -135,4 +139,26 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([SEO_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: ADS_PROPOSALS_ID, order: 85, label: () => t('adsProposalsPageTitle'), locale: NS,
   }, AdsProposalsPage))), 'ui-settings-operations: Ads proposals page')
+
+  // The deployment plugins with only an on/off switch have no settings form to
+  // gate their cards on; each card appears when the Host answers its status
+  // route, probed once per page load (a plugin comes or goes only with a
+  // redeploy, which reloads the page).
+  SWITCH_IDS.forEach((switchId, index) => {
+    ctx.effect(() => {
+      let off: (() => void) | undefined
+      let live = true
+      void hostServesSwitch(switchId).then((served) => {
+        if (!served || !live) return
+        off = ctx.slots.inject('plugins.item', () => ctx.slots.register({
+          name: 'plugins.item', id: `switch-${switchId}`, order: 100 + index, label: () => t(`switch.${switchId}.title`), locale: NS,
+          inject: () => ({ switchId }),
+        }, SwitchCard))
+      })
+      return () => {
+        live = false
+        off?.()
+      }
+    }, `ui-settings-operations: ${switchId} card`)
+  })
 }

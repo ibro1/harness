@@ -32,10 +32,11 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-import { createChromiumDriver } from './chromium.ts'
+import { createChromiumDriver, resolveBrowserPath } from './chromium.ts'
 import { isOutputsCapability } from './driver.ts'
 import type { CaptureDriver, CaptureRequest, CaptureResult, DomRect, OutputsCapability } from './driver.ts'
 import { screenUrl, systemLookup } from './ssrf.ts'
+import { gateTools, mountSwitch } from '@deepseek-ai/dsh-host-plugin-switch'
 import type { HostLookup } from './ssrf.ts'
 
 /** The plugin name, for the Loader. */
@@ -567,11 +568,41 @@ export function apply(ctx: Context, config: Config): void {
     const service: unknown = ctx.get('outputs')
     return isOutputsCapability(service) ? service : undefined
   }
-  const tools = buildCaptureTools(config, { readOutputs })
+  const driver = createChromiumDriver({
+    browserPath: config.browserPath,
+    launchTimeoutMs: config.launchTimeoutMs,
+    loadTimeoutMs: config.loadTimeoutMs,
+    hardTimeoutMs: config.hardTimeoutMs,
+    maxFullPageHeightPx: config.maxFullPageHeightPx,
+    scrollStepMs: config.scrollStepMs,
+  })
+  const toggle = mountSwitch(ctx, {
+    id: 'capture',
+    defaultEnabled: true,
+    health: () => {
+      try {
+        return { healthy: true, facts: [{ key: 'browser', value: resolveBrowserPath(config.browserPath) }] }
+      } catch (error) {
+        return { healthy: false, facts: [], problem: error instanceof Error ? error.message : String(error) }
+      }
+    },
+    // One real capture of a public page: browser start, network and screenshot together.
+    test: async () => {
+      const started = Date.now()
+      const screened = await screenUrl('https://example.com/', systemLookup)
+      const result = await driver.capture({
+        url: screened.url.href, addresses: screened.addresses, literalHost: screened.literal,
+        width: 800, height: 600, deviceScaleFactor: 1, waitMs: 0, fullPage: false, mobile: false, darkMode: false,
+      }, AbortSignal.timeout(config.hardTimeoutMs))
+      return { ok: true, message: `Captured example.com in ${String(Date.now() - started)} ms (${String(result.png.byteLength)} bytes).` }
+    },
+  })
+  const tools = gateTools(buildCaptureTools(config, { readOutputs, driver }), () => toggle.isOn(), 'Page capture')
 
   const installed = new Map<Agent, { dispose: () => Promise<void> }>()
   const install = (agent: Agent): void => {
-    if (installed.has(agent)) return
+    // Switched off (Plugins → Page capture): a new agent is not given the tool.
+    if (installed.has(agent) || !toggle.isOn()) return
     installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
       registerCaptureTools(scope, tools)
     }))

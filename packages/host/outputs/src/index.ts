@@ -32,6 +32,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolRunContext, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session'
+import { gateTools, mountSwitch } from '@deepseek-ai/dsh-host-plugin-switch'
 
 /**
  * Directory name, inside the session cwd, that holds published outputs.
@@ -496,8 +497,8 @@ export function buildOutputTools(outputs: SessionOutputs, resolveCwd: ResolveCwd
  * @param outputs - the session-outputs service.
  * @param resolveCwd - reads that agent's session cwd at call time.
  */
-function registerOutputTools(ctx: Context, outputs: SessionOutputs, resolveCwd: ResolveCwd): void {
-  for (const tool of buildOutputTools(outputs, resolveCwd)) {
+function registerOutputTools(ctx: Context, outputs: SessionOutputs, resolveCwd: ResolveCwd, isOn: () => boolean): void {
+  for (const tool of gateTools(buildOutputTools(outputs, resolveCwd), isOn, 'Session outputs')) {
     ctx.effect(() => ctx.tools.register(tool), `outputs: ${tool.name}`)
   }
 }
@@ -527,12 +528,26 @@ function sessionCwd(ctx: Context, agent: Agent): string {
 export function apply(ctx: Context, config: Config): void {
   const outputs = createSessionOutputs(config)
   ctx.provide('outputs', outputs)
+  // The switch (Plugins → Session outputs) covers the model's publish_output
+  // tool only: the drawer, and the plugins that deliver into it, keep working.
+  const toggle = mountSwitch(ctx, {
+    id: 'outputs',
+    defaultEnabled: true,
+    health: () => ({
+      healthy: true,
+      facts: [
+        { key: 'directory', value: OUTPUTS_DIR },
+        { key: 'maxFile', value: `${String(Math.round(config.maxFileBytes / 1_000_000))} MB` },
+        { key: 'maxTotal', value: `${String(Math.round(config.maxTotalBytes / 1_000_000))} MB` },
+      ],
+    }),
+  })
 
   const installed = new Map<Agent, { dispose: () => Promise<void> }>()
   const install = (agent: Agent): void => {
-    if (installed.has(agent)) return
+    if (installed.has(agent) || !toggle.isOn()) return
     installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
-      registerOutputTools(scope, outputs, () => sessionCwd(ctx, agent))
+      registerOutputTools(scope, outputs, () => sessionCwd(ctx, agent), () => toggle.isOn())
     }))
   }
   const remove = (agent: Agent): void => {

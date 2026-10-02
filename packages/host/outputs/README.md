@@ -33,6 +33,8 @@ interface PublishedOutput {
   label?: string
 }
 
+**Plugins → Session outputs** switches the model's `publish_output` tool on or off (`@deepseek-ai/dsh-host-plugin-switch`). The `outputs` service stays provided either way, so the drawer and the plugins that deliver into it keep working.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

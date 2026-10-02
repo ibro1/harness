@@ -23,6 +23,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
+import { isSwitchedOn, mountSwitch } from '../../packages/host/plugin-switch/lib/index.js'
 import { buildOutputTools } from '../../packages/host/outputs/lib/index.js'
 import { buildCaptureTools, Config as CaptureConfig, resolveBrowserPath } from '../../packages/host/capture/lib/index.js'
 import { buildPsdTools, Config as PsdConfig, createPhotopeaEngine } from '../../packages/host/psd-tools/lib/index.js'
@@ -67,6 +68,14 @@ async function readBody(req, limit) {
 }
 
 export function apply(ctx, config) {
+  // Mounted before the token check, so the Plugins page can say the route is missing its token.
+  const toggle = mountSwitch(ctx, {
+    id: 'session-tools',
+    defaultEnabled: true,
+    health: () => config.token === ''
+      ? { healthy: false, facts: [{ key: 'token', flag: false }], problem: 'No token was generated for this route at boot, so the CLIs cannot reach it.' }
+      : { healthy: true, facts: [{ key: 'token', flag: true }, { key: 'route', value: `${config.path}/command` }, { key: 'tools', value: toolsFor(() => '').map(t => t.name).join(', ') }] },
+  })
   if (config.token === '') {
     announce('no token configured — route not mounted')
     return
@@ -112,10 +121,11 @@ export function apply(ctx, config) {
    */
   const toolsFor = (resolveCwd) => {
     const outputs = readOutputs()
+    // Each plugin's own switch on the Plugins page applies here too.
     return [
-      ...(outputs === undefined ? [] : buildOutputTools(outputs, resolveCwd)),
-      ...(config.capture ? buildCaptureTools(captureConfig, { readOutputs, resolveCwd: () => resolveCwd() }) : []),
-      ...(config.psd ? buildPsdTools(psdConfig, { engine: psdEngine, readOutputs, resolveCwd: () => resolveCwd() }) : []),
+      ...(outputs === undefined || !isSwitchedOn('outputs', true) ? [] : buildOutputTools(outputs, resolveCwd)),
+      ...(config.capture && isSwitchedOn('capture', true) ? buildCaptureTools(captureConfig, { readOutputs, resolveCwd: () => resolveCwd() }) : []),
+      ...(config.psd && isSwitchedOn('psd-tools', true) ? buildPsdTools(psdConfig, { engine: psdEngine, readOutputs, resolveCwd: () => resolveCwd() }) : []),
     ]
   }
 
@@ -130,6 +140,12 @@ export function apply(ctx, config) {
       if (!secretEquals(presented, config.token)) {
         res.writeHead(404)
         res.end()
+        return
+      }
+      if (!toggle.isOn()) {
+        // Switched off on the Plugins page: the CLI lists no tools and every call is refused.
+        if (req.method === 'GET') json(res, 200, { tools: [] })
+        else json(res, 200, { error: 'Session tools for the CLIs is switched off on the Plugins page; ask the owner to switch it on.' })
         return
       }
       if (req.method === 'GET') {

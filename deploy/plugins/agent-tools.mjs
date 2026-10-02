@@ -32,6 +32,7 @@
 
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
+import { mountSwitch } from '../../packages/host/plugin-switch/lib/index.js'
 
 export const name = 'agent-tools'
 export const inject = ['webServer', 'agents', 'tools']
@@ -88,6 +89,14 @@ function contentText(content) {
 }
 
 export function apply(ctx, config) {
+  // Mounted before the token check, so the Plugins page can say the route is missing its token.
+  const toggle = mountSwitch(ctx, {
+    id: 'agent-tools',
+    defaultEnabled: true,
+    health: () => config.token === ''
+      ? { healthy: false, facts: [{ key: 'token', flag: false }], problem: 'No token was generated for this route at boot, so the CLIs cannot reach it.' }
+      : { healthy: true, facts: [{ key: 'token', flag: true }, { key: 'route', value: `${config.path}/command` }, { key: 'tools', value: config.tools.join(', ') }] },
+  })
   if (config.token === '') {
     announce('no token configured — route not mounted')
     return
@@ -119,6 +128,12 @@ export function apply(ctx, config) {
       if (!secretEquals(presented, config.token)) {
         res.writeHead(404)
         res.end()
+        return
+      }
+      if (!toggle.isOn()) {
+        // Switched off on the Plugins page: the CLI lists no tools and every call is refused.
+        if (req.method === 'GET') json(res, 200, { tools: [] })
+        else json(res, 200, { error: 'Agent Teams tools for the CLIs is switched off on the Plugins page; ask the owner to switch it on.' })
         return
       }
       if (req.method === 'GET') {

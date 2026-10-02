@@ -21,6 +21,8 @@ kind: "package-reference"
 
 One tool, `capture_page`, screenshots a web page and measures it. It drives Chromium over the DevTools Protocol, so the same call that produces the PNG also reads the page's geometry out of the live DOM: `scrollWidth` against the viewport width, the title and final URL after redirects, the `currentSrc` of every image that failed to load, the bounding box of an optional CSS selector, and how many elements the document holds.
 
+**Plugins → Page capture** switches the tool on or off and runs a test capture of example.com (`@deepseek-ai/dsh-host-plugin-switch`). Off, new agents are not given the tool and calls from existing ones are refused.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

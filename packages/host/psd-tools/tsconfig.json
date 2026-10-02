@@ -22,6 +22,9 @@
     },
     {
       "path": "../capture"
+    },
+    {
+      "path": "../plugin-switch"
     }
   ]
 }

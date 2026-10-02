@@ -129,6 +129,8 @@ describe('capture plugin registration', () => {
       get: () => undefined,
       on() {},
       effect(fn: () => unknown) { fn() },
+      // The switch routes need the web server, which this stub does not have.
+      inject() { return { dispose: () => Promise.resolve() } },
     }
     apply(ctx as unknown as Context, testConfig())
     expect([...tools.keys()]).toEqual(['capture_page'])

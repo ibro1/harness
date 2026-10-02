@@ -468,6 +468,7 @@
     { "path": "./packages/host/klipara-scout" },
     { "path": "./packages/host/seo-employee" },
     { "path": "./packages/host/psd-tools" },
+    { "path": "./packages/host/plugin-switch" },
     { "path": "./packages/host/error-reporting" },
     { "path": "./packages/host/dokploy" },
     { "path": "./packages/host/outputs" },

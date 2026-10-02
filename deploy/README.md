@@ -560,6 +560,8 @@ on the Plugins page, so they are inserted by the web-app bundle
 Plugins-page edits composes after bundles and before `--patch` overlays, so a
 plugin an overlay inserts can never take a saved edit.
 
+The overlay plugins in the table below each have a card on the Plugins page with an on/off switch, their status and, where one exists, a test (`packages/host/plugin-switch`). The switch is saved in `~/.dsh/plugin-switches.json` and applies without a redeploy; the `DSH_*=0` variables still leave a plugin out entirely.
+
 | Plugin | On by default | Turn off with | Model tools reach agy/opencode |
 |---|---|---|---|
 | Session outputs | yes | `DSH_OUTPUTS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |

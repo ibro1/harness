@@ -26,7 +26,8 @@ import { deliverFile, isOutputsCapability, resolveBrowserPath } from '@deepseek-
 import type { ImageRecord, OutputsCapability } from '@deepseek-ai/dsh-host-capture'
 import { createPhotopeaEngine } from './photopea.ts'
 import type { PhotopeaEngine } from './photopea.ts'
-import { customScripts, ECHO_MARK, editScripts, exportScript, INSPECT_MARK, inspectScript } from './scripts.ts'
+import { customScripts, ECHO_MARK, editScripts, exportScript, INSPECT_MARK, inspectScript, wrapScript } from './scripts.ts'
+import { gateTools, mountSwitch } from '@deepseek-ai/dsh-host-plugin-switch'
 import type { DocInfo, ExportFormat, LayerInfo, PsdEdit } from './scripts.ts'
 
 export { createPhotopeaEngine } from './photopea.ts'
@@ -543,7 +544,8 @@ export function buildPsdTools(config: Config, deps: PsdDeps = {}): ToolDefinitio
 }
 
 /**
- * Mount the PSD tools on every agent, sharing one Photopea browser.
+ * Mount the PSD tools on every agent created while they are switched on
+ * (Plugins → PSD tools), sharing one Photopea browser.
  * @param ctx - the plugin context, injecting `agents`.
  * @param config - validated composition config.
  */
@@ -560,11 +562,51 @@ export function apply(ctx: Context, config: Config): void {
     idleCloseMs: config.idleCloseMs,
   })
   ctx.effect(() => () => { void engine.close() }, 'psd-tools: Photopea browser')
-  const tools = buildPsdTools(config, { engine, readOutputs })
+
+  // The last call, for the Plugins page: when, which tool, and how it ended.
+  let lastCall: { at: string; tool: string; error?: string } | undefined
+  const recorded = buildPsdTools(config, { engine, readOutputs }).map(tool => ({
+    ...tool,
+    execute: async (args: unknown, exec: ToolRunContext): Promise<unknown> => {
+      try {
+        const value = await tool.execute(args, exec)
+        lastCall = { at: new Date().toISOString(), tool: tool.name }
+        return value
+      } catch (error) {
+        lastCall = { at: new Date().toISOString(), tool: tool.name, error: error instanceof Error ? error.message : String(error) }
+        throw error
+      }
+    },
+  }))
+  const toggle = mountSwitch(ctx, {
+    id: 'psd-tools',
+    defaultEnabled: true,
+    health: () => {
+      const facts = [
+        { key: 'photopea', value: config.photopeaUrl },
+        { key: 'lastCall', value: lastCall === undefined ? '' : `${lastCall.at} ${lastCall.tool}${lastCall.error === undefined ? '' : `: ${lastCall.error}`}` },
+      ]
+      try {
+        return { healthy: true, facts: [{ key: 'browser', value: resolveBrowserPath(config.browserPath) }, ...facts] }
+      } catch (error) {
+        return { healthy: false, facts, problem: error instanceof Error ? error.message : String(error) }
+      }
+    },
+    // Loads Photopea in the browser the tools use, the step that fails when photopea.com is unreachable.
+    test: async () => {
+      const started = Date.now()
+      const signal = AbortSignal.timeout(config.loadTimeoutMs + config.stepTimeoutMs)
+      const result = await engine.run({ files: [], documents: 0, scripts: [wrapScript(`app.echoToOE(${JSON.stringify(ECHO_MARK)} + app.fonts.length)`)] }, signal)
+      const fonts = result.echoes.find(e => e.startsWith(ECHO_MARK))?.slice(ECHO_MARK.length) ?? '?'
+      return { ok: true, message: `Photopea answered in ${String(Date.now() - started)} ms with ${fonts} fonts available.` }
+    },
+  })
+  const tools = gateTools(recorded, () => toggle.isOn(), 'PSD tools')
 
   const installed = new Map<Agent, { dispose: () => Promise<void> }>()
   const install = (agent: Agent): void => {
-    if (installed.has(agent)) return
+    // Switched off: a new agent is not given the tools at all.
+    if (installed.has(agent) || !toggle.isOn()) return
     installed.set(agent, agent.ctx.inject(['tools'], (scope) => {
       for (const tool of tools) scope.effect(() => scope.tools.register(tool), `psd-tools: ${tool.name}`)
     }))
