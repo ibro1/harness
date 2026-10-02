@@ -71,12 +71,22 @@ export interface TtsStatus {
   videos: TtsVideoRow[]
 }
 
+/** The owner's TikTok browser, as `/tts/tiktok` reports it. */
+export interface TtsAccount {
+  state: 'signed-out' | 'waiting-for-scan' | 'signed-in' | 'error'
+  qr?: string
+  error?: string
+}
+
 /** The status block's state. */
 export interface TtsLiveState {
   status: TtsStatus | undefined
   failed: boolean
   /** Set briefly after "Run a shift now". */
   started: boolean
+  account: TtsAccount | undefined
+  /** A connect or disconnect is in flight. */
+  accountBusy: boolean
 }
 
 /** What the card renders. */
@@ -96,6 +106,8 @@ export interface TtsCardFace extends SettingsFormActions {
   runNow: () => void
   pause: () => void
   resume: () => void
+  /** The TikTok browser: show a QR code to sign in, check the session, or forget it. */
+  tiktok: (action: 'connect' | 'check' | 'disconnect') => void
   hooks: {
     /** Bound as useTtsCard. */
     ttsCard: SnapshotStore<TtsCardState>
@@ -129,7 +141,10 @@ function listField(field: ListField): SettingsFieldSpec {
 export class TtsCardController {
   private readonly form: SettingsFormModel<TtsSettings>
   private readonly store: SnapshotStore<TtsCardState>
-  private readonly live = createSnapshotStore<TtsLiveState>({ status: undefined, failed: false, started: false })
+  private readonly live = createSnapshotStore<TtsLiveState>({
+    status: undefined, failed: false, started: false, account: undefined, accountBusy: false,
+  })
+  private scanTimer: ReturnType<typeof setInterval> | undefined
 
   /**
    * @param scope - the bound settings scope.
@@ -189,8 +204,34 @@ export class TtsCardController {
     })()
   }
 
-  /** Stop following the settings scope; the page is gone. */
-  dispose(): void { this.form.dispose() }
+  /** Connect, check or disconnect the TikTok browser; while a QR code waits for a scan, read it again every 3 seconds. */
+  account(action: 'connect' | 'check' | 'disconnect' | 'read'): void {
+    this.live.update((draft) => { draft.accountBusy = action !== 'read' })
+    void (async () => {
+      try {
+        const response = await this.request('/tts/tiktok', action === 'read'
+          ? { cache: 'no-store', credentials: 'same-origin' }
+          : { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) })
+        const account = await response.json() as TtsAccount
+        this.live.update((draft) => { draft.account = account; draft.accountBusy = false })
+        if (account.state === 'waiting-for-scan' && this.scanTimer === undefined) {
+          this.scanTimer = setInterval(() => { this.account('read') }, 3000)
+        } else if (account.state !== 'waiting-for-scan' && this.scanTimer !== undefined) {
+          clearInterval(this.scanTimer)
+          this.scanTimer = undefined
+        }
+      } catch {
+        // The plugin is not loaded or the sign-in expired; the block shows nothing new.
+        this.live.update((draft) => { draft.accountBusy = false })
+      }
+    })()
+  }
+
+  /** Stop following the settings scope and the QR polling; the page is gone. */
+  dispose(): void {
+    this.form.dispose()
+    if (this.scanTimer !== undefined) clearInterval(this.scanTimer)
+  }
 
   /**
    * Build the face the card's slot registration injects, reading the status as the page opens.
@@ -200,9 +241,11 @@ export class TtsCardController {
    */
   inject(models: SnapshotStore<ScoutModelCatalogState>, retryModels: () => void): TtsCardFace {
     this.refreshStatus()
+    this.account('read')
     const actions = this.form.actions()
     return {
       hooks: { ttsCard: this.store, ttsModels: models, ttsLive: this.live },
+      tiktok: (action) => { this.account(action) },
       ...actions,
       save: () => { actions.save(); setTimeout(() => { this.refreshStatus() }, 1500) },
       retryModels,

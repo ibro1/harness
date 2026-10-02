@@ -51,6 +51,8 @@ State is one JSON file, `<DSH home>/tiktok-shop-employee/state.json` (mode 0600)
 
 The review page `GET <path>/v/<id>?sig=` (HMAC of the video id with a key in the state file) works without the harness sign-in: the video with range requests, a download, the caption, posting steps, and buttons that record posted, skipped and the owner's views and sales. `GET <path>/status` and `POST <path>/action` (pause, resume, run-now) are signed-in only. `tts-` Sessions may not use the DeerFlow browser.
 
+`tiktok-browser.ts` is the owner's TikTok account in its own persistent Chromium profile (`<data dir>/tiktok-profile`), always through the proxy and never shared with the DeerFlow browsers. **Connect TikTok** on the settings page opens TikTok's QR login headless and shows the code (refreshed as it expires) until the owner scans it with the app, within 3 minutes; the session is the `sessionid` cookie in the profile, and **Disconnect** deletes the profile. On a ready video's review page **Prepare** runs the posting script without pressing Post and **Post now** presses it: open the upload page (`tiktokUploadUrl`), upload the file, type the caption, tag the product (Add link, Products, search by id then title), switch on the AI-generated and disclosure labels, and screenshot the page. Controls are found by their visible words; each step is recorded, posting refuses unless sign-in, upload, caption and product tag all worked, and the owner gets the steps and screenshot on WhatsApp. The model never posts.
+
 </details>
 
 -----
@@ -76,7 +78,7 @@ The tool set is fixed for a Session's life, so the prefix stays cacheable.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Posting is manual.** TikTok's Content Posting API publishes publicly only for apps TikTok has audited; until then the owner posts from the review page's download.
+- **Posting drives TikTok's web page.** TikTok does not document its upload page, so a change there breaks a step until the words the script looks for are updated; the step list and screenshot show which. TikTok's Content Posting API publishes publicly only for audited apps and may not tag Shop products.
 - **Results are typed in.** Views and sales come from the owner on the review page; TikTok's analytics are not read.
 - **Product data is a paid third party.** SocialCrawl's field names are not published, so a change on their side can empty searches; its product-details endpoint may not cover GB, in which case scripts work from the search result alone.
 - **Only the listing's still images.** No product video footage, stock clips or AI-generated scenes yet.

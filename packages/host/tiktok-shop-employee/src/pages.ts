@@ -16,10 +16,13 @@ function html(value: string): string {
  * The review page.
  * @param video - the video.
  * @param product - its product, when still known.
- * @param links - the signed media and action addresses.
+ * @param links - the signed media, action and screenshot addresses.
+ * @param signedIn - whether the owner's TikTok browser is signed in, so the page can offer to post from it.
  * @returns the HTML document.
  */
-export function reviewPage(video: VideoRecord, product: TrackedProduct | undefined, links: { media: string; action: string }): string {
+export function reviewPage(
+  video: VideoRecord, product: TrackedProduct | undefined, links: { media: string; action: string; shot?: string }, signedIn = false,
+): string {
   const status = {
     rendering: 'Still rendering. Refresh in a minute.',
     failed: `The render failed: ${video.error ?? 'unknown error'}`,
@@ -29,6 +32,16 @@ export function reviewPage(video: VideoRecord, product: TrackedProduct | undefin
   }[video.status]
   const playable = video.file !== undefined && video.status !== 'rendering' && video.status !== 'failed'
   const results = video.results
+  const posting = video.posting
+  const running = posting?.state === 'running'
+  const postingBlock = video.status !== 'ready' && posting === undefined ? '' : `<div class="card"><strong>Post from your TikTok browser</strong>
+${signedIn ? '<p class="muted">The harness uploads the video, types the caption, tags the product and switches on the labels. <em>Prepare</em> stops before posting and shows you a screenshot; <em>Post now</em> presses Post.</p>' : '<p class="muted">Sign the TikTok browser in first: Plugins → TikTok Shop employee → Connect TikTok (scan the QR code with the TikTok app).</p>'}
+${running ? `<p>${posting.mode === 'prepare' ? 'Preparing' : 'Posting'}… started ${html(posting.at.slice(11, 16))}. Refresh in a minute.</p>` : ''}
+${posting !== undefined && !running ? `<p>Last ${posting.mode === 'prepare' ? 'dry run' : 'post'} ${html(posting.at.slice(0, 16).replace('T', ' '))}: ${posting.error === undefined ? 'finished' : html(posting.error)}</p>
+<ul>${posting.steps.map(s => `<li>${s.ok ? '✅' : '❌'} ${html(s.step)}${s.note === undefined ? '' : ` <span class="muted">(${html(s.note)})</span>`}</li>`).join('')}</ul>
+${posting.shot !== undefined && links.shot !== undefined ? `<p><a href="${html(links.shot)}" target="_blank" rel="noreferrer">Open the screenshot of TikTok's upload page</a></p>` : ''}` : ''}
+${video.status === 'ready' && signedIn && !running ? `<form method="post" action="${html(links.action)}"><button class="ghost" name="do" value="prepare">Prepare (don't post)</button><button class="primary" name="do" value="post" onclick="return confirm('Post this video to your TikTok now?')">Post now</button></form>` : ''}
+</div>`
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TikTok Shop video</title>
 <style>
@@ -56,7 +69,8 @@ ${playable ? `<video src="${html(links.media)}" controls playsinline preload="me
 <li>Add link → Products → find <em>${html(product?.title ?? 'the product')}</em>${product?.id === undefined ? '' : ` (id ${html(product.id)})`} and add it.</li>
 <li>More options → turn on <strong>AI-generated content</strong> (the voice is AI) and <strong>Content disclosure → Promotional content</strong>.</li>
 <li>Add a trending sound at low volume if you like.</li></ol></div>
-${video.status === 'ready' ? `<form method="post" action="${html(links.action)}"><button class="primary" name="do" value="posted">I posted it</button><button class="ghost" name="do" value="skipped">Skip this one</button></form>` : ''}
+${postingBlock}
+${video.status === 'ready' ? `<form method="post" action="${html(links.action)}"><button class="primary" name="do" value="posted">I posted it myself</button><button class="ghost" name="do" value="skipped">Skip this one</button></form>` : ''}
 ${video.status === 'posted' ? `<form class="card" method="post" action="${html(links.action)}"><strong>How did it do?</strong>
 <p class="muted">After a few days, from the video's analytics. The employee writes more like the ones that sell.</p>
 <p><label>Views <input name="views" inputmode="numeric" value="${html(String(results?.views ?? ''))}"></label>

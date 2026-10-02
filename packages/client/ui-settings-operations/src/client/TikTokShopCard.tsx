@@ -68,6 +68,34 @@ function StatusBlock(props: {
 }
 
 /**
+ * The TikTok browser block: the account's state, the QR code while waiting, and the buttons.
+ * @returns the block.
+ */
+function AccountBlock(props: { t: Translate; live: TtsLiveState; onAction: (action: 'connect' | 'check' | 'disconnect') => void }) {
+  const { t, live } = props
+  const account = live.account
+  const state = account?.state ?? 'signed-out'
+  return (
+    <div className={css.picker}>
+      <span className={css.pickerLabel}>{t('ttsTikTokTitle')}</span>
+      <p className={state === 'signed-in' ? css.pickerValue : css.pickerHint} role="status">
+        {t(`ttsTikTok.${state}`)}{account?.error === undefined ? '' : ` ${account.error}`}
+      </p>
+      {state === 'waiting-for-scan' && account?.qr !== undefined
+        ? <img src={account.qr} alt={t('ttsTikTokQr')} width={220} height={220} style={{ background: '#fff', padding: 8, borderRadius: 8 }} />
+        : null}
+      <div className={css.pickerCurrent}>
+        {state === 'signed-in'
+          ? <Button variant="ghost" size="sm" disabled={live.accountBusy} onClick={() => { props.onAction('disconnect') }}>{t('ttsTikTokDisconnect')}</Button>
+          : <Button variant="outline" size="sm" disabled={live.accountBusy || state === 'waiting-for-scan' || live.status?.proxy !== true} onClick={() => { props.onAction('connect') }}>{t('ttsTikTokConnect')}</Button>}
+        <Button variant="ghost" size="sm" disabled={live.accountBusy} onClick={() => { props.onAction('check') }}>{t('ttsTikTokCheck')}</Button>
+      </div>
+      {live.status?.proxy === true ? null : <p className={css.pickerUnknown}>{t('ttsTikTokNeedsProxy')}</p>}
+    </div>
+  )
+}
+
+/**
  * Render the card.
  * @param props - locale copy, the form, the status and the actions.
  * @returns the summary line or the card.
@@ -106,6 +134,7 @@ export function TikTokShopCard(props: TikTokShopCardProps) {
   return (
     <SettingsForm labels={formLabels(t)} state={state} onSave={props.save} onDiscard={props.discard}>
       <StatusBlock t={t} live={live} onRun={props.runNow} onPause={props.pause} onResume={props.resume} onRefresh={props.refreshStatus} />
+      <AccountBlock t={t} live={live} onAction={props.tiktok} />
       <div>
         <p><strong>{t('tts.enabled')}</strong></p>
         <Switch

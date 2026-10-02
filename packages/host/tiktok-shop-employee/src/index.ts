@@ -26,6 +26,7 @@ import { renderVideo } from './render.ts'
 import { DEFAULT_BLOCKED_WORDS } from './rules.ts'
 import { socialCrawl } from './socialcrawl.ts'
 import { directShop, withFallback } from './direct.ts'
+import { TikTokBrowser, type PostRun } from './tiktok-browser.ts'
 import { resolveBrowserPath } from '@deepseek-ai/dsh-host-capture'
 import { ShopStore } from './store.ts'
 import { buildShopTools } from './tools.ts'
@@ -37,6 +38,8 @@ export { blockedWord, DEFAULT_BLOCKED_WORDS, finalCaption, scriptProblems } from
 export { parseProduct, socialCrawl } from './socialcrawl.ts'
 export { DirectUnavailable, directShop, productsIn, proxyOption, withFallback } from './direct.ts'
 export type { DirectSettings, SourcedAnswer } from './direct.ts'
+export { TikTokBrowser } from './tiktok-browser.ts'
+export type { AccountState, PostRun, PostStep } from './tiktok-browser.ts'
 export type { ShopProduct, SocialCrawl } from './socialcrawl.ts'
 export { emptyState, ShopStore } from './store.ts'
 export type { ShopState, TrackedProduct, VideoRecord } from './store.ts'
@@ -96,8 +99,10 @@ export interface Config {
   directSearchUrl: Volatile<string>
   /** Direct product page; `{region}` and `{id}` are filled in. */
   directProductUrl: Volatile<string>
-  /** Chromium for the direct read; empty searches PATH. */
+  /** Chromium for the direct read and the TikTok browser; empty searches PATH. */
   browserPath: string
+  /** TikTok's web upload page, where the owner's posts are made. */
+  tiktokUploadUrl: Volatile<string>
   /** `auto` (every Gemini key, then Groq as the last resort), `gemini`, `groq` or `elevenlabs`. */
   voiceProvider: Volatile<string>
   /** Gemini voice name, such as Puck. */
@@ -157,6 +162,7 @@ export const Config = z.object({
   directSearchUrl: z.string().default('https://shop.tiktok.com/{region}/search?q={query}').volatile(),
   directProductUrl: z.string().default('https://shop.tiktok.com/{region}/pdp/{id}').volatile(),
   browserPath: z.string().default(''),
+  tiktokUploadUrl: z.string().default('https://www.tiktok.com/tiktokstudio/upload?from=webapp').volatile(),
   voiceProvider: z.string().default('auto').volatile(),
   voice: z.string().default('Puck').volatile(),
   groqVoice: z.string().default('troy').volatile(),
@@ -248,6 +254,51 @@ export function apply(ctx: Context, config: Config): void {
     groqApiKey: config.groqApiKey.get(),
     speakScript: config.speakScript,
   }))
+
+  // The owner's TikTok account, in its own profile, only through the proxy.
+  const tiktok = new TikTokBrowser(() => ({
+    profileDir: join(dataDir, 'tiktok-profile'),
+    browserPath: resolveBrowserPath(config.browserPath),
+    proxy: proxy(),
+    uploadUrl: config.tiktokUploadUrl.get(),
+  }))
+  /** Prepare or post one video in the TikTok browser, recording the steps and a screenshot; tells the owner when done. */
+  const runPost = async (videoId: string, mode: 'prepare' | 'post'): Promise<void> => {
+    const state = await store.read()
+    const video = state.videos.find(v => v.id === videoId)
+    const product = state.products.find(p => p.id === video?.productId)
+    if (video?.file === undefined || product === undefined) return
+    const result: PostRun = await tiktok.run({
+      videoPath: join(mediaDir, video.file), caption: video.caption, productId: product.id, productTitle: product.title,
+    }, mode).catch((error: unknown): PostRun => ({
+      mode, steps: [], posted: false, error: error instanceof Error ? error.message : String(error),
+    }))
+    let shot: string | undefined
+    if (result.screenshot !== undefined) {
+      shot = `${videoId}-${mode}.png`
+      await writeFile(join(mediaDir, shot), result.screenshot)
+    }
+    const at = new Date().toISOString()
+    await store.update((s) => {
+      const v = s.videos.find(x => x.id === videoId)
+      if (v === undefined) return
+      v.posting = {
+        mode, state: result.error === undefined || result.posted ? 'done' : 'failed', at, steps: result.steps,
+        ...result.error === undefined ? {} : { error: result.error }, ...shot === undefined ? {} : { shot },
+      }
+      if (result.posted) Object.assign(v, { status: 'posted', postedAt: at })
+    })
+    const failed = result.steps.filter(s => !s.ok).map(s => s.step)
+    await notify(result.posted
+      ? `TikTok Shop: "${product.title}" is posted on your TikTok. ${reviewLink(videoId)}`
+      : `TikTok Shop: ${mode === 'prepare' ? 'the dry run' : 'posting'} for "${product.title}" ${result.error === undefined ? 'finished' : `stopped: ${result.error}`}.${failed.length === 0 ? '' : ` Steps that did not work: ${failed.join(', ')}.`} Screenshot and steps: ${reviewLink(videoId)}`)
+  }
+  const startPost = (videoId: string, mode: 'prepare' | 'post'): void => {
+    void store.update((s) => {
+      const v = s.videos.find(x => x.id === videoId)
+      if (v !== undefined) v.posting = { mode, state: 'running', at: new Date().toISOString(), steps: [] }
+    }).then(() => runPost(videoId, mode))
+  }
 
   // Renders run one at a time, in the order they were asked for.
   let renders: Promise<void> = Promise.resolve()
@@ -365,6 +416,14 @@ export function apply(ctx: Context, config: Config): void {
         createReadStream(path).pipe(res)
         return
       }
+      if (part === 'shot') {
+        const shot = video.posting?.shot
+        const info = shot === undefined ? undefined : await stat(join(mediaDir, shot)).catch(() => undefined)
+        if (shot === undefined || info === undefined) { res.writeHead(404); res.end(); return }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': String(info.size) })
+        createReadStream(join(mediaDir, shot)).pipe(res)
+        return
+      }
       if (part === 'action') {
         if (req.method !== 'POST') { res.writeHead(405); res.end(); return }
         const form = new URLSearchParams(await readBody(req, 4096) ?? '')
@@ -377,7 +436,9 @@ export function apply(ctx: Context, config: Config): void {
         await store.update((s) => {
           const v = s.videos.find(x => x.id === videoId)
           if (v === undefined) return
-          if (action === 'posted' && v.status === 'ready') Object.assign(v, { status: 'posted', postedAt: at })
+          if ((action === 'prepare' || action === 'post') && v.status === 'ready' && v.posting?.state !== 'running') {
+            queueMicrotask(() => { startPost(videoId, action) })
+          } else if (action === 'posted' && v.status === 'ready') Object.assign(v, { status: 'posted', postedAt: at })
           else if (action === 'skipped' && v.status === 'ready') Object.assign(v, { status: 'skipped', skippedAt: at })
           else if (action === 'results' && v.status === 'posted') {
             const views = count('views')
@@ -394,7 +455,8 @@ export function apply(ctx: Context, config: Config): void {
       res.end(reviewPage(fresh, state.products.find(p => p.id === fresh.productId), {
         media: `${prefix}/v/${videoId}/media?sig=${sig}`,
         action: `${prefix}/v/${videoId}/action?sig=${sig}`,
-      }))
+        shot: `${prefix}/v/${videoId}/shot?sig=${sig}&t=${encodeURIComponent(fresh.posting?.at ?? '')}`,
+      }, tiktok.current().state === 'signed-in'))
     },
   }), `tiktok-shop-employee: ${prefix}/v`)
 
@@ -414,6 +476,7 @@ export function apply(ctx: Context, config: Config): void {
         dataKey: dataKey() !== '',
         dataKeySource: config.socialCrawlApiKey.get().trim() !== '' ? 'settings' : config.envSocialCrawlApiKey.trim() !== '' ? 'environment' : 'none',
         proxy: proxy() !== '',
+        tiktok: tiktok.current().state,
         groqKey: config.groqApiKey.get().trim() !== '',
         // How many keys of each the voice can use; never the keys.
         voiceKeys: { gemini: envKeys(process.env, 'GEMINI_API_KEY').length, groq: envKeys(process.env, 'GROQ_API_KEY').length },
@@ -447,6 +510,32 @@ export function apply(ctx: Context, config: Config): void {
       json(res, 200, { ok: true })
     },
   }), `tiktok-shop-employee: ${prefix}/action`)
+
+  // ----- The TikTok account (signed in) -----
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: `${prefix}/tiktok`,
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      if (req.method === 'GET') { json(res, 200, tiktok.current()); return }
+      if (req.method !== 'POST') { json(res, 405, { error: 'GET or POST' }); return }
+      let body: { action?: unknown }
+      try {
+        body = JSON.parse(await readBody(req, 4096) ?? '{}') as { action?: unknown }
+      } catch {
+        json(res, 400, { error: 'not JSON' })
+        return
+      }
+      try {
+        if (body.action === 'connect') json(res, 200, await tiktok.startLogin())
+        else if (body.action === 'check') json(res, 200, await tiktok.check())
+        else if (body.action === 'disconnect') { await tiktok.signOut(); json(res, 200, tiktok.current()) } else json(res, 400, { error: 'unknown action' })
+      } catch (error) {
+        json(res, 200, { state: 'error', error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+  }), `tiktok-shop-employee: ${prefix}/tiktok`)
+  // The session's state is read once at start, so the card does not open a browser on every visit.
+  void keyReady.then(() => (proxy() === '' ? undefined : tiktok.check())).catch(() => undefined)
 
   // ----- CLI command route: the same tools for the agy and opencode CLIs -----
   if (config.token !== '') {

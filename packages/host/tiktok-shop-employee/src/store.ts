@@ -42,6 +42,16 @@ export interface VideoRecord {
   file?: string
   postedAt?: string
   skippedAt?: string
+  /** The last prepare or post run in the owner's TikTok browser. */
+  posting?: {
+    mode: 'prepare' | 'post'
+    state: 'running' | 'done' | 'failed'
+    at: string
+    steps: { step: string; ok: boolean; note?: string }[]
+    error?: string
+    /** File name of the upload page's screenshot, under the media directory. */
+    shot?: string
+  }
   /** What the owner reported after posting. */
   results?: { views?: number; sales?: number; at: string }
 }

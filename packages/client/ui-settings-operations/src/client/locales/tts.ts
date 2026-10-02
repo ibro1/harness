@@ -9,7 +9,8 @@ export type TtsFieldKey =
 export type TtsLocaleKey =
   | 'ttsTitle' | 'ttsDescription' | 'ttsInvalid'
   | 'ttsStatusTitle' | 'ttsStatusLoading' | 'ttsStatusUnknown' | 'ttsRunning' | 'ttsPaused' | 'ttsToday' | 'ttsLastShift' | 'ttsNoDataKey'
-  | 'ttsVoiceKeys' | 'ttsSourceDirect' | 'ttsSourceCrawl' | 'ttsDataKeyFromEnv' | 'ttsRunNow' | 'ttsPause' | 'ttsResume' | 'ttsRefresh' | 'ttsStarted' | 'ttsNoVideos' | 'ttsResults'
+  | 'ttsVoiceKeys' | 'ttsTikTokTitle' | 'ttsTikTokQr' | 'ttsTikTokConnect' | 'ttsTikTokCheck' | 'ttsTikTokDisconnect' | 'ttsTikTokNeedsProxy'
+  | 'ttsTikTok.signed-out' | 'ttsTikTok.waiting-for-scan' | 'ttsTikTok.signed-in' | 'ttsTikTok.error' | 'ttsSourceDirect' | 'ttsSourceCrawl' | 'ttsDataKeyFromEnv' | 'ttsRunNow' | 'ttsPause' | 'ttsResume' | 'ttsRefresh' | 'ttsStarted' | 'ttsNoVideos' | 'ttsResults'
   | 'ttsVideo.rendering' | 'ttsVideo.failed' | 'ttsVideo.ready' | 'ttsVideo.posted' | 'ttsVideo.skipped'
   | `tts.${TtsFieldKey}` | `tts.${TtsFieldKey}.hint` | 'tts.shiftModel.none' | 'tts.fallbackModelPick.none'
 
@@ -67,6 +68,16 @@ export const ttsEn: Record<TtsLocaleKey, string> = {
   'tts.directSearchUrl.hint': 'TikTok Shop search address; {region} and {query} are filled in.',
   'tts.directProductUrl': 'Direct product page',
   'tts.directProductUrl.hint': 'TikTok Shop product address; {region} and {id} are filled in.',
+  'ttsTikTokTitle': 'TikTok account',
+  'ttsTikTokQr': 'QR code to scan with the TikTok app',
+  'ttsTikTokConnect': 'Connect TikTok',
+  'ttsTikTokCheck': 'Check',
+  'ttsTikTokDisconnect': 'Disconnect',
+  'ttsTikTokNeedsProxy': 'Set the proxy first: the account is only ever used through it.',
+  'ttsTikTok.signed-out': 'Not connected. Connect to post from the review pages instead of your phone.',
+  'ttsTikTok.waiting-for-scan': 'In the TikTok app, tap the scan icon on the search page and scan this code within 3 minutes.',
+  'ttsTikTok.signed-in': 'Connected. Each video\'s review page can now prepare or post it.',
+  'ttsTikTok.error': 'Could not open TikTok:',
   'ttsVoiceKeys': 'The deployment gives the voice {gemini} Gemini and {groq} Groq keys.',
   'tts.voice': 'Gemini voice',
   'tts.voice.hint': 'A Gemini voice name, such as Puck, Kore or Charon.',
@@ -140,6 +151,16 @@ export const ttsZh: Record<TtsLocaleKey, string> = {
   'tts.directSearchUrl.hint': 'TikTok Shop 搜索地址；会填入 {region} 和 {query}。',
   'tts.directProductUrl': '直接商品页',
   'tts.directProductUrl.hint': 'TikTok Shop 商品地址；会填入 {region} 和 {id}。',
+  'ttsTikTokTitle': 'TikTok 账号',
+  'ttsTikTokQr': '用 TikTok 应用扫描的二维码',
+  'ttsTikTokConnect': '连接 TikTok',
+  'ttsTikTokCheck': '检查',
+  'ttsTikTokDisconnect': '断开',
+  'ttsTikTokNeedsProxy': '请先设置代理：该账号只通过代理使用。',
+  'ttsTikTok.signed-out': '未连接。连接后可在审核页直接发布，而不必用手机。',
+  'ttsTikTok.waiting-for-scan': '在 TikTok 应用中打开扫码（搜索页的扫码图标），在 3 分钟内扫描此二维码。',
+  'ttsTikTok.signed-in': '已连接。每条视频的审核页现在可以预备或发布它。',
+  'ttsTikTok.error': '无法打开 TikTok：',
   'ttsVoiceKeys': '部署为配音提供了 {gemini} 个 Gemini 密钥和 {groq} 个 Groq 密钥。',
   'tts.voice': 'Gemini 声音',
   'tts.voice.hint': 'Gemini 声音名称，例如 Puck、Kore 或 Charon。',
