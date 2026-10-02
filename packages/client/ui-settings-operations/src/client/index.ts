@@ -37,6 +37,8 @@ import { SCOUT_NS, ScoutCardController } from './scout-card-controller.ts'
 import { ScoutModelCatalog } from './scout-model-catalog.ts'
 import { SEO_NS, SeoCardController } from './seo-card-controller.ts'
 import { AdsCardController } from './ads-card-controller.ts'
+import { TikTokShopCard } from './TikTokShopCard.tsx'
+import { TTS_NS, TtsCardController } from './tts-card-controller.ts'
 import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
 
 export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from './cloudflare-card-controller.ts'
@@ -45,6 +47,7 @@ export type { PostgresCardFace, PostgresCardState, PostgresSettings } from './po
 export type { ScoutCardFace, ScoutCardState, ScoutSettings } from './scout-card-controller.ts'
 export type { SeoCardFace, SeoCardState, SeoSettings } from './seo-card-controller.ts'
 export type { AdsCardFace, AdsCardState, AdsSettings } from './ads-card-controller.ts'
+export type { TtsCardFace, TtsCardState, TtsSettings } from './tts-card-controller.ts'
 export type { ErrorReportingCardFace, ErrorReportingCardState, ErrorReportingSettings } from './error-reporting-card-controller.ts'
 export type { OperationsSettingsLocaleKey } from './locales.ts'
 export type { SwitchCardFace, SwitchStatus } from './SwitchCard.tsx'
@@ -87,6 +90,7 @@ export function apply(ctx: ClientContext): void {
   // The ads employee's settings live in the SEO employee's namespace; its card stages only the ads fields.
   const ads = new AdsCardController(ctx.configForms.get(SEO_NS))
   const errorReporting = new ErrorReportingCardController(ctx.configForms.get(ERROR_REPORTING_NS))
+  const tts = new TtsCardController(ctx.configForms.get(TTS_NS))
   // Adapters come and go, and a settings commit elsewhere can change the routes.
   ctx.effect(() => ctx.remote.$on('llm/adapters-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model adapters')
   ctx.effect(() => ctx.remote.$on('settings/document-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model settings')
@@ -98,6 +102,7 @@ export function apply(ctx: ClientContext): void {
     errorReporting.dispose()
     seo.dispose()
     ads.dispose()
+    tts.dispose()
   }, 'ui-settings-operations: form subscriptions')
 
   ctx.effect(() => ctx.configForms.whileServed([DOKPLOY_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
@@ -139,6 +144,13 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([SEO_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: ADS_PROPOSALS_ID, order: 85, label: () => t('adsProposalsPageTitle'), locale: NS,
   }, AdsProposalsPage))), 'ui-settings-operations: Ads proposals page')
+  ctx.effect(() => ctx.configForms.whileServed([TTS_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'tiktok-shop-employee', order: 86, label: () => t('ttsTitle'), locale: NS,
+    inject: () => {
+      scoutModels.refresh()
+      return tts.inject(scoutModels.store, () => { scoutModels.refresh() })
+    },
+  }, TikTokShopCard))), 'ui-settings-operations: TikTok Shop employee page')
 
   // The deployment plugins with only an on/off switch have no settings form to
   // gate their cards on; each card appears when the Host answers its status

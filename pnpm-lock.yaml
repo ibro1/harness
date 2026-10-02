@@ -2629,6 +2629,9 @@ importers:
       '@deepseek-ai/dsh-host-seo-employee':
         specifier: workspace:*
         version: link:../../host/seo-employee
+      '@deepseek-ai/dsh-host-tiktok-shop-employee':
+        specifier: workspace:*
+        version: link:../../host/tiktok-shop-employee
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../host/webserver
@@ -9602,6 +9605,34 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../workspace/workspace
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+
+  packages/host/tiktok-shop-employee:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../util/atomic-write
+      '@deepseek-ai/dsh-host-employee-kit':
+        specifier: workspace:*
+        version: link:../employee-kit
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../webserver
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery

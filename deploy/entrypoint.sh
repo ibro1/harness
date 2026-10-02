@@ -96,6 +96,9 @@ fi
 if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
   export DSH_SEO_TOKEN="${DSH_SEO_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_TIKTOK_SHOP_EMPLOYEE:-1}" != "0" ]]; then
+  export DSH_TTS_TOKEN="${DSH_TTS_TOKEN:-$(random_token)}"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -401,6 +404,18 @@ if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
   echo "[entrypoint] SEO employee available (Plugins -> SEO employee: settings, Google and sites)"
   register_cli_mcp dsh-seo seo-mcp.mjs DSH_SEO_TOKEN DSH_SEO_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT/seo/command" "SEO employee"
+fi
+
+# TikTok Shop employee (packages/host/tiktok-shop-employee): finds UK TikTok
+# Shop products, renders short videos about them with ffmpeg and an AI voice,
+# and sends the owner review links on WhatsApp. Off until switched on at
+# Plugins -> TikTok Shop employee. CLI models reach its tools over MCP.
+if [[ "${DSH_TIKTOK_SHOP_EMPLOYEE:-1}" != "0" ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/tiktok-shop-employee" "$HOME/.dsh/skills/tiktok-shop-employee"
+  echo "[entrypoint] TikTok Shop employee available (Plugins -> TikTok Shop employee)"
+  register_cli_mcp dsh-tiktok-shop tts-mcp.mjs DSH_TTS_TOKEN DSH_TTS_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT/tts/command" "TikTok Shop employee"
 fi
 
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in

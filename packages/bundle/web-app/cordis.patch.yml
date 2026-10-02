@@ -304,6 +304,19 @@
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
 
+    # Fork-local TikTok Shop employee (packages/host/tiktok-shop-employee): finds
+    # UK TikTok Shop products, renders honest short videos about them, and sends
+    # the owner review links to post. Off until switched on at Plugins.
+    - id: tiktok-shop-employee
+      name: '@deepseek-ai/dsh-host-tiktok-shop-employee'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_TIKTOK_SHOP_EMPLOYEE === '0'
+      config:
+        publicBaseUrl: !!js "process.env.DSH_PUBLIC_HOST ? 'https://' + process.env.DSH_PUBLIC_HOST : ''"
+        token: !!js process.env.DSH_TTS_TOKEN || ''
+        workspacePath: !!js process.env.DSH_TTS_WORKSPACE || '/workspace/tiktok-shop-employee'
+        whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
+        whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
+
     - id: postgres
       name: '@deepseek-ai/dsh-host-postgres'
       disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_POSTGRES === '0'
