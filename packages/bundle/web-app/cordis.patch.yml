@@ -242,6 +242,11 @@
     - id: ui-whatsapp
       name: '@deepseek-ai/dsh-client-ui-whatsapp'
 
+    # Fork-local: keeps the open panel and Plugins page in the address bar's
+    # hash, so a refresh, back/forward and a copied link return to that page.
+    - id: ui-url-location
+      name: '@deepseek-ai/dsh-client-ui-url-location'
+
     # Fork-local social plugin card (Settings -> Plugins). Shows what each
     # connected account can post to and whether its credential is about to
     # lapse — LinkedIn's expires every 60 days with no refresh, and the card is

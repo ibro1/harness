@@ -25,7 +25,7 @@ import { PluginsPanelIcon } from './PluginsPanelIcon.tsx'
 import { configLedgerSource } from './config-ledger.ts'
 import { PluginManagerController } from './manager-store.ts'
 import { en, zh, type PluginManagerLocaleKey } from './locales.ts'
-import { createNavigationStore } from './navigation-store.ts'
+import { createNavigationStore, type PluginView } from './navigation-store.ts'
 import type {} from './slot-contract.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -44,6 +44,20 @@ declare module '@deepseek-ai/cordis' {
        * @param id - the page's `plugins.item` id.
        */
       openItem(id: string): void
+      /** Which view of the Plugins panel is showing, kept while another panel or a Session is in front. */
+      view(): PluginView
+      /**
+       * Hear each change of {@link view}.
+       * @param listener - called after the view changed.
+       * @returns unsubscribe.
+       */
+      subscribe(listener: () => void): () => void
+      /**
+       * Select the Plugins panel showing one view. An item or bundle that is not
+       * registered yet shows the list until it is.
+       * @param view - the list, a bundle, an official item, or a bundle row.
+       */
+      show(view: PluginView): void
     }
   }
 }
@@ -52,6 +66,7 @@ export type { PluginManagerPageProps } from './PluginManagerPage.tsx'
 export type { ConfigLedger, OfficialItem } from './config-ledger.ts'
 export type { PluginManagerFace } from './manager-store.ts'
 export type { PluginManagerLocaleKey } from './locales.ts'
+export type { PluginView } from './navigation-store.ts'
 export type {
   ConfigPageForm, PluginActivationOwnerProps, PluginConfigViewProps, PluginDetailProps, PluginPackageRef, PluginRowRef, PluginsSubject,
 } from './slot-contract.ts'
@@ -133,6 +148,12 @@ export function apply(ctx: ClientContext): void {
       openItem: (id: string) => {
         ctx.layout.selectPanel(PANEL_ID)
         instance.actions.setView({ kind: 'item', id })
+      },
+      view: () => instance.getSnapshot().view,
+      subscribe: (listener: () => void) => instance.subscribe(listener),
+      show: (view: PluginView) => {
+        ctx.layout.selectPanel(PANEL_ID)
+        instance.actions.setView(view)
       },
     })
     yield () => { void disposeNavigation() }

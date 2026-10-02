@@ -313,6 +313,7 @@
       "@deepseek-ai/dsh-client-ui-mobile": ["./packages/client/ui-mobile/src"],
       "@deepseek-ai/dsh-client-ui-social": ["./packages/client/ui-social/src"],
       "@deepseek-ai/dsh-client-ui-whatsapp": ["./packages/client/ui-whatsapp/src"],
+      "@deepseek-ai/dsh-client-ui-url-location": ["./packages/client/ui-url-location/src"],
       "@deepseek-ai/dsh-host-browser-bridge": ["./packages/host/browser-bridge/src"],
       "@deepseek-ai/dsh-host-capture": ["./packages/host/capture/src"],
       "@deepseek-ai/dsh-host-cloudflare": ["./packages/host/cloudflare/src"],

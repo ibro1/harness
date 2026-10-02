@@ -2551,6 +2551,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-trajectory':
         specifier: workspace:*
         version: link:../../client/ui-trajectory
+      '@deepseek-ai/dsh-client-ui-url-location':
+        specifier: workspace:*
+        version: link:../../client/ui-url-location
       '@deepseek-ai/dsh-client-ui-user-questions':
         specifier: workspace:*
         version: link:../../client/ui-user-questions
@@ -6092,6 +6095,18 @@ importers:
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
+
+  packages/client/ui-url-location:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:*
+        version: link:../ui-layout
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        specifier: workspace:*
+        version: link:../ui-plugin-manager
 
   packages/client/ui-user-questions:
     devDependencies:

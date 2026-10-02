@@ -127,6 +127,7 @@
     { "path": "./packages/client/ui-composer-tools" },
     { "path": "./packages/client/ui-social" },
     { "path": "./packages/client/ui-whatsapp" },
+    { "path": "./packages/client/ui-url-location" },
     { "path": "./packages/client/ui-settings-operations" },
     { "path": "./packages/client/ui-settings-models" },
     { "path": "./packages/client/ui-plugin-manager/tsconfig.client.json" },

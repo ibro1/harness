@@ -880,6 +880,11 @@ export function renderLoginPage(error?: boolean, locked?: boolean, username?: st
   </div>
   <script>
     (function () {
+      // The redirect after sign-in drops the hash; keep the page it named for
+      // the app to reopen (dsh-client-ui-url-location reads this key).
+      try { if (location.hash.indexOf('#/') === 0) sessionStorage.setItem('dsh-url-location', location.hash) } catch (e) { /* storage refused: the app opens its default */ }
+    })();
+    (function () {
       var input = document.getElementById('password')
       var toggle = document.getElementById('reveal')
       var open = document.getElementById('eye-open')
