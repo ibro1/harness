@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { apply, backfillCovers, bestCandidate, KliparaError, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
+import { creatorEmail } from '../src/podcasts.ts'
+import { ownShow } from '../src/contacts.ts'
+import { aboutLinks, checkComments, emailsIn, followUpsDue, lookUpComment, nextVisibility, outreachStats, apply, backfillCovers, bestCandidate, KliparaError, buildScoutTools, finishSample, leadsPage, localTime, parseShiftTime, ScoutStore, shiftDue, type Config, type KliparaApi, type ScoutDeps, type YtDlpRunner } from '../src/index.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 
@@ -18,6 +20,8 @@ function config(overrides: Partial<Record<keyof Config, unknown>> = {}): Config 
   const base = {
     enabled: live(true), shiftTime: live('09:00'), timeZone: live('Africa/Lagos'),
     samplesPerDay: live(2), pitchesPerDay: live(2), replyCheckMinutes: live(15), topics: live(['podcast']),
+    podcastCountry: live('ng'), podcastActiveDays: live(60),
+    commentsPerDay: live(2), followUpDays: live(6), youtubeApiKey: live(''), commentCheckMinutes: live(180), commentHeldHours: live(24), heldCommentsPause: live(2),
     minSubscribers: live(1000), maxSubscribers: live(500_000), maxShorts: live(10),
     kliparaApiKey: live('klp_sk_test_x'), sampleBaseUrl: live('https://klipara.test/s'), sampleTtlDays: live(30), outreachBrowser: live('outreach'), notifyTo: live('Me'), provider: live(''), model: live(''),
     sampleHeadline: live('A clip'), sampleNote: live('note'),
@@ -224,10 +228,10 @@ describe('klipara scout', () => {
     await run('scout_check_sample', { channel_id: 'UC_small' })
     const link = (await deps.store.read()).leads[0]!.samplePageUrl ?? ''
     await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: 'no link here' })).rejects.toThrow('email pitch must contain the sample link')
-    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: `Clipped your landlord story: ${link}` }))
-      .rejects.toThrow('must contain no link')
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'I clipped your landlord story, want it?' }))
+      .rejects.toThrow('pitch by email, which carries the clip')
     await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'not-an-address', text: link })).rejects.toThrow('needs an email address')
-    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'Such an inspiring episode! I clipped a truly insightful moment. Let me know if you would like it!' }))
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: `Such an inspiring episode! I clipped a truly insightful moment. Let me know if you would like it! ${link}` }))
       .rejects.toThrow('reads as machine-written')
     expect((await deps.store.read()).leads[0]!.stage).toBe('sampled')
     await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'email', to: 'hi@small.pod', text: `Subject: Re: your Lagos rent episode\n\nI clipped the landlord story: ${link}` }))
@@ -250,12 +254,28 @@ describe('klipara scout', () => {
       .rejects.toThrow('No outreach account is configured')
   })
 
-  it('accepts a link-free comment pitch', async () => {
-    const { run, deps } = setup()
+  it('accepts a link-free comment pitch only after an email search found nothing, within the comment cap', async () => {
+    const { run, deps } = setup({}, config({ commentsPerDay: live(1), pitchesPerDay: live(5) }))
     await run('scout_search')
-    await deps.store.update((s) => { s.leads[0]!.stage = 'sampled'; s.leads[0]!.samplePageUrl = 'https://klipara.test/s/abc' })
-    expect(await run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'The bit where he explains Lagos rent deposits is gold. I cut it into a vertical clip; reply and I will send it over.' }))
+    await deps.store.update((s) => {
+      for (const [i, lead] of s.leads.entries()) {
+        lead.stage = 'sampled'
+        lead.samplePageUrl = `https://klipara.test/s/${String(i)}`
+        delete lead.email
+      }
+    })
+    const comment = 'The bit where he explains Lagos rent deposits is gold. I cut it into a vertical clip; reply and I will send it over.'
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: comment }))
+      .rejects.toThrow('Call scout_find_email')
+    await deps.store.update((s) => { for (const lead of s.leads) lead.contactSearch = { at: 'x', tried: ['About page: 0 links'] } })
+    await expect(run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'Clipped your landlord story: https://klipara.test/s/0' }))
+      .rejects.toThrow('must contain no link')
+    expect(await run('scout_pitch', { channel_id: 'UC_small', via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: comment }))
       .toContain('using only the "outreach" browser tools')
+    expect((await deps.store.read()).leads.find(l => l.channelId === 'UC_small')?.pitch?.visibility?.state).toBe('pending')
+    const second = (await deps.store.read()).leads.find(l => l.channelId !== 'UC_small' && l.stage === 'sampled')
+    await expect(run('scout_pitch', { channel_id: second!.channelId, via: 'comment', to: 'https://www.youtube.com/watch?v=v2', text: 'Your take on side hustles at 31:10 made me laugh. I made a short clip of it, want it?' }))
+      .rejects.toThrow("Today's comment cap (1)")
   })
 
   it('pauses outreach, alerts the owner, and refuses samples and pitches until resumed', async () => {
@@ -321,5 +341,174 @@ describe('klipara scout', () => {
     expect(await gate({ name: 'mcp__deerflow__browser_click', agent: agent('scout-1') }, allow)).toMatchObject({ kind: 'deny' })
     expect(await gate({ name: 'mcp__outreach__browser_click', agent: agent('scout-1') }, allow)).toEqual({ kind: 'allow' })
     expect(await gate({ name: 'mcp__deerflow__browser_click', agent: agent('session-9') }, allow)).toEqual({ kind: 'allow' })
+  })
+})
+
+/** A fetch stand-in answering from a table of URL prefixes. */
+function fakeFetch(pages: Record<string, { status?: number; body: string; type?: string }>, seen: string[] = []): typeof fetch {
+  const answer = (input: string | URL | Request): Promise<Response> => {
+    const url = String(input instanceof Request ? input.url : input)
+    seen.push(url)
+    const hit = Object.entries(pages).find(([prefix]) => url.startsWith(prefix))
+    if (hit === undefined) return Promise.resolve(new Response('not found', { status: 404 }))
+    const [, page] = hit
+    return Promise.resolve(new Response(page.body, { status: page.status ?? 200, headers: { 'content-type': page.type ?? 'text/html' } }))
+  }
+  return answer
+}
+
+describe('finding an email before a comment', () => {
+  it('reads addresses from mailto links and page text, and drops page furniture', () => {
+    expect(emailsIn('<a href="mailto:Bookings@Show.ng?subject=hi">x</a> or hello&#64;show.ng, not noreply@show.ng or logo@2x.png')).toEqual(['bookings@show.ng', 'hello@show.ng'])
+  })
+
+  it('ignores hosting-platform and image-name addresses', () => {
+    expect(creatorEmail('feeds@spreaker.com')).toBe(false)
+    expect(creatorEmail('anything@soundcloud.com')).toBe(false)
+    expect(creatorEmail('dashboard@2x.avif')).toBe(false)
+    expect(creatorEmail('mifox87@gmail.com')).toBe(true)
+  })
+
+  it('takes a podcast as the channel\'s own only when the names match closely', () => {
+    expect(ownShow(['Sweat Elite Podcast'], 'Sweat Elite - Podcast')).toBe(true)
+    expect(ownShow(['Modern Girl', 'Emma'], 'Modern Girl')).toBe(true)
+    expect(ownShow(['The Edge: Houston Astros'], 'The Edge')).toBe(false)
+    expect(ownShow(['Confident Business English'], 'Business English Podcast')).toBe(false)
+  })
+
+  it('reads the links an About page lists', () => {
+    const page = '"channelExternalLinkViewModel":{"title":{"content":"Website"},"link":{"content":"show.ng"}},"channelExternalLinkViewModel":{"title":{"content":"IG"},"link":{"content":"instagram.com/show"}}'
+    expect(aboutLinks(page)).toEqual(['https://show.ng', 'https://instagram.com/show'])
+  })
+
+  it('follows the About page to the website\'s contact page, saves the address and the socials, and then allows only email', async () => {
+    const about = '"channelExternalLinkViewModel":{"title":{"content":"Site"},"link":{"content":"smallpod.ng"}},"channelExternalLinkViewModel":{"title":{"content":"IG"},"link":{"content":"instagram.com/smallpod"}}'
+    const seen: string[] = []
+    const fetcher = fakeFetch({
+      'https://www.youtube.com/channel/UC_small/about': { body: about },
+      'https://smallpod.ng/contact': { body: '<p>Write to <a href="mailto:team@smallpod.ng">us</a></p>' },
+      'https://smallpod.ng/': { body: '<p>Welcome</p>' },
+    }, seen)
+    const { run, deps } = setup({ fetch: fetcher })
+    await run('scout_search')
+    await deps.store.update((s) => { delete s.leads[0]!.email })
+    const text = await run('scout_find_email', { channel_id: 'UC_small' })
+    expect(text).toContain('Found team@smallpod.ng')
+    expect(text).toContain('instagram.com/smallpod')
+    expect(seen.some(u => u.includes('instagram.com'))).toBe(false)
+    const lead = (await deps.store.read()).leads[0]!
+    expect(lead.email).toBe('team@smallpod.ng')
+    expect(lead.socials).toEqual(['https://instagram.com/smallpod'])
+    expect(lead.contactSearch?.found).toBe('team@smallpod.ng')
+  })
+
+  it('records every place it looked when nothing has an address', async () => {
+    const fetcher = fakeFetch({
+      'https://www.youtube.com/channel/UC_small/about': { body: '' },
+      'https://itunes.apple.com/search': { body: '{"results":[]}', type: 'application/json' },
+    })
+    const { run, deps } = setup({ fetch: fetcher })
+    await run('scout_search')
+    await deps.store.update((s) => { delete s.leads[0]!.email })
+    const text = await run('scout_find_email', { channel_id: 'UC_small' })
+    expect(text).toContain('No email found')
+    expect(text).toContain('About page: 0 links')
+    expect(text).toContain('podcast directory: no show named like')
+    expect((await deps.store.read()).leads[0]!.contactSearch?.tried.length).toBe(2)
+  })
+})
+
+describe('comment visibility', () => {
+  const posted = 'The bit where he explains Lagos rent deposits is gold. I cut it into a vertical clip; reply and I will send it over.'
+
+  it('finds a published comment signed out, and reports a missing one', async () => {
+    const answer = (texts: string[]) => fakeFetch({ 'https://www.googleapis.com/youtube/v3/commentThreads': { type: 'application/json', body: JSON.stringify({ items: texts.map(t => ({ snippet: { topLevelComment: { snippet: { textOriginal: t } } } })) }) } })
+    const signal = new AbortController().signal
+    expect((await lookUpComment(answer([posted]), 'key', 'v1', posted, signal)).state).toBe('visible')
+    expect((await lookUpComment(answer(['great episode']), 'key', 'v1', posted, signal)).state).toBe('missing')
+    const off = fakeFetch({ 'https://www.googleapis.com/': { status: 403, type: 'application/json', body: '{"error":{"errors":[{"reason":"commentsDisabled"}]}}' } })
+    expect(await lookUpComment(off, 'key', 'v1', posted, signal)).toEqual({ state: 'unknown', detail: 'YouTube API HTTP 403 (commentsDisabled)' })
+  })
+
+  it('calls a comment held only once it is still missing after the held window', () => {
+    expect(nextVisibility('pending', 'missing', 3, 24)).toBe('unseen')
+    expect(nextVisibility('unseen', 'missing', 25, 24)).toBe('held')
+    expect(nextVisibility('unseen', 'visible', 25, 24)).toBe('visible')
+    expect(nextVisibility('unseen', 'unknown', 25, 24)).toBe('unseen')
+  })
+
+  it('marks held comments, tells the owner, and stops comment pitches after two in a row', async () => {
+    const fetcher = fakeFetch({ 'https://www.googleapis.com/youtube/v3/commentThreads': { type: 'application/json', body: '{"items":[]}' } })
+    const { deps, notes, run } = setup({ fetch: fetcher }, config({ youtubeApiKey: live('key') }))
+    await run('scout_search')
+    await deps.store.update((s) => {
+      const base = s.leads[0]!
+      s.leads = ['A', 'B'].map(id => ({ ...base, channelId: `UC_${id}`, channelName: `Pod ${id}`, stage: 'pitched' as const, videoId: `v${id}`,
+        pitch: { via: 'comment' as const, to: `https://www.youtube.com/watch?v=v${id}`, text: `clip for ${id}`, at: '2026-09-28T08:00:00Z', visibility: { state: 'unseen' as const, checkedAt: '2026-09-28T12:00:00Z' } } }))
+    })
+    const lines = await checkComments(deps, new AbortController().signal)
+    expect(lines).toContain('Comment pitches stopped.')
+    const state = await deps.store.read()
+    expect(state.leads.map(l => l.pitch?.visibility?.state)).toEqual(['held', 'held'])
+    expect(state.commentsPaused?.reason).toContain('held the last 2')
+    expect(notes.filter(n => n.includes('YouTube is holding it'))).toHaveLength(2)
+    expect(notes.some(n => n.includes('comment pitches are STOPPED'))).toBe(true)
+    expect(await run('scout_status')).toContain('Comment pitches are STOPPED')
+    expect(await run('scout_resume')).toContain('Comment pitches resumed')
+  })
+
+  it('retries a comment the API could not check for a passing reason, and settles one on a video with comments off', async () => {
+    const answer = (reason: string) => fakeFetch({ 'https://www.googleapis.com/': { status: 403, type: 'application/json', body: JSON.stringify({ error: { errors: [{ reason }] } }) } })
+    for (const [reason, expected] of [['quotaExceeded', 'pending'], ['commentsDisabled', 'unknown']] as const) {
+      const { deps, run } = setup({ fetch: answer(reason) }, config({ youtubeApiKey: live('key') }))
+      await run('scout_search')
+      await deps.store.update((s) => {
+        const l = s.leads[0]!
+        l.stage = 'pitched'
+        l.videoId = 'v1'
+        l.pitch = { via: 'comment', to: 'https://www.youtube.com/watch?v=v1', text: 'clip for you', at: '2026-09-29T05:00:00Z', visibility: { state: 'pending' } }
+      })
+      await checkComments(deps, new AbortController().signal)
+      expect((await deps.store.read()).leads[0]!.pitch?.visibility?.state).toBe(expected)
+    }
+  })
+
+  it('checks nothing without an API key', async () => {
+    const { deps } = setup()
+    expect(await checkComments(deps, new AbortController().signal)).toEqual([])
+  })
+})
+
+describe('follow-ups and numbers', () => {
+  it('allows one follow-up, with the sample link, on an email unanswered for the configured days', async () => {
+    const { run, deps } = setup()
+    await run('scout_search')
+    await deps.store.update((s) => {
+      const l = s.leads[0]!
+      l.stage = 'pitched'
+      l.samplePageUrl = 'https://h.test/scout/s/abc'
+      l.pitch = { via: 'email', to: 'hi@small.pod', text: 'Loved the Lagos rent episode, I clipped the landlord story: https://h.test/scout/s/abc', at: '2026-09-20T10:00:00Z' }
+    })
+    expect(followUpsDue((await deps.store.read()).leads, 6, new Date('2026-09-29T10:00:00Z'))).toHaveLength(1)
+    expect(await run('scout_status')).toContain('Follow-ups due (scout_follow_up): Small Pod')
+    await expect(run('scout_follow_up', { channel_id: 'UC_small', text: 'checking the clip got to you, happy to cut one from your newest episode too' }))
+      .rejects.toThrow('must contain the sample link')
+    expect(await run('scout_follow_up', { channel_id: 'UC_small', text: 'checking the clip got to you: https://h.test/scout/s/abc happy to cut one from your newest episode too' }))
+      .toContain('reply to it in the same thread')
+    await expect(run('scout_follow_up', { channel_id: 'UC_small', text: 'one more time https://h.test/scout/s/abc' })).rejects.toThrow('has no follow-up due')
+  })
+
+  it('counts email and comment pitches and their replies separately', () => {
+    const lead = (via: 'email' | 'comment', replied: boolean, extra: object = {}) => ({
+      channelId: 'x', channelName: 'x', channelUrl: 'x', stage: 'pitched' as const, source: 'scout', history: [], createdAt: 'a', updatedAt: 'a',
+      pitch: { via, to: 'x', text: 't', at: '2026-09-01T00:00:00Z', ...extra },
+      replies: replied ? [{ at: '2026-09-02T00:00:00Z', where: via, text: 'yes' }] : [],
+    })
+    const stats = outreachStats([
+      lead('email', true), lead('email', false),
+      lead('comment', false, { visibility: { state: 'held' } }), lead('comment', true, { visibility: { state: 'visible' } }), lead('comment', false),
+    ])
+    expect(stats.email).toEqual({ sent: 2, replied: 1, followUps: 0, repliedAfterFollowUp: 0 })
+    expect(stats.comment).toEqual({ sent: 3, replied: 1, visible: 1, held: 1, unseen: 0, unchecked: 1 })
   })
 })

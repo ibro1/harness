@@ -14,7 +14,7 @@ interface LeadRow {
   videoTitle?: string
   stage: string
   samplePageUrl?: string
-  pitch?: { via: string; to: string }
+  pitch?: { via: string; to: string; visibility?: { state: string } }
   replies: { text: string }[]
   updatedAt: string
 }
@@ -25,6 +25,13 @@ interface LeadsReport {
   today: { samples: number; pitches: number }
   caps: { samples: number; pitches: number }
   paused: { reason: string } | null
+  /** Absent from Hosts older than the outreach numbers. */
+  commentsPaused?: { reason: string } | null
+  commentChecks?: boolean
+  stats?: {
+    email: { sent: number; replied: number; followUps: number; repliedAfterFollowUp: number }
+    comment: { sent: number; replied: number; visible: number; held: number }
+  }
   leads: LeadRow[]
 }
 
@@ -70,6 +77,18 @@ export function ScoutLeads(props: { t: (key: OperationsSettingsLocaleKey, vars?:
           {report.paused === null ? null : ` ${t('scoutLeadsPaused', { reason: report.paused.reason })}`}
         </p>
       )}
+      {report?.stats === undefined ? null : (
+        <p className={css.summary}>
+          {t('scoutStats', {
+            emailSent: report.stats.email.sent, emailReplied: report.stats.email.replied,
+            commentSent: report.stats.comment.sent, commentVisible: report.stats.comment.visible,
+            commentHeld: report.stats.comment.held, commentReplied: report.stats.comment.replied,
+          })}
+          {report.stats.email.followUps === 0 ? null : ` ${t('scoutStatsFollowUps', { followUps: report.stats.email.followUps, afterFollowUp: report.stats.email.repliedAfterFollowUp })}`}
+        </p>
+      )}
+      {report?.commentChecks === false ? <p className={css.summary}>{t('scoutStatsUnchecked')}</p> : null}
+      {report?.commentsPaused === undefined || report.commentsPaused === null ? null : <p className={css.summary} role="status">{t('scoutCommentsStopped', { reason: report.commentsPaused.reason })}</p>}
       {failed ? <p className={css.empty} role="status">{t('scoutLeadsFailed')}</p> : null}
       {report !== undefined && report.leads.length === 0 ? <p className={css.empty}>{t('scoutLeadsEmpty')}</p> : null}
       {report !== undefined && report.leads.length > 0 ? (
@@ -96,7 +115,11 @@ export function ScoutLeads(props: { t: (key: OperationsSettingsLocaleKey, vars?:
                   </td>
                   <td>{lead.videoUrl === undefined ? null : <a href={lead.videoUrl} target="_blank" rel="noreferrer">{lead.videoTitle ?? lead.videoUrl}</a>}</td>
                   <td>{lead.samplePageUrl === undefined ? null : <a href={lead.samplePageUrl} target="_blank" rel="noreferrer">{t('scoutSampleLink')}</a>}</td>
-                  <td>{lead.pitch === undefined ? null : `${lead.pitch.via} → ${lead.pitch.to}`}</td>
+                  <td>
+                    {lead.pitch === undefined ? null : `${lead.pitch.via} → ${lead.pitch.to}`}
+                    {lead.pitch?.visibility?.state === 'held' ? <><br /><strong>{t('scoutCommentHeld')}</strong></> : null}
+                    {lead.pitch?.visibility?.state === 'visible' ? <><br />{t('scoutCommentVisible')}</> : null}
+                  </td>
                   <td>{lead.replies.map(reply => reply.text.slice(0, 200)).join(' · ')}</td>
                   <td>{lead.updatedAt.slice(0, 16).replace('T', ' ')}</td>
                 </tr>

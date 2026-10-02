@@ -31,6 +31,33 @@ export interface FeedFacts {
 const MAX_FEED_BYTES = 3 * 1024 * 1024
 const EMAIL = /^[^@\s<>"]+@[^@\s<>"]+\.[A-Za-z]{2,}$/u
 
+/** Local parts that are placeholders or a feed's own address, not a person. */
+const PLACEHOLDER = /^(?:no-?reply|donotreply|example|test|your|name|email|user|feeds?|podcasts?-?feeds?)@/iu
+
+/** Domains of page furniture: error trackers, site builders, template text. */
+const FURNITURE = /@(?:example\.|sentry|wixpress\.com|domain\.com|email\.com|godaddy\.com)/iu
+
+/** Image and asset names that look like addresses (`logo@2x.png`). */
+const FILE_NAME = /\.(?:png|jpe?g|gif|webp|svg|avif|ico|css|js)$/iu
+
+/** Podcast hosts and platforms: their address in a feed reaches the host, not the creator. */
+const PLATFORMS = [
+  'spreaker.com', 'soundcloud.com', 'anchor.fm', 'libsyn.com', 'buzzsprout.com', 'podbean.com', 'megaphone.fm', 'simplecast.com',
+  'transistor.fm', 'acast.com', 'captivate.fm', 'redcircle.com', 'rss.com', 'audioboom.com', 'omnystudio.com', 'iheart.com', 'spotify.com', 'apple.com',
+]
+
+/**
+ * Whether an address can reach the creator: not a placeholder, not a hosting platform's feed address
+ * (`feeds@spreaker.com`), not an image name that looks like one (`logo@2x.png`).
+ * @param address - a lower-case address.
+ * @returns true when it is worth pitching.
+ */
+export function creatorEmail(address: string): boolean {
+  const domain = address.slice(address.lastIndexOf('@') + 1)
+  return !PLACEHOLDER.test(address) && !FURNITURE.test(address) && !FILE_NAME.test(address)
+    && !PLATFORMS.some(platform => domain === platform || domain.endsWith(`.${platform}`))
+}
+
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
@@ -114,7 +141,7 @@ export async function readFeed(fetcher: typeof fetch, feedUrl: string, signal: A
   const header = xml.split(/<item[\s>]/iu)[0] ?? xml
   const owner = first(header, 'itunes:owner') ?? ''
   const candidates = [first(owner, 'itunes:email'), first(header, 'itunes:email'), first(header, 'managingEditor')?.split(/[\s(]/u)[0]]
-  const email = candidates.find((value): value is string => value !== undefined && EMAIL.test(value))
+  const email = candidates.find((value): value is string => value !== undefined && EMAIL.test(value) && creatorEmail(value.toLowerCase()))
   const ownerName = first(owner, 'itunes:name') ?? first(header, 'itunes:author')
   const item = xml.split(/<item[\s>]/iu)[1]
   const latestEpisodeTitle = item === undefined ? undefined : first(item, 'title')

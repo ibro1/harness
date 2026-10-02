@@ -17,6 +17,24 @@ export const LEAD_STAGES: readonly LeadStage[] = ['found', 'sampling', 'sampled'
 /** How a pitch reached the creator. */
 export type PitchVia = 'email' | 'comment'
 
+/**
+ * Whether a comment pitch can be seen by anyone but its author, read signed out
+ * through the YouTube Data API. `unseen` is a first check that did not find it
+ * (YouTube can take a while); `held` is a later check that still did not, which
+ * means YouTube is holding it for review. `unknown` is a check that could not
+ * run (comments off on the video, the API refused).
+ */
+export type CommentVisibility = 'pending' | 'visible' | 'unseen' | 'held' | 'unknown'
+
+/** What one pitch-time search for a lead's address tried and found. */
+export interface ContactSearch {
+  at: string
+  /** Each place looked, with what it gave: `about page: 3 links`, `lexfridman.com/contact: no address`. */
+  tried: string[]
+  /** The address it found, when it found one. */
+  found?: string
+}
+
 /** One creator the scout is working. Keyed by YouTube channel id. */
 export interface Lead {
   channelId: string
@@ -42,7 +60,20 @@ export interface Lead {
   /** The hosted sample's id and public page. */
   sampleId?: string
   samplePageUrl?: string
-  pitch?: { via: PitchVia; to: string; text: string; at: string }
+  pitch?: {
+    via: PitchVia
+    to: string
+    text: string
+    at: string
+    /** Comment pitches only: whether it is publicly visible, and when that was last checked. */
+    visibility?: { state: CommentVisibility; checkedAt?: string; detail?: string }
+  }
+  /** The one follow-up email sent after an email pitch went unanswered. */
+  followUp?: { text: string; at: string }
+  /** The last search for an address, run before a lead may be pitched by comment. */
+  contactSearch?: ContactSearch
+  /** Social profiles found on the channel, for the owner to message by hand. */
+  socials?: string[]
   replies: { at: string; where: string; text: string }[]
   history: { at: string; stage: LeadStage; note?: string }[]
   createdAt: string
@@ -52,7 +83,10 @@ export interface Lead {
 /** Samples and pitches spent on one local calendar day. */
 export interface DayCount {
   samples: number
+  /** Emails, comments and follow-ups together. */
   pitches: number
+  /** Comment pitches alone, held under their own lower cap. */
+  comments?: number
 }
 
 /** The whole file. */
@@ -69,6 +103,8 @@ export interface ScoutState {
   podcastsSeen?: string[]
   /** Free-clip event ids already recorded, so Klipara's retries change nothing. Newest last, capped. */
   inboundEvents?: string[]
+  /** Set when comment pitches are stopped because YouTube held several in a row; email pitches go on. */
+  commentsPaused?: { reason: string; at: string } | null
 }
 
 /** A state with nothing in it. */

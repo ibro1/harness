@@ -52,6 +52,7 @@ function setup(shows: object[], feeds: Record<string, string>) {
   const config = {
     enabled: live(true), shiftTime: live('09:00'), timeZone: live('Africa/Lagos'), samplesPerDay: live(2), pitchesPerDay: live(2),
     replyCheckMinutes: live(15), topics: live(['podcast']), minSubscribers: live(1000), maxSubscribers: live(300_000), maxShorts: live(10),
+    commentsPerDay: live(2), followUpDays: live(6), youtubeApiKey: live(''), commentCheckMinutes: live(180), commentHeldHours: live(24), heldCommentsPause: live(2),
     podcastCountry: live('ng'), podcastActiveDays: live(60), kliparaApiKey: live('k'), notifyTo: live(''), provider: live(''), model: live(''),
     fallbackProvider: live(''), fallbackModel: live(''), fallbackPitches: live(false), fallbackCooldownMinutes: live(15),
     sampleBaseUrl: live('https://klipara.test/s'), sampleTtlDays: live(30), outreachBrowser: live('outreach'), sampleHeadline: live('h'), sampleNote: live('n'),

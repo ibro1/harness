@@ -7,7 +7,8 @@ import { formLabels } from './locales.ts'
 import { useState } from 'react'
 import { ScoutModelPicker } from './ScoutModelPicker.tsx'
 import {
-  SCOUT_FREE_CLIP_SECRET_FIELD, SCOUT_KEY_FIELD, SCOUT_MODEL_PAIRS, SCOUT_NUMBER_FIELDS, SCOUT_SWITCH_FIELDS, SCOUT_TEXT_FIELDS,
+  SCOUT_FREE_CLIP_SECRET_FIELD, SCOUT_KEY_FIELD, SCOUT_YOUTUBE_KEY_FIELD, SCOUT_MODEL_PAIRS,
+  SCOUT_NUMBER_FIELDS, SCOUT_SWITCH_FIELDS, SCOUT_TEXT_FIELDS,
   type FreeClipHandOffState, type ScoutCardFace,
 } from './scout-card-controller.ts'
 import css from './scout.module.css'
@@ -157,6 +158,19 @@ export function ScoutCard(props: ScoutCardProps) {
       />
       {handOff.status?.source === 'settings'
         ? <p><Button variant="ghost" size="sm" disabled={disabled} onClick={props.removeFreeClipSecret}>{t('scoutRemoveSecret')}</Button></p>
+        : null}
+      <SettingsSecretField
+        id={`plugin-config-scout-${SCOUT_YOUTUBE_KEY_FIELD}`}
+        label={t(`scout.${SCOUT_YOUTUBE_KEY_FIELD}`)}
+        hint={t(`scout.${SCOUT_YOUTUBE_KEY_FIELD}.hint`)}
+        disabled={disabled}
+        text={state.youtubeApiKey.text}
+        configured={handOff.youtubeKeySet === true}
+        stateLabel={handOff.youtubeKeySet === true ? t('scoutSecretSet') : t('scoutSecretUnset')}
+        onEdit={(text) => { props.edit(SCOUT_YOUTUBE_KEY_FIELD, text) }}
+      />
+      {handOff.youtubeKeySet === true
+        ? <p><Button variant="ghost" size="sm" disabled={disabled} onClick={props.removeYoutubeKey}>{t('scoutRemoveYoutubeKey')}</Button></p>
         : null}
       {SCOUT_MODEL_PAIRS.map(pair => (
         <ScoutModelPicker

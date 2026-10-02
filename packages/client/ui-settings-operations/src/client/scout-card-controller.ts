@@ -19,7 +19,7 @@ export const SCOUT_TEXT_FIELDS = [
   'shiftTime', 'timeZone', 'kliparaApiKey', 'notifyTo', 'outreachBrowser', 'provider', 'model', 'fallbackProvider', 'fallbackModel', 'podcastCountry', 'sampleBaseUrl', 'sampleHeadline', 'sampleNote',
 ] as const
 /** Whole-number fields, in the order the card shows them. */
-export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'replyCheckMinutes', 'fallbackCooldownMinutes', 'podcastActiveDays', 'sampleTtlDays', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
+export const SCOUT_NUMBER_FIELDS = ['samplesPerDay', 'pitchesPerDay', 'commentsPerDay', 'followUpDays', 'replyCheckMinutes', 'commentCheckMinutes', 'commentHeldHours', 'heldCommentsPause', 'fallbackCooldownMinutes', 'podcastActiveDays', 'sampleTtlDays', 'minSubscribers', 'maxSubscribers', 'maxShorts'] as const
 
 /** On/off fields, in the order the card shows them. */
 export const SCOUT_SWITCH_FIELDS = ['enabled', 'fallbackPitches'] as const
@@ -34,8 +34,14 @@ export const SCOUT_KEY_FIELD = 'kliparaApiKey'
 /** The free-clip hand-off secret: `role('secret')`, so it never rides a response and is written blind. */
 export const SCOUT_FREE_CLIP_SECRET_FIELD = 'freeClipSecret'
 
+/** The YouTube Data API key for signed-out comment checks: `role('secret')`, written blind like the hand-off secret. */
+export const SCOUT_YOUTUBE_KEY_FIELD = 'youtubeApiKey'
+
 /** The Host route that says whether a hand-off secret is in force, and where Klipara posts. */
 const FREE_CLIP_STATUS_PATH = '/scout/inbound/status'
+
+/** The Host route whose `commentChecks` says whether a YouTube key is in force. */
+const LEADS_PATH = '/scout/leads.json'
 
 /** The hand-off as the Host reports it; never the secret. */
 export interface FreeClipHandOff {
@@ -50,6 +56,8 @@ export interface FreeClipHandOff {
 export interface FreeClipHandOffState {
   status: FreeClipHandOff | undefined
   failed: boolean
+  /** Whether a YouTube key is saved, so comment pitches are checked; undefined until the Host answers. */
+  youtubeKeySet?: boolean
 }
 
 type ScoutTextField = typeof SCOUT_TEXT_FIELDS[number]
@@ -57,7 +65,7 @@ type ScoutSwitchField = typeof SCOUT_SWITCH_FIELDS[number]
 type ScoutNumberField = typeof SCOUT_NUMBER_FIELDS[number]
 
 /** The Klipara Scout fields this card edits. */
-export type ScoutSettings = Partial<Record<ScoutTextField | ScoutNumberField | ScoutSwitchField | 'topics' | typeof SCOUT_FREE_CLIP_SECRET_FIELD, unknown>>
+export type ScoutSettings = Partial<Record<ScoutTextField | ScoutNumberField | ScoutSwitchField | 'topics' | typeof SCOUT_FREE_CLIP_SECRET_FIELD | typeof SCOUT_YOUTUBE_KEY_FIELD, unknown>>
 
 /** What the Klipara Scout card renders. */
 export interface ScoutCardState extends SettingsFormShell {
@@ -66,6 +74,7 @@ export interface ScoutCardState extends SettingsFormShell {
   text: Record<ScoutTextField, SettingsFieldState>
   numbers: Record<ScoutNumberField, SettingsFieldState>
   freeClipSecret: SettingsFieldState
+  youtubeApiKey: SettingsFieldState
 }
 
 /** The registration-side face the card's slot entry injects. */
@@ -76,6 +85,8 @@ export interface ScoutCardFace extends SettingsFormActions {
   retryModels: () => void
   /** Remove the saved hand-off secret; Klipara's requests are refused until another is saved. */
   removeFreeClipSecret: () => void
+  /** Remove the saved YouTube key; comment pitches go unchecked until another is saved. */
+  removeYoutubeKey: () => void
   hooks: {
     /** Card snapshot bound by the renderer as useScoutCard. */
     scoutCard: SnapshotStore<ScoutCardState>
@@ -140,6 +151,13 @@ export class ScoutCardController {
         this.refreshHandOff()
         return accepted
       },
+    }, {
+      field: SCOUT_YOUTUBE_KEY_FIELD,
+      write: async (text) => {
+        const accepted = await scope.mutate([{ op: 'set', path: [SCOUT_YOUTUBE_KEY_FIELD], value: text.trim() }])
+        this.refreshHandOff()
+        return accepted
+      },
     }])
     this.store = this.form.bind(() => this.projection())
   }
@@ -156,6 +174,24 @@ export class ScoutCardController {
         // An older Host without the hand-off, or an expired session: the card says the status is unknown.
         this.handOff.update((draft) => { draft.failed = true })
       }
+    })()
+    void (async () => {
+      try {
+        const response = await this.request(LEADS_PATH, { cache: 'no-store', credentials: 'same-origin' })
+        if (!response.ok) throw new Error(`HTTP ${String(response.status)}`)
+        const body = await response.json() as { commentChecks?: boolean }
+        this.handOff.update((draft) => { if (typeof body.commentChecks === 'boolean') draft.youtubeKeySet = body.commentChecks })
+      } catch {
+        // Unknown: the key field shows no saved state.
+      }
+    })()
+  }
+
+  /** Remove the saved YouTube key. */
+  removeYoutubeKey(): void {
+    void (async () => {
+      await this.scope.mutate([{ op: 'unset', path: [SCOUT_YOUTUBE_KEY_FIELD] }])
+      this.refreshHandOff()
     })()
   }
 
@@ -178,6 +214,7 @@ export class ScoutCardController {
       numbers: Object.fromEntries(SCOUT_NUMBER_FIELDS.map(field => [field, this.form.field(field)])) as
         Record<ScoutNumberField, SettingsFieldState>,
       freeClipSecret: this.form.field(SCOUT_FREE_CLIP_SECRET_FIELD),
+      youtubeApiKey: this.form.field(SCOUT_YOUTUBE_KEY_FIELD),
     }
   }
 
@@ -199,6 +236,7 @@ export class ScoutCardController {
       openLeads,
       retryModels,
       removeFreeClipSecret: () => { this.removeFreeClipSecret() },
+      removeYoutubeKey: () => { this.removeYoutubeKey() },
     }
   }
 }

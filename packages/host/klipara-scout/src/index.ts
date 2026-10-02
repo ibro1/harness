@@ -29,6 +29,8 @@ import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { EVENT_ID, ownerNote, parseEvent, recordEvent, verifySignature } from './inbound.ts'
 import { readFeed, sameShow, searchPodcasts } from './podcasts.ts'
+import { findContact } from './contacts.ts'
+import { lookUpComment, nextVisibility, outreachStats, statsLine } from './comments.ts'
 import { styleProblems } from './style.ts'
 import { FallbackRouter, installFallback, localTime, parseShiftTime, shiftDue, startShift, whatsAppNotifier } from '@deepseek-ai/dsh-host-employee-kit'
 import { advance, dayCount, LEAD_STAGES, ScoutStore, type Lead, type LeadStage, type ScoutState } from './store.ts'
@@ -40,6 +42,9 @@ export { localTime, parseShiftTime, shiftDue } from '@deepseek-ai/dsh-host-emplo
 export { ScoutStore, emptyState } from './store.ts'
 export type { Lead, LeadStage, ScoutState } from './store.ts'
 export type { YtDlpRunner } from './youtube.ts'
+export { aboutLinks, emailsIn, findContact, hubLinks } from './contacts.ts'
+export { lookUpComment, nextVisibility, outreachStats, statsLine } from './comments.ts'
+export type { OutreachStats } from './comments.ts'
 
 /** The part of a shift a failure happened in. */
 export type ScoutStage = 'discover' | 'sample' | 'pitch' | 'reply-check' | 'inbound'
@@ -94,8 +99,23 @@ export interface Config {
   timeZone: Volatile<string>
   /** Samples started per local day; each exported sample spends one Klip. */
   samplesPerDay: Volatile<number>
-  /** Pitches (emails and comments together) per local day. */
+  /** Pitches (emails, comments and follow-ups together) per local day. */
   pitchesPerDay: Volatile<number>
+  /** Comment pitches per local day, within `pitchesPerDay`: a comment carries no clip, so it is the last resort. */
+  commentsPerDay: Volatile<number>
+  /** Days an email pitch waits unanswered before its one follow-up is due; 0 sends none. */
+  followUpDays: Volatile<number>
+  /**
+   * YouTube Data API key for reading comments signed out. Empty: comment pitches are not checked, and the leads page
+   * says so. Write-only on the settings page.
+   */
+  youtubeApiKey: Volatile<string>
+  /** Minutes after posting before a comment pitch is first looked for. */
+  commentCheckMinutes: Volatile<number>
+  /** Hours after posting after which a comment still not found counts as held by YouTube. */
+  commentHeldHours: Volatile<number>
+  /** Held comments in a row that stop comment pitches until the owner resumes the scout; 0 never stops them. */
+  heldCommentsPause: Volatile<number>
   /** Minutes between reply checks while a pitch awaits an answer; 0 leaves replies to the daily shift. */
   replyCheckMinutes: Volatile<number>
   /** Search phrases the shift rotates through. */
@@ -171,6 +191,12 @@ export const Config = z.object({
   timeZone: z.string().default('Africa/Lagos').volatile(),
   samplesPerDay: z.natural().default(3).volatile(),
   pitchesPerDay: z.natural().default(5).volatile(),
+  commentsPerDay: z.natural().default(2).volatile(),
+  followUpDays: z.natural().default(6).volatile(),
+  youtubeApiKey: z.string().role('secret').default('').volatile(),
+  commentCheckMinutes: z.natural().min(5).default(180).volatile(),
+  commentHeldHours: z.natural().min(1).default(24).volatile(),
+  heldCommentsPause: z.natural().default(2).volatile(),
   replyCheckMinutes: z.natural().default(15).volatile(),
   topics: z.array(z.string()).default(['nigerian podcast', 'african business podcast', 'nigerian interview']).volatile(),
   minSubscribers: z.natural().default(2000).volatile(),
@@ -251,7 +277,21 @@ function overlap(a: string, b: string): number {
   return shared / (x.size + y.size - shared)
 }
 
-/** One line per lead, for listings. */
+/**
+ * Email pitches whose one follow-up is due: unanswered, not followed up, and older than `days`.
+ * @param leads - every lead.
+ * @param days - days a pitch waits; 0 means follow-ups are off.
+ * @param now - the current time.
+ * @returns the leads, oldest pitch first.
+ */
+export function followUpsDue(leads: readonly Lead[], days: number, now: Date): Lead[] {
+  if (days <= 0) return []
+  const cutoff = now.getTime() - days * 86_400_000
+  return leads
+    .filter(l => l.stage === 'pitched' && l.pitch?.via === 'email' && l.followUp === undefined && l.replies.length === 0 && Date.parse(l.pitch.at) <= cutoff)
+    .sort((a, b) => (a.pitch?.at ?? '').localeCompare(b.pitch?.at ?? ''))
+}
+
 /**
  * Why a channel is outside the scout's limits.
  * @param facts - the channel.
@@ -449,6 +489,81 @@ export async function backfillCovers(deps: ScoutDeps, signal: AbortSignal): Prom
   return covered
 }
 
+/** Hours between looks at a comment that has not been found yet. */
+const COMMENT_RECHECK_HOURS = 1
+
+/**
+ * Look up each comment pitch that is due a check, signed out, and record what
+ * YouTube shows. A comment still missing `commentHeldHours` after posting is
+ * held: the owner hears about it, and after `heldCommentsPause` held comments
+ * in a row (counting only comments whose fate is known), comment pitches stop
+ * until the owner resumes the scout. Runs without a model turn.
+ * @param deps - the store, config, HTTP and owner alerts.
+ * @param signal - cancels the lookups.
+ * @returns one line per comment checked.
+ */
+export async function checkComments(deps: ScoutDeps, signal: AbortSignal): Promise<string[]> {
+  const { config } = deps
+  const key = config.youtubeApiKey.get().trim()
+  if (key === '') return []
+  const now = deps.now()
+  const firstAfterMs = config.commentCheckMinutes.get() * 60_000
+  const heldHours = config.commentHeldHours.get()
+  const state = await deps.store.read()
+  const due = state.leads.filter((lead) => {
+    const pitch = lead.pitch
+    if (pitch?.via !== 'comment' || lead.videoId === undefined) return false
+    const visibility = pitch.visibility?.state ?? 'pending'
+    if (visibility !== 'pending' && visibility !== 'unseen') return false
+    const age = now.getTime() - Date.parse(pitch.at)
+    const last = pitch.visibility?.checkedAt === undefined ? undefined : Date.parse(pitch.visibility.checkedAt)
+    return age >= firstAfterMs && (last === undefined || now.getTime() - last >= COMMENT_RECHECK_HOURS * 3_600_000)
+  })
+  const lines: string[] = []
+  const held: Lead[] = []
+  for (const lead of due) {
+    const pitch = lead.pitch
+    if (pitch === undefined || lead.videoId === undefined) continue
+    const found = await lookUpComment(deps.fetch ?? fetch, key, lead.videoId, pitch.text, signal)
+    const ageHours = (now.getTime() - Date.parse(pitch.at)) / 3_600_000
+    // Comments off or the video gone settle a comment as unknown; a bad key or a spent quota is retried next hour.
+    const permanent = found.state !== 'unknown' || /commentsDisabled|videoNotFound/u.test(found.detail ?? '')
+    const next = permanent ? nextVisibility(pitch.visibility?.state ?? 'pending', found.state, ageHours, heldHours) : pitch.visibility?.state ?? 'pending'
+    const stored = await deps.store.update((s) => {
+      const l = s.leads.find(x => x.channelId === lead.channelId)
+      if (l?.pitch === undefined) return undefined
+      l.pitch.visibility = { state: next, checkedAt: now.toISOString(), ...found.detail === undefined ? {} : { detail: found.detail } }
+      if (next === 'held') l.history.push({ at: now.toISOString(), stage: l.stage, note: 'comment held by YouTube: not visible signed out' })
+      return { ...l }
+    })
+    if (stored === undefined) continue
+    if (next === 'held') held.push(stored)
+    if (found.state === 'unknown') deps.reportFailure?.({ stage: 'pitch', leadId: lead.channelId, error: new Error(`Comment check failed: ${found.detail ?? 'unknown'}`), redact: leadStrings(lead) })
+    lines.push(`${lead.channelName}: ${next}${found.detail === undefined ? '' : ` (${found.detail})`}`)
+  }
+  for (const lead of held) {
+    await deps.notify(`Klipara Scout: the comment pitch to ${lead.channelName} is not visible to anyone else ${String(heldHours)} hours after posting, so YouTube is holding it. The creator has not seen it.\n\nVideo: ${lead.videoUrl ?? ''}\nSample: ${lead.samplePageUrl ?? ''}`)
+  }
+  const limit = config.heldCommentsPause.get()
+  if (held.length > 0 && limit > 0) {
+    const stopped = await deps.store.update((s) => {
+      if (s.commentsPaused !== undefined && s.commentsPaused !== null) return false
+      const decided = s.leads
+        .filter(l => l.pitch?.via === 'comment' && (l.pitch.visibility?.state === 'visible' || l.pitch.visibility?.state === 'held'))
+        .sort((a, b) => (a.pitch?.at ?? '').localeCompare(b.pitch?.at ?? ''))
+      const recent = decided.slice(-limit)
+      if (recent.length < limit || !recent.every(l => l.pitch?.visibility?.state === 'held')) return false
+      s.commentsPaused = { reason: `YouTube held the last ${String(limit)} comment pitches`, at: now.toISOString() }
+      return true
+    })
+    if (stopped) {
+      await deps.notify(`Klipara Scout: comment pitches are STOPPED. YouTube held the last ${String(limit)} comments, which usually means the outreach account is flagged. Email pitches go on. To restart comments, open a Klipara Scout session and say "resume the scout".`)
+      lines.push('Comment pitches stopped.')
+    }
+  }
+  return lines
+}
+
 /**
  * Build the scout tools without registering them, so one definition serves both
  * the shift Sessions and the CLI command route.
@@ -487,10 +602,14 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
         const state = await store.read()
         const day = state.days[today()] ?? { samples: 0, pitches: 0 }
         const counts = LEAD_STAGES.map(stage => `${stage} ${String(state.leads.filter(l => l.stage === stage).length)}`).join(', ')
+        const due = followUpsDue(state.leads, config.followUpDays.get(), deps.now())
         return [
-          `Today (${today()}): samples ${String(day.samples)}/${String(config.samplesPerDay.get())}, pitches ${String(day.pitches)}/${String(config.pitchesPerDay.get())}.`,
+          `Today (${today()}): samples ${String(day.samples)}/${String(config.samplesPerDay.get())}, pitches ${String(day.pitches)}/${String(config.pitchesPerDay.get())}, of which comments ${String(day.comments ?? 0)}/${String(config.commentsPerDay.get())}.`,
           state.paused === null ? 'Outreach is running.' : `Outreach is PAUSED since ${state.paused.at}: ${state.paused.reason}`,
+          ...state.commentsPaused === undefined || state.commentsPaused === null ? [] : [`Comment pitches are STOPPED since ${state.commentsPaused.at}: ${state.commentsPaused.reason}. Pitch by email only.`],
           `Leads: ${counts}.`,
+          due.length === 0 ? 'No follow-ups due.' : `Follow-ups due (scout_follow_up): ${due.map(l => `${l.channelName} (${l.channelId}), emailed ${l.pitch?.at.slice(0, 10) ?? ''}`).join('; ')}.`,
+          statsLine(outreachStats(state.leads)),
           `Search topics: ${config.topics.get().join('; ')}.`,
         ].join('\n')
       },
@@ -705,6 +824,12 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           if (lead.inbound !== undefined) throw new Error(`${lead.channelName} asked Klipara for a free clip themselves; they are the owner's to follow up, never pitched.`)
           if (lead.stage !== 'sampled' || lead.samplePageUrl === undefined) throw new Error(`${lead.channelName} is at stage ${lead.stage}; only a sampled lead is pitched.`)
           if (via === 'email' && !text.includes(lead.samplePageUrl)) throw new Error(`An email pitch must contain the sample link ${lead.samplePageUrl}.`)
+          if (via === 'comment') {
+            // A comment carries no clip, so it is only for a creator with no address anywhere.
+            if (lead.email !== undefined) throw new Error(`${lead.channelName} has an email address (${lead.email}); pitch by email, which carries the clip.`)
+            if (lead.contactSearch === undefined) throw new Error(`Call scout_find_email for ${lead.channelName} first: a comment cannot carry the clip, so it is only for creators with no address anywhere.`)
+            if (s.commentsPaused !== undefined && s.commentsPaused !== null) throw new Error(`Comment pitches are stopped (${s.commentsPaused.reason}). Pitch only leads with an email; leave this one for the owner.`)
+          }
           if (via === 'comment' && /https?:\/\/|www\.|\b[\w-]+\.(?:de|com|net|org|io|tv|ly|co)\b/iu.test(text)) {
             throw new Error('A comment pitch must contain no link: YouTube hides comments with links. Say what you clipped and ask them to reply for it.')
           }
@@ -723,10 +848,70 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
           if (closest >= 0.6) throw new Error(`This pitch is ${String(Math.round(closest * 100))}% the same words as an earlier one; YouTube and Gmail flag repeated text. Rewrite it around this creator's video.`)
           const day = dayCount(s, today())
           if (day.pitches >= config.pitchesPerDay.get()) throw new Error(`Today's pitch cap (${String(config.pitchesPerDay.get())}) is reached. End the shift.`)
+          if (via === 'comment' && (day.comments ?? 0) >= config.commentsPerDay.get()) {
+            throw new Error(`Today's comment cap (${String(config.commentsPerDay.get())}) is reached. Pitch leads with an email, or leave this one for tomorrow.`)
+          }
           day.pitches++
-          lead.pitch = { via, to, text, at: iso() }
+          if (via === 'comment') day.comments = (day.comments ?? 0) + 1
+          lead.pitch = { via, to, text, at: iso(), ...via === 'comment' ? { visibility: { state: 'pending' as const } } : {} }
           advance(lead, 'pitched', iso(), `${via} to ${to}`)
           return `Pitch ${String(day.pitches)}/${String(config.pitchesPerDay.get())} reserved. Now send exactly this ${via === 'email' ? `email to ${to}` : `comment on ${to}`} using only the "${config.outreachBrowser.get().trim()}" browser tools, never the deerflow browser. If sending fails or YouTube or Gmail shows any warning, captcha or restriction, call scout_pause immediately.`
+        })
+      },
+    }),
+    tool({
+      name: 'scout_find_email',
+      description: 'Look for a lead\'s email before pitching by comment: the channel\'s About page links, its website\'s home, contact and about pages, Linktree-style pages, and a podcast with the same name. Saves an address it finds on the lead (pitch it by email then) and the social profiles it saw for the owner. A lead with no email must have been searched before scout_pitch accepts a comment for it.',
+      parameters: { channel_id: channelParameter },
+      run: async (args, exec) => {
+        const channelId = String(args['channel_id'])
+        const lead = findLead(await store.read(), channelId)
+        if (lead.email !== undefined) return `${lead.channelName} already has an email: ${lead.email}. Pitch by email.`
+        const result = await findContact(deps.fetch ?? fetch, lead, config.podcastCountry.get(), exec.signal)
+        await store.update((s) => {
+          const l = findLead(s, channelId)
+          l.contactSearch = { at: iso(), tried: result.tried, ...result.email === undefined ? {} : { found: result.email } }
+          if (result.socials.length > 0) l.socials = result.socials
+          if (result.email !== undefined && l.email === undefined) l.email = result.email
+          l.updatedAt = iso()
+        })
+        return [
+          result.email === undefined
+            ? `No email found for ${lead.channelName}. A comment pitch is allowed (no link in it), within today's comment cap.`
+            : `Found ${result.email} for ${lead.channelName}; it is saved on the lead. Pitch by email.`,
+          `Looked at: ${result.tried.join('; ')}.`,
+          ...result.socials.length === 0 ? [] : [`Social profiles, for the owner only (do not message them): ${result.socials.join(', ')}.`],
+        ].join('\n')
+      },
+    }),
+    tool({
+      name: 'scout_follow_up',
+      description: 'Reserve the one follow-up for an email pitch that went unanswered (scout_status lists the ones due), then send exactly this text as a reply in the same Gmail thread as the pitch. 2 to 4 short lines, the sample link again, no pressure; never a second follow-up. Counts against today\'s pitch cap. It refuses a lead not due, a text without the sample link, machine-writing tells, or text too close to the original pitch.',
+      parameters: {
+        channel_id: channelParameter,
+        text: { type: 'string', required: true, description: 'The follow-up body, with the sample link. No subject: it is a reply in the pitch\'s thread.' },
+      },
+      run: async (args) => {
+        const channelId = String(args['channel_id'])
+        const text = String(args['text']).trim()
+        return await store.update((s) => {
+          if (config.outreachBrowser.get().trim() === '') throw new Error('No outreach account is configured, so nothing may be sent. Tell the owner.')
+          refuseWhilePaused(s)
+          const lead = findLead(s, channelId)
+          if (!followUpsDue([lead], config.followUpDays.get(), deps.now()).includes(lead)) {
+            throw new Error(`${lead.channelName} has no follow-up due: only an email pitch unanswered for ${String(config.followUpDays.get())} days gets one, and only once.`)
+          }
+          if (lead.samplePageUrl === undefined || !text.includes(lead.samplePageUrl)) throw new Error(`The follow-up must contain the sample link ${lead.samplePageUrl ?? ''}.`)
+          const tells = styleProblems(text)
+          if (tells.length > 0) throw new Error(`This reads as machine-written. Rewrite it as a short human note. Found: ${tells.join('; ')}.`)
+          if (lead.pitch !== undefined && overlap(lead.pitch.text, text) >= 0.6) throw new Error('This repeats the original pitch; write a short new note that points back to the clip.')
+          const day = dayCount(s, today())
+          if (day.pitches >= config.pitchesPerDay.get()) throw new Error(`Today's pitch cap (${String(config.pitchesPerDay.get())}) is reached. End the shift.`)
+          day.pitches++
+          lead.followUp = { text, at: iso() }
+          lead.updatedAt = iso()
+          lead.history.push({ at: iso(), stage: lead.stage, note: 'follow-up email' })
+          return `Follow-up reserved. Now open the outreach account's Gmail, find the pitch you sent to ${lead.pitch?.to ?? ''} in Sent, reply to it in the same thread with exactly this text, and confirm it appears in the thread. Use only the "${config.outreachBrowser.get().trim()}" browser tools.`
         })
       },
     }),
@@ -781,11 +966,20 @@ export function buildScoutTools(deps: ScoutDeps): ToolDefinition[] {
     }),
     tool({
       name: 'scout_resume',
-      description: 'Resume outreach after a pause. Only when the owner explicitly asks for it in this conversation; never on your own.',
+      description: 'Resume outreach after a pause, and comment pitches after YouTube held too many. Only when the owner explicitly asks for it in this conversation; never on your own.',
       parameters: {},
       run: async () => {
-        const was = await store.update((s) => { const p = s.paused; s.paused = null; return p })
-        return was === null ? 'Outreach was not paused.' : `Outreach resumed (it was paused for: ${was.reason}).`
+        const was = await store.update((s) => {
+          const both = { paused: s.paused, comments: s.commentsPaused ?? null }
+          s.paused = null
+          s.commentsPaused = null
+          return both
+        })
+        const lines = [
+          was.paused === null ? 'Outreach was not paused.' : `Outreach resumed (it was paused for: ${was.paused.reason}).`,
+          ...was.comments === null ? [] : [`Comment pitches resumed (they were stopped for: ${was.comments.reason}).`],
+        ]
+        return lines.join(' ')
       },
     }),
   ]
@@ -838,7 +1032,7 @@ export function leadsPage(state: ScoutState, date: string, config: Pick<Config, 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Klipara Scout leads</title>
 <style>:root{color-scheme:dark light;--bg:#0f0f12;--fg:#eee;--line:#2a2a31}@media (prefers-color-scheme:light){:root{--bg:#fafafa;--fg:#111;--line:#ddd}}
 body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}div{overflow-x:auto}a{color:inherit}</style></head>
-<body><h1>Klipara Scout</h1><p>Today ${html(date)}: samples ${String(day.samples)}/${String(config.samplesPerDay.get())}, pitches ${String(day.pitches)}/${String(config.pitchesPerDay.get())}. ${state.paused === null ? 'Outreach running.' : `<strong>Paused: ${html(state.paused.reason)}</strong>`}</p>
+<body><h1>Klipara Scout</h1><p>${html(statsLine(outreachStats(state.leads)))}</p><p>Today ${html(date)}: samples ${String(day.samples)}/${String(config.samplesPerDay.get())}, pitches ${String(day.pitches)}/${String(config.pitchesPerDay.get())}. ${state.paused === null ? 'Outreach running.' : `<strong>Paused: ${html(state.paused.reason)}</strong>`}</p>
 <div><table><thead><tr><th>Stage</th><th>Channel</th><th>Video</th><th>Sample</th><th>Pitch</th><th>Replies</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table></div></body></html>`
 }
 
@@ -900,8 +1094,8 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
   const pitchHeld = (sessionId: string, tool: string): string | undefined =>
-    tool === 'scout_pitch' && !config.fallbackPitches.get() && router.onFallback(sessionId)
-      ? `Pitching is held while this turn runs on the fallback model (${config.fallbackModel.get()}): leave sampled leads for the shift's own model, and do the rest of the work.`
+    (tool === 'scout_pitch' || tool === 'scout_follow_up') && !config.fallbackPitches.get() && router.onFallback(sessionId)
+      ? `Pitching and follow-ups are held while this turn runs on the fallback model (${config.fallbackModel.get()}): leave them for the shift's own model, and do the rest of the work.`
       : undefined
   installFallback(ctx, router, isScoutSession)
 
@@ -941,6 +1135,9 @@ export function apply(ctx: Context, config: Config): void {
         today: state.days[date] ?? { samples: 0, pitches: 0 },
         caps: { samples: config.samplesPerDay.get(), pitches: config.pitchesPerDay.get() },
         paused: state.paused,
+        commentsPaused: state.commentsPaused ?? null,
+        commentChecks: config.youtubeApiKey.get().trim() !== '',
+        stats: outreachStats(state.leads),
         // Newest first, with skipped channels after every lead still in play.
         leads: [...state.leads].reverse().sort((a, b) => Number(a.stage === 'skipped') - Number(b.stage === 'skipped')),
       }))
@@ -1220,4 +1417,19 @@ export function apply(ctx: Context, config: Config): void {
   }
   const replyTimer = setInterval(() => { void checkReplies() }, 60_000)
   ctx.effect(() => () => { clearInterval(replyTimer) })
+
+  // Comment visibility, read signed out every ten minutes, with no model turn.
+  let checkingComments = false
+  const commentTimer = setInterval(() => {
+    if (checkingComments || !config.enabled.get()) return
+    checkingComments = true
+    void checkComments(deps, AbortSignal.timeout(300_000))
+      .then((lines) => { if (lines.length > 0) process.stderr.write(`klipara-scout: comment checks: ${lines.join('; ')}\n`) })
+      .catch((error: unknown) => {
+        process.stderr.write(`klipara-scout: comment check failed: ${error instanceof Error ? error.message : String(error)}\n`)
+        reportFailure({ stage: 'pitch', error, redact: [] })
+      })
+      .finally(() => { checkingComments = false })
+  }, 600_000)
+  ctx.effect(() => () => { clearInterval(commentTimer) })
 }

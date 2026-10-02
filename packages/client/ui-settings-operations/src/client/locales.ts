@@ -9,7 +9,7 @@ import { switchesEn, switchesZh, type SwitchLocaleKey } from './locales/switches
 export type ScoutFieldKey =
   | 'enabled' | 'shiftTime' | 'timeZone' | 'samplesPerDay' | 'pitchesPerDay' | 'replyCheckMinutes' | 'topics'
   | 'minSubscribers' | 'maxSubscribers' | 'maxShorts' | 'kliparaApiKey' | 'notifyTo'
-  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'podcastCountry' | 'podcastActiveDays' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays' | 'freeClipSecret'
+  | 'provider' | 'model' | 'fallbackProvider' | 'fallbackModel' | 'fallbackPitches' | 'fallbackCooldownMinutes' | 'podcastCountry' | 'podcastActiveDays' | 'commentsPerDay' | 'followUpDays' | 'commentCheckMinutes' | 'commentHeldHours' | 'heldCommentsPause' | 'youtubeApiKey' | 'shiftModel' | 'fallbackModelPick' | 'sampleHeadline' | 'sampleNote' | 'outreachBrowser' | 'sampleBaseUrl' | 'sampleTtlDays' | 'freeClipSecret'
 
 /** Locale keys the pages render. */
 export type OperationsSettingsLocaleKey =
@@ -28,7 +28,7 @@ export type OperationsSettingsLocaleKey =
   | 'errors.release' | 'errors.release.hint' | 'errors.tracesSampleRate' | 'errors.tracesSampleRate.hint'
   | 'scoutChangeKey' | 'scoutKeyPlaceholder' | 'scoutKeepKey' | 'scoutModelSearch' | 'scoutModelChange' | 'scoutModelLoading' | 'scoutModelFailed' | 'scoutModelRetry' | 'scoutModelNoMatch' | 'scoutModelUnknown'
   | 'scoutHandOffTitle' | 'scoutHandOffLoading' | 'scoutHandOffUnknown' | 'scoutHandOffOff' | 'scoutHandOffOn' | 'scoutHandOffFromEnvironment'
-  | 'scoutHandOffAddress' | 'scoutHandOffCopy' | 'scoutHandOffCopied' | 'scoutSecretSet' | 'scoutSecretUnset' | 'scoutRemoveSecret' | 'scout.freeClipSecret.env'
+  | 'scoutHandOffAddress' | 'scoutHandOffCopy' | 'scoutHandOffCopied' | 'scoutSecretSet' | 'scoutSecretUnset' | 'scoutRemoveSecret' | 'scoutRemoveYoutubeKey' | 'scoutStats' | 'scoutStatsFollowUps' | 'scoutStatsUnchecked' | 'scoutCommentsStopped' | 'scoutCommentHeld' | 'scoutCommentVisible' | 'scout.freeClipSecret.env'
   | `scout.${ScoutFieldKey}` | `scout.${ScoutFieldKey}.hint` | 'scout.shiftModel.none' | 'scout.fallbackModelPick.none'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed'
@@ -127,6 +127,13 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   scoutSecretUnset: 'Not set',
   scoutRemoveSecret: 'Remove secret',
   'scout.freeClipSecret': 'Free-clip webhook secret',
+  'scoutRemoveYoutubeKey': 'Remove the YouTube key',
+  'scoutCommentHeld': 'Held by YouTube: not visible to others',
+  'scoutCommentVisible': 'Visible to others',
+  'scoutStats': 'Email: {emailSent} sent, {emailReplied} replied. Comments: {commentSent} posted ({commentVisible} visible, {commentHeld} held by YouTube), {commentReplied} replied.',
+  'scoutStatsFollowUps': '{followUps} emails followed up, {afterFollowUp} replied after.',
+  'scoutStatsUnchecked': 'Comment visibility is not checked: add a YouTube Data API key on the Klipara Scout card.',
+  'scoutCommentsStopped': 'Comment pitches are stopped: {reason}. Email pitches go on.',
   'scout.freeClipSecret.hint': 'The same value as FREE_CLIP_WEBHOOK_SECRET in Klipara\'s deployment; make one with openssl rand -hex 32. Write-only: it is never shown again; leave the field empty to keep the saved one.',
   'scout.freeClipSecret.env': 'Set by KLIPARA_FREE_CLIP_SECRET in the deployment environment, which wins over this page. Remove it there to manage the secret here.',
   scoutModelSearch: 'Search models',
@@ -169,6 +176,18 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   'scout.maxSubscribers.hint': 'Skip bigger channels; they usually have an editor.',
   'scout.maxShorts': 'Most Shorts already posted',
   'scout.maxShorts.hint': 'Skip channels already posting more Shorts than this; they already clip.',
+  'scout.commentsPerDay': 'Comment pitches per day',
+  'scout.commentsPerDay.hint': 'Within the pitches per day. A comment cannot carry the clip, so it is only for creators with no email anywhere; keep it low.',
+  'scout.followUpDays': 'Days before a follow-up',
+  'scout.followUpDays.hint': 'An email pitch unanswered this many days gets one follow-up in the same thread, never more. 0 sends none.',
+  'scout.commentCheckMinutes': 'First comment check after (minutes)',
+  'scout.commentCheckMinutes.hint': 'How long after posting the scout first looks for a comment pitch signed out; it then looks again every hour.',
+  'scout.commentHeldHours': 'Comment counts as held after (hours)',
+  'scout.commentHeldHours.hint': 'A comment still not visible signed out this long after posting is held by YouTube, and you hear about it.',
+  'scout.heldCommentsPause': 'Held comments before comments stop',
+  'scout.heldCommentsPause.hint': 'After this many held comments in a row, comment pitches stop until you resume the scout; email goes on. 0 never stops them.',
+  'scout.youtubeApiKey': 'YouTube Data API key',
+  'scout.youtubeApiKey.hint': 'Lets the scout check, signed out, whether YouTube shows each comment pitch to others. Create an API key in Google Cloud with the YouTube Data API v3 enabled. Write-only: leave the field empty to keep the saved key.',
   'scout.kliparaApiKey': 'Klipara API key',
   'scout.kliparaApiKey.hint': "Create one on the API keys page in Klipara (klp_sk_live_…). It is stored in this deployment's settings and shown here.",
   'scout.notifyTo': 'WhatsApp alerts to',
@@ -293,6 +312,13 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   scoutSecretUnset: '未设置',
   scoutRemoveSecret: '移除密钥',
   'scout.freeClipSecret': '免费片段 webhook 密钥',
+  'scoutRemoveYoutubeKey': '移除 YouTube 密钥',
+  'scoutCommentHeld': '被 YouTube 扣留：他人不可见',
+  'scoutCommentVisible': '他人可见',
+  'scoutStats': '邮件：已发 {emailSent} 封，{emailReplied} 封获回复。评论：已发 {commentSent} 条（{commentVisible} 条可见，{commentHeld} 条被 YouTube 扣留），{commentReplied} 条获回复。',
+  'scoutStatsFollowUps': '已跟进 {followUps} 封邮件，其中 {afterFollowUp} 封在跟进后获回复。',
+  'scoutStatsUnchecked': '未检查评论是否可见：请在 Klipara Scout 卡片上添加 YouTube Data API 密钥。',
+  'scoutCommentsStopped': '评论推介已停止：{reason}。邮件推介照常。',
   'scout.freeClipSecret.hint': '与 Klipara 部署中的 FREE_CLIP_WEBHOOK_SECRET 相同；可用 openssl rand -hex 32 生成。只写：保存后不再显示；留空则保留已保存的密钥。',
   'scout.freeClipSecret.env': '由部署环境中的 KLIPARA_FREE_CLIP_SECRET 设置，它优先于本页面。在那里移除后即可在此管理密钥。',
   scoutModelSearch: '搜索模型',
@@ -335,6 +361,18 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   'scout.maxSubscribers.hint': '跳过更大的频道；它们通常已有剪辑师。',
   'scout.maxShorts': '已发布 Shorts 上限',
   'scout.maxShorts.hint': '跳过已发布超过此数量 Shorts 的频道；它们已在做剪辑。',
+  'scout.commentsPerDay': '每日评论推介数',
+  'scout.commentsPerDay.hint': '包含在每日推介数内。评论无法附带片段，只用于到处都找不到邮箱的创作者；请保持很低。',
+  'scout.followUpDays': '跟进前等待天数',
+  'scout.followUpDays.hint': '邮件推介在此天数内无回复时，在同一邮件线程中发送一次跟进，绝不多发。设为 0 则不跟进。',
+  'scout.commentCheckMinutes': '首次检查评论（分钟后）',
+  'scout.commentCheckMinutes.hint': '评论推介发布后多久，侦察员以未登录状态首次查找它；之后每小时再查一次。',
+  'scout.commentHeldHours': '评论视为被扣留（小时后）',
+  'scout.commentHeldHours.hint': '发布这么久后在未登录状态下仍看不到的评论，视为被 YouTube 扣留，并会通知你。',
+  'scout.heldCommentsPause': '停止评论前的连续扣留数',
+  'scout.heldCommentsPause.hint': '连续这么多条评论被扣留后，停止评论推介，直到你恢复侦察员；邮件照常。设为 0 则从不停止。',
+  'scout.youtubeApiKey': 'YouTube Data API 密钥',
+  'scout.youtubeApiKey.hint': '让侦察员以未登录状态检查 YouTube 是否向他人显示每条评论推介。在 Google Cloud 中启用 YouTube Data API v3 并创建 API 密钥。只写：留空则保留已保存的密钥。',
   'scout.kliparaApiKey': 'Klipara API 密钥',
   'scout.kliparaApiKey.hint': '在 Klipara 的 API 密钥页面创建（klp_sk_live_…）。保存在本部署的设置中并在此显示。',
   'scout.notifyTo': 'WhatsApp 提醒对象',
