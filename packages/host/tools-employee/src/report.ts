@@ -127,6 +127,6 @@ export function adsenseReadiness(input: {
     ? 'AdSense client set: ads and ads.txt go out with the next publish.'
     : ready
       ? 'Ready: apply for AdSense now. AdSense adds sites by root domain, so apply with linkfa.de and put the ads.txt line on linkfa.de too.'
-      : `Not yet: ${checks.filter(c => !c.ok).map(c => c.label.toLowerCase()).join('; ')}.`
+      : `Missing: ${checks.filter(c => !c.ok).map(c => c.label.toLowerCase()).join('; ')}.`
   return { ready, verdict, checks }
 }

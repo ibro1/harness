@@ -477,13 +477,13 @@ export function apply(ctx: Context, config: Config): void {
         adsense: { clientSet: settings.adsenseClient() !== '', ...readiness },
         gsc: {
           connected: gsc === undefined, keySet: config.googleServiceAccountKey.get().trim() !== '', property: config.gscProperty.get(),
-          detail: gsc === undefined ? (state.gsc === undefined ? 'Connected; no review yet.' : `Last review ${state.gsc.at.slice(0, 10)}: ${String(state.gsc.totals.clicks)} clicks, ${String(state.gsc.totals.impressions)} impressions in 28 days.`) : `Not connected: ${gsc}.`,
+          detail: gsc === undefined ? (state.gsc === undefined ? 'Connected; no review yet.' : `Last review ${state.gsc.at.slice(0, 10)}: ${String(state.gsc.totals.clicks)} clicks, ${String(state.gsc.totals.impressions)} impressions in 28 days.`) : `${gsc.charAt(0).toUpperCase()}${gsc.slice(1)}.`,
           lastReviewAt: state.gsc?.at ?? null,
         },
         keywordPlanner: {
           available: keyword !== '' && config.seoCommandUrl !== '' && config.seoToken !== '',
           detail: keyword === ''
-            ? 'Not used: choose an SEO employee site to borrow its Keyword Planner access. Demand rests on Google autocomplete.'
+            ? 'Choose an SEO employee site below to borrow its Keyword Planner access.'
             : config.seoToken === '' ? 'The SEO employee is not running here.' : `Borrowed from the SEO employee site "${keyword}".`,
         },
       })

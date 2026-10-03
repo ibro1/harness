@@ -190,7 +190,7 @@ describe('Google data', () => {
     const rules = { minTools: 2, minClicks28: 50 }
     const notYet = adsenseReadiness({ site, pages, tools: [tool], clicks28: undefined, clientSet: false, rules })
     expect(notYet.ready).toBe(false)
-    expect(notYet.verdict).toMatch(/^Not yet/u)
+    expect(notYet.verdict).toMatch(/^Missing: /u)
     expect(notYet.checks.find(c => c.label.startsWith('Search traffic'))?.detail).toMatch(/not connected/u)
     const ready = adsenseReadiness({ site, pages, tools: [tool, { ...tool, slug: 'b' }], clicks28: 80, clientSet: false, rules })
     expect(ready.ready).toBe(true)
