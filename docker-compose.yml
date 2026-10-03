@@ -169,6 +169,9 @@ services:
       # transcription calls through the proxy too.
       SOCIALCRAWL_API_KEY: ${SOCIALCRAWL_API_KEY:-}
       TTS_PROXY_URL: ${TTS_PROXY_URL:-${HTTPS_PROXY:-}}
+      # YouTube niche scout: YouTube Data API v3 key (Google Cloud -> APIs ->
+      # YouTube Data API v3 -> Credentials -> API key). A key saved on its card wins.
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       GEMINI_API_KEY_1: ${GEMINI_API_KEY_1:-}
       GEMINI_API_KEY_2: ${GEMINI_API_KEY_2:-}
       GEMINI_API_KEY_3: ${GEMINI_API_KEY_3:-}

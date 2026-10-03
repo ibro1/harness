@@ -2641,6 +2641,9 @@ importers:
       '@deepseek-ai/dsh-host-whatsapp-delegate':
         specifier: workspace:*
         version: link:../../host/whatsapp-delegate
+      '@deepseek-ai/dsh-host-youtube-niche-scout':
+        specifier: workspace:*
+        version: link:../../host/youtube-niche-scout
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../util/launch-environment
@@ -9717,6 +9720,34 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+
+  packages/host/youtube-niche-scout:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../util/atomic-write
+      '@deepseek-ai/dsh-host-employee-kit':
+        specifier: workspace:*
+        version: link:../employee-kit
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../webserver
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../core/tools

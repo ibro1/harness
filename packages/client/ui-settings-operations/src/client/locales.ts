@@ -6,6 +6,7 @@ import { meetingRemindersEn, meetingRemindersZh, type MeetingRemindersLocaleKey 
 import { seoEn, seoZh, type SeoLocaleKey } from './locales/seo.ts'
 import { switchesEn, switchesZh, type SwitchLocaleKey } from './locales/switches.ts'
 import { ttsEn, ttsZh, type TtsLocaleKey } from './locales/tts.ts'
+import { ynsEn, ynsZh, type YnsLocaleKey } from './locales/yns.ts'
 import { wadEn, wadZh, type WadLocaleKey } from './locales/whatsapp-delegate.ts'
 
 /** The Klipara Scout fields that carry a label and a hint. */
@@ -39,6 +40,7 @@ export type OperationsSettingsLocaleKey =
   | AdsLocaleKey
   | SwitchLocaleKey
   | TtsLocaleKey
+  | YnsLocaleKey
   | MeetingRemindersLocaleKey
   | WadLocaleKey
 
@@ -48,6 +50,7 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   ...adsEn,
   ...switchesEn,
   ...ttsEn,
+  ...ynsEn,
   ...meetingRemindersEn,
   ...wadEn,
   dokployTitle: 'Dokploy',
@@ -236,6 +239,7 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   ...adsZh,
   ...switchesZh,
   ...ttsZh,
+  ...ynsZh,
   ...meetingRemindersZh,
   ...wadZh,
   dokployTitle: 'Dokploy',

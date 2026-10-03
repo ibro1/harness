@@ -469,6 +469,7 @@
     { "path": "./packages/host/seo-employee" },
     { "path": "./packages/host/psd-tools" },
     { "path": "./packages/host/tiktok-shop-employee" },
+    { "path": "./packages/host/youtube-niche-scout" },
     { "path": "./packages/host/meeting-reminders" },
     { "path": "./packages/host/whatsapp-delegate" },
     { "path": "./packages/host/plugin-switch" },

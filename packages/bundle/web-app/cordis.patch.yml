@@ -319,6 +319,20 @@
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
 
+    # Fork-local YouTube niche scout (packages/host/youtube-niche-scout): a weekly
+    # run that researches YouTube niches, outlier channels and keywords and
+    # sends the owner a report. Off until switched on at Plugins.
+    - id: youtube-niche-scout
+      name: '@deepseek-ai/dsh-host-youtube-niche-scout'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_YOUTUBE_NICHE_SCOUT === '0'
+      config:
+        publicBaseUrl: !!js "process.env.DSH_PUBLIC_HOST ? 'https://' + process.env.DSH_PUBLIC_HOST : ''"
+        token: !!js process.env.DSH_YNS_TOKEN || ''
+        envYoutubeApiKey: !!js process.env.YOUTUBE_API_KEY || ''
+        workspacePath: !!js process.env.DSH_YNS_WORKSPACE || '/workspace/youtube-niche-scout'
+        whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
+        whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
+
     # Fork-local meeting reminders (packages/host/meeting-reminders): posts
     # recurring WhatsApp reminders of monthly meetings to group chats. Sends
     # nothing until rules are saved at Plugins -> Meeting reminders.

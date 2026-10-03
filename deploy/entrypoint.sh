@@ -96,6 +96,9 @@ fi
 if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
   export DSH_SEO_TOKEN="${DSH_SEO_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_YOUTUBE_NICHE_SCOUT:-1}" != "0" ]]; then
+  export DSH_YNS_TOKEN="${DSH_YNS_TOKEN:-$(random_token)}"
+fi
 if [[ "${DSH_TIKTOK_SHOP_EMPLOYEE:-1}" != "0" ]]; then
   export DSH_TTS_TOKEN="${DSH_TTS_TOKEN:-$(random_token)}"
 fi
@@ -407,6 +410,19 @@ if [[ "${DSH_SEO_EMPLOYEE:-1}" != "0" ]]; then
   echo "[entrypoint] SEO employee available (Plugins -> SEO employee: settings, Google and sites)"
   register_cli_mcp dsh-seo seo-mcp.mjs DSH_SEO_TOKEN DSH_SEO_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT/seo/command" "SEO employee"
+fi
+
+# YouTube niche scout (packages/host/youtube-niche-scout): researches which
+# YouTube niche a faceless long-form channel should enter, weekly, and sends
+# the owner a report link on WhatsApp. Off until switched on at Plugins ->
+# YouTube niche scout; needs a YouTube Data API key (there or YOUTUBE_API_KEY).
+# CLI models reach its tools over MCP.
+if [[ "${DSH_YOUTUBE_NICHE_SCOUT:-1}" != "0" ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/youtube-niche-scout" "$HOME/.dsh/skills/youtube-niche-scout"
+  echo "[entrypoint] YouTube niche scout available (Plugins -> YouTube niche scout)"
+  register_cli_mcp dsh-youtube-niche-scout yns-mcp.mjs DSH_YNS_TOKEN DSH_YNS_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT/yns/command" "YouTube niche scout"
 fi
 
 # TikTok Shop employee (packages/host/tiktok-shop-employee): finds UK TikTok
