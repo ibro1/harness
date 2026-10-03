@@ -1,0 +1,112 @@
+{
+  "slug": "zakat-calculator",
+  "title": "Zakat Calculator: Gold, Silver and Business Stock",
+  "h1": "Zakat calculator",
+  "description": "Work out zakat on cash, gold and silver by gram and karat, business stock and debts. See the gold and silver nisab side by side at your own prices.",
+  "intro": "Enter your savings, gold and silver by weight, business stock and debts. You get the zakat due at 2.5%, the nisab on both standards and the full working.",
+  "category": "islamic-finance",
+  "applicationCategory": "FinanceApplication",
+  "keyword": "zakat calculator",
+  "secondaryKeywords": [
+    "zakat on business stock",
+    "zakat on business inventory",
+    "zakat calculator gold grams",
+    "zakat calculator uk",
+    "zakat calculator gold and silver",
+    "nisab gold silver"
+  ],
+  "differentiator": "Values gold and silver by gram and karat or fineness, includes business stock at sale value and receivables, shows the nisab on both the gold and silver standards side by side at the user's own prices, lets the user choose the 85 g or 87.48 g reading and the jewellery view, and prints an itemised working; the big charity calculators hide the nisab choice and ask for lump sums.",
+  "related": [
+    "islamic-inheritance-calculator"
+  ],
+  "published": "2026-10-03",
+  "updated": "2026-10-03",
+  "sources": [
+    {
+      "title": "Zakat Nisab Today: what is nisab",
+      "url": "https://nzf.org.uk/nisab",
+      "publisher": "National Zakat Foundation (UK)",
+      "checked": "2026-10-03",
+      "note": "Nisab of 87.48 g gold and 612.36 g silver, with 85 g and 595 g as another opinion; zakat typically 2.5%; silver standard recommended as safer and more beneficial for recipients."
+    },
+    {
+      "title": "Zakat: what is zakat and how to pay it",
+      "url": "https://islamic-relief.org/zakat/",
+      "publisher": "Islamic Relief Worldwide",
+      "checked": "2026-10-03",
+      "note": "Nisab of 87.48 g gold or 612.36 g silver; 2.5% due once one lunar (Islamic) year has passed above the nisab; shop goods valued at their bulk selling price; precious stones not liable."
+    },
+    {
+      "title": "Al-Kafi #1811: Nisab for zakat on gold, in accordance with the zakat institution or current value?",
+      "url": "https://muftiwp.gov.my/en/artikel/al-kafi-li-al-fatawi/4850-al-kafi-1811-nisab-for-zakat-on-gold-in-accordance-with-the-zakat-institution-or-current-value",
+      "publisher": "Office of the Mufti of the Federal Territories, Malaysia",
+      "checked": "2026-10-03",
+      "note": "Nisab of 20 mithqal of gold (85 g) and 200 dirhams of silver (595 g); quotes Sunan Abu Dawud 1573 on five dirhams from two hundred and nothing on gold below twenty dinars after a year."
+    },
+    {
+      "title": "Zakat on business assets",
+      "url": "https://nzf.org.uk/knowledge/business-assets/",
+      "publisher": "National Zakat Foundation (UK)",
+      "checked": "2026-10-03",
+      "note": "Business assets valued at current market price, finished goods at retail sale price, unfinished goods at expected price on the zakat date, old stock at what you would accept for the lot; strong debts owed to the business are included; rate 2.5%."
+    },
+    {
+      "title": "Which debts can be deducted from my Zakat calculation?",
+      "url": "https://nzf.org.uk/knowledge/which-debts-can-be-deducted-from-my-zakat-calculation/",
+      "publisher": "National Zakat Foundation (UK)",
+      "checked": "2026-10-03",
+      "note": "Deductible: arrears, expenses settled within 12 lunar months, personal loans repaid in the next 12 months, capital repayments due in the coming lunar year; interest never deductible; deduct only if zakat would affect repayment, otherwise none or one month."
+    },
+    {
+      "title": "Zakat on Gold: Thresholds & Worn Jewellery",
+      "url": "https://fiqh.islamonline.net/en/zakat-on-gold-thresholds-worn-jewellery/",
+      "publisher": "Fiqh (IslamOnline)",
+      "checked": "2026-10-03",
+      "note": "Hanafi school: zakat due on all jewellery, worn or stored; other schools: jewellery for personal use exempt. Gold nisab of 7.5 tola at 11.6638 g a tola (87.48 g)."
+    },
+    {
+      "title": "Zakat on gold jewelry (fatwa)",
+      "url": "https://www.qcharity.org/en/qa/zakat/fatwa/details?Sid=12254",
+      "publisher": "Qatar Charity",
+      "checked": "2026-10-03",
+      "note": "Majority of jurists: no zakat on jewellery worn as adornment, with payment recommended as a precaution."
+    },
+    {
+      "title": "Zakat on gold of different carats",
+      "url": "https://seekersguidance.org/answers/hanafi-fiqh/zakat-on-gold-of-different-carats/",
+      "publisher": "SeekersGuidance",
+      "checked": "2026-10-03",
+      "note": "Zakat on gold is on its market value on the zakat date; estimate the actual gold content and value each carat separately rather than averaging."
+    }
+  ],
+  "faqs": [
+    {
+      "q": "How do you calculate zakat on business stock?",
+      "a": "Value the stock you hold for sale at what it would sell for on your zakat date, add business cash and money customers owe you that you expect to collect, take off debts due now or within the next lunar year, and pay 2.5% if the balance is at or above the nisab."
+    },
+    {
+      "q": "Is zakat on business inventory based on cost or sale price?",
+      "a": "On its current value, not what you paid. The National Zakat Foundation says finished goods should be valued at retail sale price, while Islamic Relief describes the bulk selling price for a shop's goods."
+    },
+    {
+      "q": "How much gold do you need to pay zakat?",
+      "a": "The gold nisab is 85 grams of pure gold on one widely used reading and 87.48 grams on another. Gold worth less than that can still make zakat due when it is added to your cash and other assets and the total passes the nisab you follow."
+    },
+    {
+      "q": "Should I use the gold or silver nisab?",
+      "a": "Scholars differ. The National Zakat Foundation recommends the silver nisab because it is safer and better for the poor, while some scholars use gold. The silver threshold is far lower, so it makes more people liable to pay."
+    },
+    {
+      "q": "Is zakat due on gold jewellery I wear?",
+      "a": "In the Hanafi school, yes: all gold and silver is zakatable whether worn or not. The Maliki, Shafi'i and Hanbali schools exempt jewellery worn for personal use in normal amounts. Gold kept as savings is zakatable in every school."
+    },
+    {
+      "q": "How do I calculate zakat on 22 carat gold?",
+      "a": "Multiply the weight by 22 and divide by 24 to find the pure gold, then multiply by today's price for a gram of pure gold. For example, 100 grams of 22 carat gold holds 91.667 grams of pure gold."
+    },
+    {
+      "q": "Can I deduct debts from my zakat?",
+      "a": "Following the National Zakat Foundation, you can deduct overdue payments and what you must repay within the next 12 lunar months, capital only and never interest. It advises deducting little or nothing if paying zakat would not affect your repayments."
+    }
+  ]
+}

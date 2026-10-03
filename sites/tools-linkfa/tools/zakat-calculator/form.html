@@ -1,0 +1,141 @@
+<form id="calc" novalidate>
+  <fieldset>
+    <legend>Prices and currency</legend>
+    <div class="grid grid-3">
+      <div class="field">
+        <label for="currency">Currency <span class="hint">For display only.</span></label>
+        <select id="currency" name="currency">
+          <option value="GBP" selected>GBP (£)</option>
+          <option value="USD">USD ($)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="NGN">NGN (₦)</option>
+          <option value="PKR">PKR</option>
+          <option value="INR">INR (₹)</option>
+          <option value="MYR">MYR</option>
+          <option value="SAR">SAR</option>
+          <option value="AED">AED</option>
+          <option value="CAD">CAD</option>
+          <option value="AUD">AUD</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="goldPrice">Gold price per gram <span class="hint">Pure (24 karat), today.</span></label>
+        <input id="goldPrice" name="goldPrice" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="silverPrice">Silver price per gram <span class="hint">Fine (999) silver, today.</span></label>
+        <input id="silverPrice" name="silverPrice" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+    </div>
+    <p class="note">Look up today's prices from a bullion dealer or jeweller near you, the <a href="https://www.lbma.org.uk/prices-and-data/precious-metal-prices" rel="nofollow noopener" target="_blank">LBMA benchmark</a> (quoted per troy ounce in US dollars), or the <a href="https://nzf.org.uk/nisab" rel="nofollow noopener" target="_blank">National Zakat Foundation's daily nisab page</a>.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Nisab</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="standard">Standard that decides if zakat is due</label>
+        <select id="standard" name="standard">
+          <option value="silver" selected>Silver (lower threshold)</option>
+          <option value="gold">Gold</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="weights">Nisab weights</label>
+        <select id="weights" name="weights">
+          <option value="85" selected>85 g gold / 595 g silver</option>
+          <option value="87.48">87.48 g gold / 612.36 g silver</option>
+        </select>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Cash and business</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="cash">Cash and bank balances <span class="hint">Personal and business, including savings.</span></label>
+        <input id="cash" name="cash" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="stock">Business stock <span class="hint">At what it would sell for today.</span></label>
+        <input id="stock" name="stock" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="receivables">Money owed to you <span class="hint">Only what you expect to be repaid.</span></label>
+        <input id="receivables" name="receivables" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="otherAssets">Other zakatable assets <span class="hint">Already valued, such as shares held to sell.</span></label>
+        <input id="otherAssets" name="otherAssets" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Gold by weight</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="goldGrams">Gold held as savings, grams <span class="hint">Bars, coins, unworn pieces.</span></label>
+        <input id="goldGrams" name="goldGrams" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="goldKarat">Its karat</label>
+        <select id="goldKarat" name="goldKarat">
+          <option value="24" selected>24k</option><option value="22">22k</option><option value="21">21k</option><option value="18">18k</option><option value="14">14k</option><option value="9">9k</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="jewelGrams">Gold jewellery you wear, grams</label>
+        <input id="jewelGrams" name="jewelGrams" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="jewelKarat">Its karat</label>
+        <select id="jewelKarat" name="jewelKarat">
+          <option value="24">24k</option><option value="22" selected>22k</option><option value="21">21k</option><option value="18">18k</option><option value="14">14k</option><option value="9">9k</option>
+        </select>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Silver by weight</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="silverGrams">Silver held as savings, grams</label>
+        <input id="silverGrams" name="silverGrams" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="silverFine">Its fineness</label>
+        <select id="silverFine" name="silverFine">
+          <option value="999" selected>999 (fine)</option><option value="958">958</option><option value="925">925 (sterling)</option><option value="800">800</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="silverJewelGrams">Silver jewellery you wear, grams</label>
+        <input id="silverJewelGrams" name="silverJewelGrams" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="silverJewelFine">Its fineness</label>
+        <select id="silverJewelFine" name="silverJewelFine">
+          <option value="999">999 (fine)</option><option value="958">958</option><option value="925" selected>925 (sterling)</option><option value="800">800</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label class="check" for="includeJewellery"><input id="includeJewellery" name="includeJewellery" type="checkbox" checked> Count jewellery I wear (the Hanafi view; untick for the Maliki, Shafi'i and Hanbali view)</label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Deductions</legend>
+    <div class="field">
+      <label for="debts">Debts you can deduct <span class="hint">Overdue amounts, plus what falls due in the next 12 lunar months. Capital only, never interest.</span></label>
+      <input id="debts" name="debts" type="number" inputmode="decimal" min="0" step="any">
+    </div>
+  </fieldset>
+
+  <div class="actions"><button type="submit">Calculate zakat</button><button type="reset" class="secondary">Clear</button></div>
+  <div class="result" id="result" aria-live="polite"></div>
+  <noscript><p class="error">This calculator needs JavaScript, which runs only in your browser.</p></noscript>
+</form>

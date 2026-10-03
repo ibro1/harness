@@ -1,0 +1,43 @@
+{
+  "name": "Linkfa Tools",
+  "tagline": "Free calculators that show their working.",
+  "origin": "https://tools.linkfa.de",
+  "language": "en-GB",
+  "owner": "DaveBukar Technologies",
+  "ownerUrl": "https://linkfa.de/",
+  "contactUrl": "https://linkfa.de/#leadform",
+  "contactEmail": "",
+  "adsenseClient": "",
+  "adSlots": {
+    "afterTool": "",
+    "inContent": ""
+  },
+  "pagesUpdated": "2026-10-03",
+  "categories": [
+    {
+      "id": "islamic-finance",
+      "label": "Islamic finance",
+      "intro": "Zakat, inheritance and other calculations from the Quran and Sunnah, with the rule behind every number."
+    },
+    {
+      "id": "uk-tax",
+      "label": "UK tax and pay",
+      "intro": "Income tax, National Insurance and allowances for England, Wales and Northern Ireland, from GOV.UK figures."
+    },
+    {
+      "id": "money",
+      "label": "Money",
+      "intro": "Everyday money sums: savings, loans and prices."
+    },
+    {
+      "id": "conversions",
+      "label": "Converters",
+      "intro": "Units and formats Google does not convert for you."
+    },
+    {
+      "id": "dates",
+      "label": "Dates and time",
+      "intro": "Day counts, deadlines and calendars."
+    }
+  ]
+}

@@ -172,6 +172,10 @@ services:
       # YouTube niche scout: YouTube Data API v3 key (Google Cloud -> APIs ->
       # YouTube Data API v3 -> Credentials -> API key). A key saved on its card wins.
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      # Tools employee: a GitHub token with push access (contents: write) to the
+      # site repository set on its card; the Dokploy app for tools.linkfa.de
+      # builds from that repository. Without it the site stays local (preview).
+      TOOLS_SITE_GIT_TOKEN: ${TOOLS_SITE_GIT_TOKEN:-}
       GEMINI_API_KEY_1: ${GEMINI_API_KEY_1:-}
       GEMINI_API_KEY_2: ${GEMINI_API_KEY_2:-}
       GEMINI_API_KEY_3: ${GEMINI_API_KEY_3:-}

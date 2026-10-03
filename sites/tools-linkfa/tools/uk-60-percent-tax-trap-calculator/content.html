@@ -1,0 +1,62 @@
+<h2 id="what">What this calculator does</h2>
+<p>Between £100,000 and £125,140 of adjusted net income, each extra pound of salary costs you 60p in income tax and 2p in National Insurance. That is the 60% tax trap, sometimes called the £100k tax trap. It is not a published rate. It comes from the Personal Allowance taper.</p>
+<p>Enter your pay and any pension or Gift Aid payments. The calculator shows:</p>
+<ul>
+<li>your adjusted net income and how much Personal Allowance you have left;</li>
+<li>income tax band by band, and employee Class 1 National Insurance;</li>
+<li>the rate you pay on your next £100 of salary;</li>
+<li>the pension contribution that brings adjusted net income back to exactly £100,000, by salary sacrifice and by a personal pension, with what each one costs you in take-home pay;</li>
+<li>a warning when you are over the £100,000 limit for Tax-Free Childcare and the working-parent free childcare hours.</li>
+</ul>
+<p>It uses the 2026 to 2027 tax year (6 April 2026 to 5 April 2027) for England, Wales and Northern Ireland. Scotland sets its own income tax bands, so the figures here are wrong for Scottish taxpayers.</p>
+
+<h2 id="how">How the calculation works</h2>
+<h3>1. Adjusted net income</h3>
+<p>HMRC starts from your taxable income, takes off pension contributions made gross (salary sacrifice never reaches your taxable pay, and a net pay workplace scheme is taken off before tax), then takes off the grossed-up value of relief at source pension contributions and Gift Aid. Grossed up means what you paid plus basic rate tax, so every £1 you pay counts as £1.25.</p>
+<span class="formula">Adjusted net income = salary − salary sacrifice − net pay pension + other income − 1.25 × (personal pension paid + Gift Aid paid)</span>
+<h3>2. The Personal Allowance taper</h3>
+<p>The standard Personal Allowance is £12,570. It goes down by £1 for every £2 of adjusted net income above £100,000, and is zero from £125,140.</p>
+<span class="formula">Personal Allowance = max(0, 12,570 − (adjusted net income − 100,000) ÷ 2)</span>
+<h3>3. Income tax</h3>
+<p>Taxable income is total income minus the allowance that is left. The first £37,700 of taxable income is taxed at 20%, income up to £125,140 at 40%, and anything above at 45%. A relief at source contribution or Gift Aid donation pushes both of those limits up by its grossed-up amount. That is how higher rate relief is given.</p>
+<h3>4. National Insurance</h3>
+<p>Employees in category A pay 8% on earnings between £12,570 and £50,270 a year and 2% above that. Salary sacrifice reduces the pay NI is charged on. A net pay pension, a personal pension and Gift Aid do not. The calculator treats pay as spread evenly over the year; NI is really worked out per pay period, so a large bonus in one month can shift the figure slightly.</p>
+<h3>Why the rate is 60%</h3>
+<p>Take £1 of extra salary inside the taper. It is taxed at 40%, which is 40p. It also removes 50p of Personal Allowance, so 50p that was tax-free is now taxed at 40%, which is another 20p. Total: 60p of income tax. Add 2p of NI and you keep 38p.</p>
+<!--ad:in-content-->
+<h2 id="example">Worked example: a £110,000 salary</h2>
+<p>Asha earns £110,000 and has no pension or Gift Aid payments outside work.</p>
+<div class="scroll"><table>
+<thead><tr><th>Step</th><th class="num">Amount</th></tr></thead>
+<tbody>
+<tr><td>Adjusted net income</td><td class="num">£110,000</td></tr>
+<tr><td>Over £100,000 by</td><td class="num">£10,000</td></tr>
+<tr><td>Allowance lost (half of £10,000)</td><td class="num">£5,000</td></tr>
+<tr><td>Personal Allowance left</td><td class="num">£7,570</td></tr>
+<tr><td>Taxable income (£110,000 − £7,570)</td><td class="num">£102,430</td></tr>
+<tr><td>£37,700 at 20%</td><td class="num">£7,540</td></tr>
+<tr><td>£64,730 at 40%</td><td class="num">£25,892</td></tr>
+<tr><td>Income tax</td><td class="num">£33,432</td></tr>
+<tr><td>NI: £37,700 at 8% + £59,730 at 2%</td><td class="num">£4,210.60</td></tr>
+</tbody></table></div>
+<p>On £100,000 the same sums give £27,432 of tax and £4,010.60 of NI. So the last £10,000 cost her £6,000 in tax and £200 in NI. She keeps £3,800 of it.</p>
+<h3>Option A: salary sacrifice of £10,000</h3>
+<p>Her pay for tax and NI becomes £100,000. She saves £6,000 of tax and £200 of NI. Her take-home pay falls by £3,800, and £10,000 goes into her pension. Each £1 in the pension cost her 38p.</p>
+<h3>Option B: a personal pension (relief at source)</h3>
+<p>She pays £8,000. The provider claims £2,000 of basic rate relief, so £10,000 lands in the pension and her adjusted net income is £100,000. Her full £12,570 allowance returns, and her basic rate band grows to £47,700. Tax is £47,700 × 20% = £9,540 plus £49,730 × 40% = £19,892, a total of £29,432. That is £4,000 less than before, which she gets back through Self Assessment or her tax code. Net cost: £8,000 − £4,000 = £4,000 for £10,000 in the pension. No NI is saved, so this route costs £200 more than salary sacrifice.</p>
+
+<h2 id="childcare">The £100,000 childcare cliff</h2>
+<p>The taper is gradual. The childcare limit is not. If your or your partner's expected adjusted net income is over £100,000 for the tax year, you cannot use Tax-Free Childcare. In England you also lose the working-parent free hours (up to 30 hours a week for children from 9 months, for 38 weeks a year). Tax-Free Childcare is worth up to £2,000 a year per child, or £4,000 for a disabled child. One pound over the line loses all of it, which is why a pension contribution that lands you at or just under £100,000 can be worth far more than the tax saved.</p>
+<div class="callout"><p>Wales and Northern Ireland run their own funded childcare schemes with their own rules. Tax-Free Childcare applies across the UK.</p></div>
+
+<h2 id="limits">What this calculator leaves out</h2>
+<ul>
+<li>Scottish income tax bands.</li>
+<li>Savings interest and dividends, which have their own allowances and rates. Leave them out of "other income".</li>
+<li>Student loan and postgraduate loan repayments.</li>
+<li>The High Income Child Benefit Charge.</li>
+<li>Self-employed Class 2 and Class 4 National Insurance.</li>
+<li>Pension annual allowance limits and the tapered annual allowance. Large contributions can trigger a charge.</li>
+<li>Employer NI savings that some employers pass on when you sacrifice salary.</li>
+</ul>
+<p>The allowance, the basic rate limit and the NI thresholds are frozen at their current levels until 5 April 2031, under a measure announced at Budget 2025. Pay rises during the freeze pull more people into the taper each year.</p>

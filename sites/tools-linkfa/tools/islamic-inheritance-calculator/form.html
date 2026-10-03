@@ -1,0 +1,105 @@
+<form id="calc" novalidate>
+  <p class="note">Sunni rules, following the Hanafi and Hanbali positions where the schools differ. Grandparents are not covered: if a grandfather or grandmother of the deceased is alive, ask a scholar.</p>
+  <fieldset>
+    <legend>The estate</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="gross">Everything the deceased owned <span class="hint">Cash, property, investments and belongings, at today's value.</span></label>
+        <input id="gross" name="gross" type="number" inputmode="decimal" min="0" step="any" required>
+      </div>
+      <div class="field">
+        <label for="currency">Currency <span class="hint">For display only.</span></label>
+        <select id="currency" name="currency">
+          <option value="GBP" selected>GBP (£)</option>
+          <option value="USD">USD ($)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="NGN">NGN (₦)</option>
+          <option value="PKR">PKR</option>
+          <option value="INR">INR (₹)</option>
+          <option value="MYR">MYR</option>
+          <option value="SAR">SAR</option>
+          <option value="AED">AED</option>
+          <option value="CAD">CAD</option>
+          <option value="AUD">AUD</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="funeral">Funeral and burial costs <span class="hint">Paid first, from the whole estate.</span></label>
+        <input id="funeral" name="funeral" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="debts">Debts <span class="hint">Everything the deceased owed, paid next.</span></label>
+        <input id="debts" name="debts" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="bequest">Bequest in the will (wasiyya) <span class="hint">To people who do not inherit, or to charity. Capped at one third of what is left.</span></label>
+        <input id="bequest" name="bequest" type="number" inputmode="decimal" min="0" step="any">
+      </div>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Surviving relatives</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="spouse">Spouse <span class="hint">A husband if the deceased was a woman; up to four wives if a man.</span></label>
+        <select id="spouse" name="spouse">
+          <option value="none" selected>No surviving spouse</option>
+          <option value="husband">Husband</option>
+          <option value="1">1 wife</option>
+          <option value="2">2 wives</option>
+          <option value="3">3 wives</option>
+          <option value="4">4 wives</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="check" for="father"><input id="father" name="father" type="checkbox"> Father is alive</label>
+        <label class="check" for="mother"><input id="mother" name="mother" type="checkbox"> Mother is alive</label>
+      </div>
+    </div>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="sons">Sons</label>
+        <input id="sons" name="sons" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="daughters">Daughters</label>
+        <input id="daughters" name="daughters" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="sonsSons">Sons' sons <span class="hint">Grandsons through a son only.</span></label>
+        <input id="sonsSons" name="sonsSons" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="sonsDaughters">Sons' daughters <span class="hint">Granddaughters through a son only.</span></label>
+        <input id="sonsDaughters" name="sonsDaughters" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="fullBrothers">Full brothers <span class="hint">Same father and mother.</span></label>
+        <input id="fullBrothers" name="fullBrothers" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="fullSisters">Full sisters</label>
+        <input id="fullSisters" name="fullSisters" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="paternalBrothers">Half-brothers through the father</label>
+        <input id="paternalBrothers" name="paternalBrothers" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="paternalSisters">Half-sisters through the father</label>
+        <input id="paternalSisters" name="paternalSisters" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="field">
+        <label for="maternalSiblings">Half-brothers and half-sisters through the mother <span class="hint">Count them together; they share equally.</span></label>
+        <input id="maternalSiblings" name="maternalSiblings" type="number" inputmode="numeric" min="0" max="50" step="1" value="0">
+      </div>
+    </div>
+    <div class="field">
+      <label class="check" for="otherAgnates"><input id="otherAgnates" name="otherAgnates" type="checkbox"> Other male relatives on the father's side are alive</label>
+      <span class="hint">Paternal uncles, nephews through a brother, or male cousins through a paternal uncle. They take only what nobody nearer takes.</span>
+    </div>
+  </fieldset>
+  <div class="actions"><button type="submit">Divide the estate</button><button type="reset" class="secondary">Clear</button></div>
+  <div class="result" id="result" aria-live="polite"></div>
+  <noscript><p class="error">This calculator needs JavaScript, which runs only in your browser.</p></noscript>
+</form>

@@ -1,0 +1,46 @@
+{
+  "name": "@deepseek-ai/dsh-host-tools-employee",
+  "description": "Fork-local tools employee: researches which small web tools people search for and can rank with, builds the approved ones with tests and sourced content, and publishes them to the static tools site",
+  "version": "0.1.2-rc.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "bundle": "tsdown"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@deepseek-ai/dsh-host-capture": "workspace:*",
+    "@deepseek-ai/dsh-host-employee-kit": "workspace:*",
+    "@deepseek-ai/dsh-host-seo-employee": "workspace:*",
+    "@deepseek-ai/dsh-host-youtube-niche-scout": "workspace:*",
+    "playwright-core": "^1.49.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ]
+}

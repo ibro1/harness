@@ -6,6 +6,7 @@ import { meetingRemindersEn, meetingRemindersZh, type MeetingRemindersLocaleKey 
 import { seoEn, seoZh, type SeoLocaleKey } from './locales/seo.ts'
 import { switchesEn, switchesZh, type SwitchLocaleKey } from './locales/switches.ts'
 import { ttsEn, ttsZh, type TtsLocaleKey } from './locales/tts.ts'
+import { toolsEn, toolsZh, type ToolsLocaleKey } from './locales/tools.ts'
 import { ynsEn, ynsZh, type YnsLocaleKey } from './locales/yns.ts'
 import { wadEn, wadZh, type WadLocaleKey } from './locales/whatsapp-delegate.ts'
 
@@ -41,6 +42,7 @@ export type OperationsSettingsLocaleKey =
   | SwitchLocaleKey
   | TtsLocaleKey
   | YnsLocaleKey
+  | ToolsLocaleKey
   | MeetingRemindersLocaleKey
   | WadLocaleKey
 
@@ -51,6 +53,7 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   ...switchesEn,
   ...ttsEn,
   ...ynsEn,
+  ...toolsEn,
   ...meetingRemindersEn,
   ...wadEn,
   dokployTitle: 'Dokploy',
@@ -240,6 +243,7 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   ...switchesZh,
   ...ttsZh,
   ...ynsZh,
+  ...toolsZh,
   ...meetingRemindersZh,
   ...wadZh,
   dokployTitle: 'Dokploy',

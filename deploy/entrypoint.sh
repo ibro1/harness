@@ -99,6 +99,9 @@ fi
 if [[ "${DSH_YOUTUBE_NICHE_SCOUT:-1}" != "0" ]]; then
   export DSH_YNS_TOKEN="${DSH_YNS_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_TOOLS_EMPLOYEE:-1}" != "0" ]]; then
+  export DSH_TLE_TOKEN="${DSH_TLE_TOKEN:-$(random_token)}"
+fi
 if [[ "${DSH_TIKTOK_SHOP_EMPLOYEE:-1}" != "0" ]]; then
   export DSH_TTS_TOKEN="${DSH_TTS_TOKEN:-$(random_token)}"
 fi
@@ -423,6 +426,20 @@ if [[ "${DSH_YOUTUBE_NICHE_SCOUT:-1}" != "0" ]]; then
   echo "[entrypoint] YouTube niche scout available (Plugins -> YouTube niche scout)"
   register_cli_mcp dsh-youtube-niche-scout yns-mcp.mjs DSH_YNS_TOKEN DSH_YNS_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT/yns/command" "YouTube niche scout"
+fi
+
+# Tools employee (packages/host/tools-employee): researches small web tools
+# with search demand and room on Google's first page, proposes a weekly
+# shortlist on WhatsApp, builds and tests the approved ones and publishes them
+# to tools.linkfa.de by pushing sites/tools-linkfa's working copy to the site
+# repository (TOOLS_SITE_GIT_TOKEN). Off until switched on at Plugins -> Tools
+# employee. CLI models reach its tools over MCP.
+if [[ "${DSH_TOOLS_EMPLOYEE:-1}" != "0" ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/tools-employee" "$HOME/.dsh/skills/tools-employee"
+  echo "[entrypoint] Tools employee available (Plugins -> Tools employee)"
+  register_cli_mcp dsh-tools-employee tle-mcp.mjs DSH_TLE_TOKEN DSH_TLE_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT/tools/command" "Tools employee"
 fi
 
 # TikTok Shop employee (packages/host/tiktok-shop-employee): finds UK TikTok

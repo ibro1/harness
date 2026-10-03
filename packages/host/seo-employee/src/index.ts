@@ -46,6 +46,10 @@ import type { Market, PublisherKind, Site, SiteGoogle, SiteSecrets } from './typ
 export { SeoStore, emptyState, isoWeek, publishedThisWeek } from './store.ts'
 export type { Article, Draft, OwnerQuestion, SeoState, Topic } from './store.ts'
 export { buildSeoTools } from './tools.ts'
+export { GscApiError, gscWindow, queryAll, strikingDistance } from './google/gsc.ts'
+export type { GscQuery, StrikingDistanceRow } from './google/gsc.ts'
+export { parseServiceAccountKey, ServiceAccountTokens } from './google/oauth.ts'
+export type { ServiceAccountKey } from './google/oauth.ts'
 export type { SeoDeps } from './tools.ts'
 export type * from './types.ts'
 

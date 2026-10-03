@@ -1,0 +1,204 @@
+{
+  "slug": "islamic-inheritance-calculator",
+  "title": "Islamic Inheritance Calculator (Faraid) with Working",
+  "h1": "Islamic inheritance calculator",
+  "description": "Divide an estate by Islamic law: each heir's exact fraction and amount, the Quran verse behind it, and 'awl or radd explained. Free faraid calculator.",
+  "intro": "Enter the estate, debts and bequest, then the relatives who survived. You get every heir's exact share and amount, the verse or hadith it comes from, and who is excluded and why.",
+  "category": "islamic-finance",
+  "applicationCategory": "FinanceApplication",
+  "keyword": "islamic inheritance calculator",
+  "secondaryKeywords": [
+    "faraid calculator",
+    "islamic inheritance calculator hanafi",
+    "islamic inheritance calculator uk",
+    "sunni inheritance calculator",
+    "islamic inheritance calculator with amount",
+    "how to calculate inheritance in islam"
+  ],
+  "differentiator": "Shows every heir's share as an exact fraction and an amount that adds up to the net estate to the penny, names the Quran verse or hadith behind each share, lists who is excluded and why, and explains 'awl, radd and the 'Umariyyatan when they apply, after funeral costs, debts and a bequest capped at one third; the current top results give bare numbers with no working.",
+  "related": ["zakat-calculator"],
+  "published": "2026-10-03",
+  "updated": "2026-10-03",
+  "sources": [
+    {
+      "title": "Quran 4:11 (Surah An-Nisa)",
+      "url": "https://quran.com/4/11-12",
+      "publisher": "Quran.com",
+      "checked": "2026-10-03",
+      "note": "A son takes twice a daughter's share; two or more daughters 2/3, one daughter 1/2; each parent 1/6 with children; mother 1/3 when childless, 1/6 with siblings; after bequests and debts."
+    },
+    {
+      "title": "Quran 4:12 (Surah An-Nisa)",
+      "url": "https://quran.com/4/12",
+      "publisher": "Quran.com",
+      "checked": "2026-10-03",
+      "note": "Husband 1/2, or 1/4 with children; wives 1/4, or 1/8 with children; a maternal brother or sister 1/6 each, two or more share 1/3, when there are neither parents nor children."
+    },
+    {
+      "title": "Quran 4:176 (Surah An-Nisa)",
+      "url": "https://quran.com/4/176",
+      "publisher": "Quran.com",
+      "checked": "2026-10-03",
+      "note": "One sister 1/2, two sisters 2/3; with brothers and sisters together a male takes twice a female's share."
+    },
+    {
+      "title": "Sahih al-Bukhari 6736: the share of a son's daughter",
+      "url": "https://ihadis.com/en/bukhari/hadith/6736",
+      "publisher": "iHadis (text of Sahih al-Bukhari, Book 85, Hadith 13)",
+      "checked": "2026-10-03",
+      "note": "Ibn Mas'ud, giving the Prophet's ruling: daughter 1/2, son's daughter 1/6 completing 2/3, and the rest to the sister."
+    },
+    {
+      "title": "Sahih al-Bukhari 6732: give the fixed shares to those entitled",
+      "url": "https://ihadis.com/en/bukhari/hadith/6732",
+      "publisher": "iHadis (text of Sahih al-Bukhari, Book 85, Hadith 9)",
+      "checked": "2026-10-03",
+      "note": "Fixed shares first, then whatever remains to the closest male relative: the basis of the residuary ('asaba) order."
+    },
+    {
+      "title": "Sahih al-Bukhari 2742: bequest limited to one third",
+      "url": "https://ihadis.com/en/bukhari/hadith/2742",
+      "publisher": "iHadis (text of Sahih al-Bukhari, Book 55, Hadith 5)",
+      "checked": "2026-10-03",
+      "note": "\"Yes, one third, yet even one third is too much\": the one-third cap on a bequest."
+    },
+    {
+      "title": "Sahih al-Bukhari 6764: no inheritance between a Muslim and a disbeliever",
+      "url": "https://ihadis.com/en/bukhari/hadith/6764",
+      "publisher": "iHadis (text of Sahih al-Bukhari, Book 85, Hadith 41)",
+      "checked": "2026-10-03",
+      "note": "Why a non-Muslim relative is left out of the heirs."
+    },
+    {
+      "title": "Sunan Ibn Majah 2645: the killer does not inherit",
+      "url": "https://en.tohed.com/hadith/ibn-majah/2645/",
+      "publisher": "Tohed (text of Sunan Ibn Majah, graded sahih by al-Albani)",
+      "checked": "2026-10-03",
+      "note": "Why a relative who killed the deceased is left out of the heirs."
+    },
+    {
+      "title": "Who pays for funeral expenses? (answer 44039)",
+      "url": "https://islamqa.info/en/44039",
+      "publisher": "Islam Question & Answer",
+      "checked": "2026-10-03",
+      "note": "The shroud and burial come from the estate before debts, the will and the heirs' shares."
+    },
+    {
+      "title": "Objection to the 'awl process in inheritance (answer 131556)",
+      "url": "https://islamqa.info/en/answers/131556",
+      "publisher": "Islam Question & Answer",
+      "checked": "2026-10-03",
+      "note": "'Awl: when the fixed shares exceed the estate every share is reduced proportionately; first ruled by 'Umar for a husband and two sisters."
+    },
+    {
+      "title": "Inheritance of a childless man with other survivors (fatwa 88267)",
+      "url": "https://www.islamweb.net/en/fatwa/88267/inheritance-of-a-childless-man-with-other-survivors",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "The 'Umariyyatan: the mother takes a third of what remains after the husband or wife when the heirs are a spouse and both parents; also \"no will for an heir\"."
+    },
+    {
+      "title": "Division of inheritance among wife and two daughters (fatwa 333970)",
+      "url": "https://www.islamweb.net/en/fatwa/333970/division-of-inheritance-among-wife-and-two-daughters",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "Radd: the surplus returns to the fixed-share heirs and spouses are not included; wife 2/16, each daughter 7/16."
+    },
+    {
+      "title": "Wife and the sons of a maternal half-brother (answer 193158)",
+      "url": "https://islamqa.info/en/answers/193158",
+      "publisher": "Islam Question & Answer",
+      "checked": "2026-10-03",
+      "note": "Spouses have no share of the remainder; distant kindred (dhawi'l-arham) take it when there is no other heir."
+    },
+    {
+      "title": "The Mushtaraka (Himariyya) case: why the Companions differed (answer 496015, Arabic)",
+      "url": "https://islamqa.info/ar/answers/496015",
+      "publisher": "Islam Question & Answer",
+      "checked": "2026-10-03",
+      "note": "Husband 1/2, mother 1/6, maternal siblings 1/3; Abu Hanifa and Ahmad give the full brothers nothing, 'Umar, Malik and al-Shafi'i let them share the third."
+    },
+    {
+      "title": "Muwatta Malik (Yahya), hadith 1476: the shared case",
+      "url": "https://en.tohed.com/hadith/muwatta-yahya/chapter/1234/sub/38257/",
+      "publisher": "Tohed (text of the Muwatta)",
+      "checked": "2026-10-03",
+      "note": "Malik's ruling that full siblings become partners with maternal siblings in the third when nothing is left for them."
+    },
+    {
+      "title": "Daughter of the son inherits if there is no daughter (fatwa 228811)",
+      "url": "https://www.islamweb.net/en/fatwa/228811/daughter-of-the-son-inherits-if-there-is-no-daughter",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "Son's daughter: like a daughter when there is none, 1/6 beside one daughter, excluded by two daughters unless a son's son makes her residuary, excluded by a son."
+    },
+    {
+      "title": "Inheritance of 4 sisters and other nephews and nieces (fatwa 91857)",
+      "url": "https://www.islamweb.net/en/fatwa/91857/inheritance-of-4-sisters-and-other-nephews-and-nieces",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "One full sister 1/2 and paternal half-sisters 1/6; two full sisters exclude paternal half-sisters; nephews through a brother take the rest."
+    },
+    {
+      "title": "Division among a mother, full siblings and half siblings (fatwa 276703)",
+      "url": "https://www.islamweb.net/en/fatwa/276703/division-of-inheritance-among-a-mother-full-siblings-and-half-siblings",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "Full brothers exclude paternal half-siblings; maternal half-siblings share 1/3 equally; full siblings take the rest 2:1."
+    },
+    {
+      "title": "Inheritance of wife, daughter, grandmother and full sister (fatwa 214165)",
+      "url": "https://www.islamweb.net/en/fatwa/214165/inheritance-of-wife-daughter-grandmother-and-full-sister",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "Sisters inherit the remainder beside daughters (ta'seeb), and the full sister then excludes paternal half-brothers."
+    },
+    {
+      "title": "Inheritance of father, mother, wife and one daughter (fatwa 187729)",
+      "url": "https://www.islamweb.net/en/fatwa/187729/inheritance-of-father-mother-wife-and-one-daughter",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "Father 1/6 plus the remainder beside a daughter (5/24); siblings are prevented by the father."
+    },
+    {
+      "title": "Division among a mother, wife and two sisters (fatwa 192707)",
+      "url": "https://www.islamweb.net/en/fatwa/192707/division-of-inheritance-among-a-mother-wife-and-two-sisters",
+      "publisher": "IslamWeb",
+      "checked": "2026-10-03",
+      "note": "Mother 1/6 because of two sisters; 'awl to 13: wife 3, mother 2, sisters 8."
+    },
+    {
+      "title": "Who inherits if someone dies without a will",
+      "url": "https://www.gov.uk/inherits-someone-dies-without-will",
+      "publisher": "GOV.UK",
+      "checked": "2026-10-03",
+      "note": "Without a will, the legal rules decide who is entitled to a share of the estate."
+    }
+  ],
+  "faqs": [
+    {
+      "q": "How do you calculate inheritance in Islam?",
+      "a": "Pay the funeral costs and debts, then any bequest up to one third of what is left. Give the fixed Quranic shares to the heirs entitled to them, scale them down by 'awl if they pass the whole, give what remains to the nearest male-line residuary heirs, and if nobody takes the remainder return it to the fixed-share heirs other than a spouse (radd)."
+    },
+    {
+      "q": "How to divide inheritance in Islam?",
+      "a": "Divide it by fractions, not by equal shares. Each heir's fraction depends on who else survived: a wife takes 1/8 if there are children and 1/4 if there are none, and a son takes twice what a daughter takes. Turn the fractions into amounts only after funeral costs, debts and any bequest are paid."
+    },
+    {
+      "q": "How much inheritance does a daughter get in Islam?",
+      "a": "With a brother, a daughter takes half of a son's share from what is left after the fixed shares. With no brother, one daughter takes 1/2 and two or more daughters share 2/3 (Quran 4:11). If nobody takes the remainder, it can come back to her by radd."
+    },
+    {
+      "q": "What are the Islamic rules for inheritance?",
+      "a": "The shares are set by Quran 4:11, 4:12 and 4:176 and the Sunnah. Some relatives exclude others: the father excludes brothers and sisters, a son excludes grandchildren. A bequest is limited to one third and cannot go to an heir, a non-Muslim does not inherit from a Muslim, and a killer does not inherit."
+    },
+    {
+      "q": "What does a wife get in Islamic inheritance?",
+      "a": "A wife takes 1/4 if her husband left no children or sons' children, and 1/8 if he did (Quran 4:12). Two to four wives share that same fraction equally. A wife does not take part in radd, so she never gets more than her fixed share."
+    },
+    {
+      "q": "Is this Islamic inheritance calculator Hanafi or Shafi'i?",
+      "a": "It follows the rules the four Sunni schools share and, where they differ, the Hanafi and Hanbali view. The main difference it meets is the Mushtaraka case, where the Maliki and Shafi'i schools let full siblings share the maternal siblings' third. Grandparents are not covered."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "tools-linkfa",
+  "private": true,
+  "type": "module",
+  "description": "tools.linkfa.de: free calculators and checkers that work in the browser, built to static HTML and served by nginx",
+  "scripts": {
+    "test": "node --test",
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

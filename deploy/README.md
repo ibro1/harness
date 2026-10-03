@@ -569,6 +569,7 @@ The overlay plugins in the table below each have a card on the Plugins page with
 | PSD tools | yes | `DSH_PSD_TOOLS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
 | TikTok Shop employee | yes; idle until switched on at Plugins | `DSH_TIKTOK_SHOP_EMPLOYEE=0` | yes |
 | YouTube niche scout | yes; idle until switched on at Plugins (needs a YouTube Data API key) | `DSH_YOUTUBE_NICHE_SCOUT=0` | yes |
+| Tools employee | yes; idle until switched on at Plugins (publishing needs the site repository and `TOOLS_SITE_GIT_TOKEN`) | `DSH_TOOLS_EMPLOYEE=0` | yes |
 | WhatsApp delegate | yes; idle until switched on and given contacts at Plugins | `DSH_WHATSAPP_DELEGATE=0` | yes, to delegate Sessions only |
 | Meeting reminders | yes; sends nothing until rules are saved at Plugins | `DSH_MEETING_REMINDERS=0` | no |
 | Agent Teams tools route | yes; lists tools only while Agent Teams is enabled under Plugins | `DSH_AGENT_TOOLS_MCP=0` | yes, unless `DSH_AGENT_TOOLS_MCP=0` |
@@ -840,6 +841,18 @@ The outreach browser on the DeerFlow sandbox (`/mnt/shared/outreach-browser`, ou
 ## SEO employee
 
 A second employee (`packages/host/seo-employee`), off until switched on at **Plugins → SEO employee**. It researches keywords for the sites added on **Plugins → SEO sites** (Search Console, Google Ads Keyword Planner, Google suggestions), plans one page per search intent, asks the owner for first-hand material on WhatsApp, writes articles that must pass the plugin's checks and an editor model's review, publishes them to Klipara's content API or a WordPress site (application password) within each site's weekly cap, and tracks how they rank. Google is reached best as a service account: paste its JSON key on the settings page and add its email as a user in Google Ads and Search Console, which needs no sign-in screen and shows no unverified-app warning. Alternatively connect with **Connect Google** once the OAuth client id and secret are entered there; add `https://<this host>/seo/oauth/callback` as an authorised redirect URI on that client and set the consent screen to *In production*, or the connection expires after 7 days. Each published article is announced on WhatsApp with a one-tap unpublish link. `DSH_SEO_EMPLOYEE=0` leaves it out.
+
+## Tools employee and tools.linkfa.de
+
+A weekly employee (`packages/host/tools-employee`), off until switched on at **Plugins → Tools employee**. It picks small web tools by keyword evidence (Google autocomplete, Keyword Planner through the SEO employee when an SEO site is chosen on its card, and Google's first page read in the container's Chromium through `TTS_PROXY_URL`), sends the owner a signed shortlist on WhatsApp, and builds only what the owner approves (review page, or a reply such as `build 1,3`). Each tool lives in the static site whose framework ships in `sites/tools-linkfa`; the employee keeps a git working copy in `/workspace/tools-employee/site`, runs every tool's tests and the build's quality checks, and pushes to the site repository. Until that is set up the card says the site is not deployed and builds stay local (signed-in preview at `/tools/preview/`).
+
+One-time setup for the live site:
+
+1. Create an empty GitHub repository for the site (for example `ibro1/tools-linkfa`, private is fine) and a fine-grained token with *Contents: read and write* on it. Set `TOOLS_SITE_GIT_TOKEN` in this project's Dokploy environment and redeploy; enter the repository's `https://github.com/…/….git` address as **Site repository** on the card, then press **Publish site now**: the first push carries the framework and the seed tools.
+2. In the Dokploy that serves `*.linkfa.de` (the project with the WordPress compose `word`), create an Application from that repository, branch `main`, build type *Dockerfile* (`./Dockerfile`), with Autodeploy on. Add the domain `tools.linkfa.de`, container port 80, HTTPS with Let's Encrypt. No DNS change is needed (the `*.linkfa.de` record already points at that server), and no WordPress change either: its Traefik catch-alls sit at priorities 2 and 1, below any app's own router. If Autodeploy is not available for the repository, copy the app's deploy webhook URL into **Deploy hook** on the card.
+3. Press **Check site** on the card: it turns to *live* once `https://tools.linkfa.de/build.json` serves the latest build.
+4. In Search Console add the property `https://tools.linkfa.de/` (or use an existing `sc-domain:linkfa.de` property), add the service account the SEO employee uses as a user on it, paste the same JSON key on the card, and submit `https://tools.linkfa.de/sitemap.xml`.
+5. Apply for AdSense only when the card's readiness says so. AdSense adds sites by root domain, so the application is for `linkfa.de`; once approved, paste the `ca-pub-…` id on the card (the next publish adds the AdSense script and `ads.txt`) and add the same `google.com, pub-…, DIRECT, f08c47fec0942fa0` line to `linkfa.de/ads.txt`.
 
 ## Error reporting (GlitchTip)
 

@@ -41,6 +41,8 @@ import { TikTokShopCard } from './TikTokShopCard.tsx'
 import { TTS_NS, TtsCardController } from './tts-card-controller.ts'
 import { YouTubeNicheScoutCard } from './YouTubeNicheScoutCard.tsx'
 import { YNS_NS, YnsCardController } from './yns-card-controller.ts'
+import { ToolsEmployeeCard } from './ToolsEmployeeCard.tsx'
+import { TOOLS_NS, ToolsCardController } from './tools-card-controller.ts'
 import { MeetingRemindersCard } from './MeetingRemindersCard.tsx'
 import { MEETING_REMINDERS_NS, MeetingRemindersCardController } from './meeting-reminders-card-controller.ts'
 import { WhatsAppDelegateCard } from './WhatsAppDelegateCard.tsx'
@@ -55,6 +57,7 @@ export type { SeoCardFace, SeoCardState, SeoSettings } from './seo-card-controll
 export type { AdsCardFace, AdsCardState, AdsSettings } from './ads-card-controller.ts'
 export type { TtsCardFace, TtsCardState, TtsSettings } from './tts-card-controller.ts'
 export type { YnsCardFace, YnsCardState, YnsSettings, YnsStatus } from './yns-card-controller.ts'
+export type { ToolsCardFace, ToolsCardState, ToolsSettings, ToolsStatus } from './tools-card-controller.ts'
 export type { MeetingRemindersCardFace, MeetingRemindersCardState, MeetingRemindersSettings } from './meeting-reminders-card-controller.ts'
 export type { WadCardFace, WadCardState, WadSettings } from './whatsapp-delegate-card-controller.ts'
 export type { ErrorReportingCardFace, ErrorReportingCardState, ErrorReportingSettings } from './error-reporting-card-controller.ts'
@@ -101,6 +104,7 @@ export function apply(ctx: ClientContext): void {
   const errorReporting = new ErrorReportingCardController(ctx.configForms.get(ERROR_REPORTING_NS))
   const tts = new TtsCardController(ctx.configForms.get(TTS_NS))
   const yns = new YnsCardController(ctx.configForms.get(YNS_NS))
+  const tools = new ToolsCardController(ctx.configForms.get(TOOLS_NS))
   const meetingReminders = new MeetingRemindersCardController(ctx.configForms.get(MEETING_REMINDERS_NS))
   const wad = new WadCardController(ctx.configForms.get(WAD_NS))
   // Adapters come and go, and a settings commit elsewhere can change the routes.
@@ -116,6 +120,7 @@ export function apply(ctx: ClientContext): void {
     ads.dispose()
     tts.dispose()
     yns.dispose()
+    tools.dispose()
     meetingReminders.dispose()
     wad.dispose()
   }, 'ui-settings-operations: form subscriptions')
@@ -173,6 +178,13 @@ export function apply(ctx: ClientContext): void {
       return yns.inject(scoutModels.store, () => { scoutModels.refresh() })
     },
   }, YouTubeNicheScoutCard))), 'ui-settings-operations: YouTube niche scout page')
+  ctx.effect(() => ctx.configForms.whileServed([TOOLS_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'tools-employee', order: 91, label: () => t('toolsTitle'), locale: NS,
+    inject: () => {
+      scoutModels.refresh()
+      return tools.inject(scoutModels.store, () => { scoutModels.refresh() })
+    },
+  }, ToolsEmployeeCard))), 'ui-settings-operations: tools employee page')
   ctx.effect(() => ctx.configForms.whileServed([MEETING_REMINDERS_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'meeting-reminders', order: 87, label: () => t('mrTitle'), locale: NS, inject: () => meetingReminders.inject(),
   }, MeetingRemindersCard))), 'ui-settings-operations: Meeting reminders page')

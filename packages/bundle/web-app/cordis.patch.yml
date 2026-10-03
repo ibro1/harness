@@ -333,6 +333,24 @@
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
 
+    # Fork-local tools employee (packages/host/tools-employee): a weekly run that
+    # researches small web tools people search for, proposes a shortlist on
+    # WhatsApp, and builds and publishes the approved ones to tools.linkfa.de.
+    # Off until switched on at Plugins; approved tools are built either way.
+    - id: tools-employee
+      name: '@deepseek-ai/dsh-host-tools-employee'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_TOOLS_EMPLOYEE === '0'
+      config:
+        publicBaseUrl: !!js "process.env.DSH_PUBLIC_HOST ? 'https://' + process.env.DSH_PUBLIC_HOST : ''"
+        token: !!js process.env.DSH_TLE_TOKEN || ''
+        siteToken: !!js process.env.TOOLS_SITE_GIT_TOKEN || ''
+        proxy: !!js process.env.TTS_PROXY_URL || ''
+        seoCommandUrl: !!js "process.env.DSH_SEO_TOKEN ? 'http://127.0.0.1:' + (process.env.DSH_INTERNAL_PORT || '3081') + '/seo/command' : ''"
+        seoToken: !!js process.env.DSH_SEO_TOKEN || ''
+        workspacePath: !!js process.env.DSH_TLE_WORKSPACE || '/workspace/tools-employee'
+        whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
+        whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
+
     # Fork-local meeting reminders (packages/host/meeting-reminders): posts
     # recurring WhatsApp reminders of monthly meetings to group chats. Sends
     # nothing until rules are saved at Plugins -> Meeting reminders.

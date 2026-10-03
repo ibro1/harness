@@ -2635,6 +2635,9 @@ importers:
       '@deepseek-ai/dsh-host-tiktok-shop-employee':
         specifier: workspace:*
         version: link:../../host/tiktok-shop-employee
+      '@deepseek-ai/dsh-host-tools-employee':
+        specifier: workspace:*
+        version: link:../../host/tools-employee
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../host/webserver
@@ -9645,6 +9648,46 @@ importers:
       '@deepseek-ai/dsh-host-employee-kit':
         specifier: workspace:*
         version: link:../employee-kit
+      playwright-core:
+        specifier: ^1.49.0
+        version: 1.61.1
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../webserver
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+
+  packages/host/tools-employee:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../util/atomic-write
+      '@deepseek-ai/dsh-host-capture':
+        specifier: workspace:*
+        version: link:../capture
+      '@deepseek-ai/dsh-host-employee-kit':
+        specifier: workspace:*
+        version: link:../employee-kit
+      '@deepseek-ai/dsh-host-seo-employee':
+        specifier: workspace:*
+        version: link:../seo-employee
+      '@deepseek-ai/dsh-host-youtube-niche-scout':
+        specifier: workspace:*
+        version: link:../youtube-niche-scout
       playwright-core:
         specifier: ^1.49.0
         version: 1.61.1

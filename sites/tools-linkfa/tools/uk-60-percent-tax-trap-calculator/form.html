@@ -1,0 +1,37 @@
+<form id="calc" novalidate>
+  <p class="note">Tax year 2026 to 2027 (6 April 2026 to 5 April 2027). England, Wales and Northern Ireland only. Enter yearly amounts in pounds.</p>
+  <div class="grid grid-2">
+    <div class="field">
+      <label for="salary">Salary and bonus <span class="hint">Gross pay for the year, before any salary sacrifice.</span></label>
+      <input id="salary" name="salary" type="number" inputmode="decimal" min="0" step="any" required placeholder="110000">
+    </div>
+    <div class="field">
+      <label for="otherIncome">Other taxable income <span class="hint">Rental profit and similar, with no NI. Leave out savings and dividends.</span></label>
+      <input id="otherIncome" name="otherIncome" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+    </div>
+  </div>
+  <fieldset>
+    <legend>Pension and Gift Aid you already pay</legend>
+    <div class="grid grid-2">
+      <div class="field">
+        <label for="salarySacrifice">Salary sacrifice <span class="hint">Pay you give up for employer pension contributions.</span></label>
+        <input id="salarySacrifice" name="salarySacrifice" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="netPayPension">Workplace pension taken before tax <span class="hint">A net pay arrangement: shown on your payslip, cuts tax but not NI.</span></label>
+        <input id="netPayPension" name="netPayPension" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="reliefAtSourceNet">Personal pension you pay in <span class="hint">Relief at source (SIPP or most personal pensions): what leaves your account, before the 25% top-up.</span></label>
+        <input id="reliefAtSourceNet" name="reliefAtSourceNet" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="giftAidNet">Gift Aid donations <span class="hint">What you gave, before the charity's claim.</span></label>
+        <input id="giftAidNet" name="giftAidNet" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+      </div>
+    </div>
+  </fieldset>
+  <div class="actions"><button type="submit">Calculate</button><button type="reset" class="secondary">Clear</button></div>
+  <div class="result" id="result" aria-live="polite"></div>
+  <noscript><p class="error">This calculator needs JavaScript, which runs only in your browser.</p></noscript>
+</form>
