@@ -78,6 +78,16 @@ describe('ui-settings-operations apply', () => {
     expect(entries.map(entry => resolveSlotLabel(entry.options.label))).toEqual(['SEO employee', 'SEO sites', 'Ads employee', 'Ads proposals'])
   })
 
+  it('registers the meeting reminders card while the Host serves meeting-reminders', async () => {
+    const { ctx, slots } = await bench(['meeting-reminders'])
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(1) })
+    const [entry] = slots.entries('plugins.item')
+    expect([entry!.options.id, entry!.options.order, resolveSlotLabel(entry!.options.label)]).toEqual(['meeting-reminders', 87, 'Meeting reminders'])
+  })
+
   it('removes its pages with the plugin', async () => {
     const { ctx, slots } = await bench(['dokploy', 'postgres', 'cloudflare'])
     const fiber = ctx.plugin({ inject: [...inject], apply })

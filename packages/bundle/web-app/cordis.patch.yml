@@ -319,6 +319,16 @@
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
 
+    # Fork-local meeting reminders (packages/host/meeting-reminders): posts
+    # recurring WhatsApp reminders of monthly meetings to group chats. Sends
+    # nothing until rules are saved at Plugins -> Meeting reminders.
+    - id: meeting-reminders
+      name: '@deepseek-ai/dsh-host-meeting-reminders'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_MEETING_REMINDERS === '0'
+      config:
+        whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
+        whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
+
     - id: postgres
       name: '@deepseek-ai/dsh-host-postgres'
       disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_POSTGRES === '0'

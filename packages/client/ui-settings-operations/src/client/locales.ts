@@ -2,6 +2,7 @@
 
 import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import { adsEn, adsZh, type AdsLocaleKey } from './locales/ads.ts'
+import { meetingRemindersEn, meetingRemindersZh, type MeetingRemindersLocaleKey } from './locales/meeting-reminders.ts'
 import { seoEn, seoZh, type SeoLocaleKey } from './locales/seo.ts'
 import { switchesEn, switchesZh, type SwitchLocaleKey } from './locales/switches.ts'
 import { ttsEn, ttsZh, type TtsLocaleKey } from './locales/tts.ts'
@@ -37,6 +38,7 @@ export type OperationsSettingsLocaleKey =
   | AdsLocaleKey
   | SwitchLocaleKey
   | TtsLocaleKey
+  | MeetingRemindersLocaleKey
 
 /** English copy. */
 export const en: Record<OperationsSettingsLocaleKey, string> = {
@@ -44,6 +46,7 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   ...adsEn,
   ...switchesEn,
   ...ttsEn,
+  ...meetingRemindersEn,
   dokployTitle: 'Dokploy',
   dokployDescription: 'The Dokploy servers an agent may query and deploy through.',
   dokployServers: 'Servers',
@@ -230,6 +233,7 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   ...adsZh,
   ...switchesZh,
   ...ttsZh,
+  ...meetingRemindersZh,
   dokployTitle: 'Dokploy',
   dokployDescription: 'Agent 可查询并通过其部署的 Dokploy 服务器。',
   dokployServers: '服务器',

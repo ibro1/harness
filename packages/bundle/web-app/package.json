@@ -144,6 +144,7 @@
     "@deepseek-ai/dsh-host-frontend-static": "workspace:*",
     "@deepseek-ai/dsh-host-klipara-scout": "workspace:*",
     "@deepseek-ai/dsh-host-seo-employee": "workspace:*",
+    "@deepseek-ai/dsh-host-meeting-reminders": "workspace:*",
     "@deepseek-ai/dsh-host-tiktok-shop-employee": "workspace:*",
     "@deepseek-ai/dsh-host-open-in-app": "workspace:*",
     "@deepseek-ai/dsh-host-plugin-inventory": "workspace:*",
