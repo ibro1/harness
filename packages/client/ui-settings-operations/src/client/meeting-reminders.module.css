@@ -1,0 +1,27 @@
+/* Meeting reminders form: widths for the compact controls; everything else uses the SEO page's form styles. */
+
+.nth {
+  width: 120px;
+}
+
+.weekday {
+  flex: 1;
+  width: auto;
+  min-width: 132px;
+  max-width: 220px;
+}
+
+.days {
+  flex: 1;
+  width: auto;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.clock {
+  width: 132px;
+}
+
+.meeting {
+  margin-bottom: 12px;
+}

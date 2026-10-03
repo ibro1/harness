@@ -75,6 +75,8 @@ const TOOLS = [
     parameters: { type: 'object', properties: { query: { type: 'string', description: 'Optional name/number substring.' } }, additionalProperties: false } },
   { name: 'whatsapp_chats', description: 'List recent WhatsApp chats (latest message per chat), newest first.',
     parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max chats (default 30).' } }, additionalProperties: false } },
+  { name: 'whatsapp_groups', description: 'List the WhatsApp groups this account belongs to, with their names and ids (JIDs).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'whatsapp_read', description: 'Read recent WhatsApp messages, optionally for one chat/contact.',
     parameters: { type: 'object', properties: { chat: { type: 'string', description: 'Contact name, phone number, or JID. Omit for the latest across all chats.' }, limit: { type: 'number', description: 'Max messages (default 30).' } }, additionalProperties: false } },
   { name: 'whatsapp_resolve', description: 'Resolve a contact name or phone number to a WhatsApp id, to confirm a recipient before sending.',
@@ -175,6 +177,7 @@ async function runTool(name, args) {
     case 'whatsapp_status': return (await svc('/status')).body
     case 'whatsapp_contacts': return (await svc(`/contacts${args.query ? `?query=${encodeURIComponent(String(args.query))}` : ''}`)).body
     case 'whatsapp_chats': return (await svc(`/chats${args.limit ? `?limit=${encodeURIComponent(String(args.limit))}` : ''}`)).body
+    case 'whatsapp_groups': return (await svc('/groups')).body
     case 'whatsapp_read': {
       const params = [args.chat ? `chat=${encodeURIComponent(String(args.chat))}` : '', args.limit ? `limit=${encodeURIComponent(String(args.limit))}` : ''].filter(Boolean).join('&')
       return (await svc(`/messages${params ? `?${params}` : ''}`)).body

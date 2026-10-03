@@ -2,7 +2,8 @@
  * The meeting reminders card's staged form over the `meeting-reminders`
  * settings namespace, plus the Host's routes: `/meeting-reminders/status`
  * (each rule's next meeting and reminder times, and recent sends), `preview`
- * and `send-now`. The rules are edited as one JSON array.
+ * `send-now`, and `groups` (the WhatsApp groups the meeting dropdown offers).
+ * The meetings form stages the rules array as JSON text in the `rules` field.
  */
 
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -11,6 +12,7 @@ import {
   SettingsFormModel, settingsNumberField, settingsTextField,
   type SettingsFieldSpec, type SettingsFieldState, type SettingsFormActions, type SettingsFormScope, type SettingsFormShell,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { meetingFrom, meetingIssues } from './meeting-reminders-model.ts'
 
 /** Namespace of the meeting reminders plugin; a client package must not import a Host package. */
 export const MEETING_REMINDERS_NS = 'meeting-reminders'
@@ -44,6 +46,19 @@ export interface MeetingRemindersStatus {
   sent: { key: string; label: string; at: string; ok: boolean; outcome: string; manual?: boolean }[]
 }
 
+/** One WhatsApp group the dropdown offers. */
+export interface MeetingGroup {
+  jid: string
+  name: string
+}
+
+/** The WhatsApp groups, as `/meeting-reminders/groups` lists them. */
+export interface MeetingGroupsState {
+  state: 'loading' | 'ready' | 'failed'
+  list: MeetingGroup[]
+  error?: string
+}
+
 /** The status block's state. */
 export interface MeetingRemindersLiveState {
   status: MeetingRemindersStatus | undefined
@@ -54,6 +69,7 @@ export interface MeetingRemindersLiveState {
   results: Record<string, string>
   /** Rule ids with a request in flight. */
   busy: string[]
+  groups: MeetingGroupsState
 }
 
 /** What the card renders. */
@@ -68,6 +84,8 @@ export interface MeetingRemindersCardState extends SettingsFormShell {
 /** The face the card's slot entry injects. */
 export interface MeetingRemindersCardFace extends SettingsFormActions {
   refreshStatus: () => void
+  /** Read the WhatsApp groups again. */
+  refreshGroups: () => void
   /** Render a rule's next message without sending it. */
   preview: (ruleId: string) => void
   /** Send a rule's reminder now; `force` sends one already sent. */
@@ -81,7 +99,8 @@ export interface MeetingRemindersCardFace extends SettingsFormActions {
 }
 
 /**
- * The rules as pretty-printed JSON; a draft that is not a JSON array of objects blocks the save.
+ * The rules as pretty-printed JSON. A draft that is not a JSON array of objects, or holds a meeting the form reports a
+ * problem with, blocks the save.
  * @returns the field spec.
  */
 export function rulesField(): SettingsFieldSpec {
@@ -92,7 +111,9 @@ export function rulesField(): SettingsFieldSpec {
       if (text.trim() === '') return { kind: 'clear' }
       try {
         const value: unknown = JSON.parse(text)
-        return Array.isArray(value) && value.every(rule => typeof rule === 'object' && rule !== null && !Array.isArray(rule))
+        if (!Array.isArray(value) || !value.every(rule => typeof rule === 'object' && rule !== null && !Array.isArray(rule))) return undefined
+        const meetings = value.map(meetingFrom)
+        return meetings.every((meeting, i) => meetingIssues(meeting, meetings.filter((_, j) => j !== i)).length === 0)
           ? { kind: 'set', value }
           : undefined
       } catch {
@@ -120,7 +141,7 @@ export class MeetingRemindersCardController {
   private readonly form: SettingsFormModel<MeetingRemindersSettings>
   private readonly store: SnapshotStore<MeetingRemindersCardState>
   private readonly live = createSnapshotStore<MeetingRemindersLiveState>({
-    status: undefined, failed: false, previews: {}, results: {}, busy: [],
+    status: undefined, failed: false, previews: {}, results: {}, busy: [], groups: { state: 'loading', list: [] },
   })
 
   /**
@@ -159,6 +180,23 @@ export class MeetingRemindersCardController {
       } catch {
         // The plugin is not loaded or the sign-in expired: the card says the status is unknown.
         this.live.update((draft) => { draft.failed = true })
+      }
+    })()
+  }
+
+  /** Read `/meeting-reminders/groups`. */
+  refreshGroups(): void {
+    this.live.update((draft) => { draft.groups = { state: 'loading', list: draft.groups.list } })
+    void (async () => {
+      try {
+        const response = await this.request(`${ROUTE}/groups`, { cache: 'no-store', credentials: 'same-origin' })
+        const body = await response.json() as { groups?: MeetingGroup[]; error?: string }
+        if (!response.ok || body.groups === undefined) throw new Error(body.error ?? String(response.status))
+        const list = body.groups
+        this.live.update((draft) => { draft.groups = { state: 'ready', list } })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.live.update((draft) => { draft.groups = { state: 'failed', list: [], error: message } })
       }
     })()
   }
@@ -212,12 +250,14 @@ export class MeetingRemindersCardController {
    */
   inject(): MeetingRemindersCardFace {
     this.refreshStatus()
+    this.refreshGroups()
     const actions = this.form.actions()
     return {
       hooks: { meetingRemindersCard: this.store, meetingRemindersLive: this.live },
       ...actions,
       save: () => { actions.save(); setTimeout(() => { this.refreshStatus() }, 1500) },
       refreshStatus: () => { this.refreshStatus() },
+      refreshGroups: () => { this.refreshGroups() },
       preview: (ruleId) => { this.preview(ruleId) },
       sendNow: (ruleId, force) => this.sendNow(ruleId, force),
     }

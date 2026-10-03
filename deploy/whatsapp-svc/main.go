@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -193,6 +194,7 @@ func main() {
 	route("/messages", (*service).handleMessages)
 	route("/chats", (*service).handleChats)
 	route("/contacts", (*service).handleContacts)
+	route("/groups", (*service).handleGroups)
 	route("/resolve", (*service).handleResolve)
 	mux.HandleFunc("/sessions", h.auth(token, h.handleSessions))
 
@@ -762,6 +764,28 @@ func (s *service) handleContacts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"contacts": out})
+}
+
+// handleGroups lists the groups the linked account belongs to, by name, so a
+// settings page can offer them in a dropdown and store the JID.
+func (s *service) handleGroups(w http.ResponseWriter, r *http.Request) {
+	if !s.isLoggedIn() {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "not linked; scan the QR first", "groups": []any{}})
+		return
+	}
+	groups, err := s.client.GetJoinedGroups(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		return
+	}
+	out := make([]map[string]any, 0, len(groups))
+	for _, group := range groups {
+		out = append(out, map[string]any{"jid": group.JID.String(), "name": group.GroupName.Name})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i]["name"].(string)) < strings.ToLower(out[j]["name"].(string))
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"groups": out})
 }
 
 func (s *service) handleResolve(w http.ResponseWriter, r *http.Request) {

@@ -17,7 +17,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { MAX_ATTEMPTS, MeetingReminders } from './reminders.ts'
 import { LATE_WINDOW_MINUTES, WEEKDAYS, type Rule } from './schedule.ts'
-import { whatsAppSender } from './sender.ts'
+import { whatsAppGroups, whatsAppSender } from './sender.ts'
 import { ReminderStore } from './store.ts'
 
 export { MAX_ATTEMPTS, MeetingReminders } from './reminders.ts'
@@ -27,8 +27,8 @@ export {
   ordinal, parseClock, planReminders, reminderKey, renderTemplate, ruleProblems, weekdayName, WEEKDAYS, whenText,
 } from './schedule.ts'
 export type { LocalTime, MessageValues, Occurrence, Override, PlannedReminder, Reminder, Rule, Weekday } from './schedule.ts'
-export { whatsAppSender } from './sender.ts'
-export type { WhatsAppRoute } from './sender.ts'
+export { whatsAppGroups, whatsAppSender } from './sender.ts'
+export type { WhatsAppGroup, WhatsAppRoute } from './sender.ts'
 export { emptyState, HISTORY_LIMIT, prune, remember, ReminderStore } from './store.ts'
 export type { Done, ReminderState, SendRecord } from './store.ts'
 
@@ -140,6 +140,7 @@ export function apply(ctx: Context, config: Config): void {
   const dataDir = config.dataDir !== '' ? config.dataDir : join(process.env['DSH_HOME'] ?? join(homedir(), '.dsh'), 'meeting-reminders')
   const prefix = config.path.replace(/\/+$/u, '')
   const send = whatsAppSender({ url: config.whatsappUrl, token: config.whatsappToken })
+  const groups = whatsAppGroups({ url: config.whatsappUrl, token: config.whatsappToken })
   const log = (line: string): void => { process.stderr.write(`meeting-reminders: ${line}\n`) }
   const reminders = new MeetingReminders({
     store: new ReminderStore(join(dataDir, 'state.json')),
@@ -162,6 +163,18 @@ export function apply(ctx: Context, config: Config): void {
       json(res, 200, await reminders.status())
     },
   }), `meeting-reminders: ${prefix}/status`)
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: `${prefix}/groups`,
+    handler: async (_req: IncomingMessage, res: ServerResponse) => {
+      try {
+        json(res, 200, { groups: await groups() })
+      } catch (error) {
+        json(res, 502, { error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+  }), `meeting-reminders: ${prefix}/groups`)
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',

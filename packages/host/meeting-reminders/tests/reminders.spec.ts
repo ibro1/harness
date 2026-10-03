@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   Config, DEFAULT_TEMPLATE, englishDate, hijriDate, MeetingReminders, nthWeekday, occurrences, ordinal, planReminders, ReminderStore,
-  renderTemplate, ruleProblems, whatsAppSender, whenText, type Rule,
+  renderTemplate, ruleProblems, whatsAppGroups, whatsAppSender, whenText, type Rule,
 } from '../src/index.ts'
 
 const dirs: string[] = []
@@ -257,5 +257,21 @@ describe('sending', () => {
     expect(await fail({ error: 'bad token' })('x@g.us', 'hi')).toBe('failed: bad token')
     expect(await fail({ result: { queued: true } })('x@g.us', 'hi')).toMatch(/^failed: unexpected answer/u)
     expect(await whatsAppSender({ url: '', token: '' })('x@g.us', 'hi')).toMatch(/^not sent/u)
+  })
+
+  it('lists groups by name, and falls back to group ids from recent chats when the tool is missing', async () => {
+    const route = { url: 'u', token: 't' }
+    const answer = (byTool: Record<string, unknown>) => whatsAppGroups(route, (_url, init) => {
+      const { name } = JSON.parse(init?.body as string) as { name: string }
+      return Promise.resolve(new Response(JSON.stringify(byTool[name])))
+    })
+    const named = answer({ whatsapp_groups: { result: { groups: [{ jid: 'b@g.us', name: 'Exco' }, { jid: 'a@g.us', name: 'AMYA General' }] } } })
+    expect(await named()).toEqual([{ jid: 'a@g.us', name: 'AMYA General' }, { jid: 'b@g.us', name: 'Exco' }])
+    const old = answer({
+      whatsapp_groups: { result: { error: 'no such tool: whatsapp_groups' } },
+      whatsapp_chats: { result: { messages: [{ chat: 'a@g.us' }, { chat: '234@s.whatsapp.net' }, { chat: 'a@g.us' }] } },
+    })
+    expect(await old()).toEqual([{ jid: 'a@g.us', name: '' }])
+    await expect(answer({ whatsapp_groups: { result: { error: 'not linked; scan the QR first' } } })()).rejects.toThrow('not linked')
   })
 })

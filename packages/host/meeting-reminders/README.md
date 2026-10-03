@@ -21,50 +21,25 @@ Posts reminders of monthly meetings ("first Saturday", "last Friday") to WhatsAp
 <a id="use-this-package"></a>
 ## Use this package
 
-The web-app bundle inserts it when `DSH_DEPLOY=1` (`DSH_MEETING_REMINDERS=0` leaves it out), sending through the WhatsApp plugin's command route (`WA_COMMAND_URL`, `WA_AGENT_TOKEN`). It sends nothing until rules are saved at **Plugins → Meeting reminders**, where the rules are one JSON array, with the time zone (default `Africa/Lagos`), the Hijri day adjustment, the alert recipient and the default message.
+The web-app bundle inserts it when `DSH_DEPLOY=1` (`DSH_MEETING_REMINDERS=0` leaves it out), sending through the WhatsApp plugin's command route (`WA_COMMAND_URL`, `WA_AGENT_TOKEN`). It sends nothing until a meeting is added and saved at **Plugins → Meeting reminders**. Each meeting there is a form: its name, the WhatsApp group (a dropdown of the groups the linked account belongs to; a field for the group's JID when they cannot be listed), "Every [First…Fifth, Last] [Sunday…Saturday] of the month", the time and venue as the message prints them, reminder rows ("On the day", "The day before" or "N days before", at a time), an optional message with insertable placeholders, a one-month skip or change, and an on/off switch. A meeting with a problem (no group, a reminder without a time, a change without its month) shows it in words and blocks the save. Below the meetings are the time zone (default `Africa/Lagos`), the Hijri day adjustment, the alert recipient and the default message.
 
-A rule:
+The form stores the plugin's `rules` array; each meeting is one rule:
 
 | Field | Meaning |
 |---|---|
-| `id` | short id you choose; sent reminders are recorded under it, so changing it lets a reminder go again |
+| `id` | made from the name when the meeting is added and never changed after it is saved: sent reminders are recorded under it |
 | `label` | the meeting's name in the message |
-| `chat` | the group's JID, ending `@g.us`; each message `whatsapp_read` returns carries its chat's JID |
+| `chat` | the group's JID, ending `@g.us` |
 | `meeting` | `{ "nth": 1–5 or "last", "weekday": "sun"…"sat" }`; the first Saturday is the Saturday among days 1–7 |
 | `time`, `venue` | printed as written |
 | `reminders` | `[{ "daysBefore": 2, "at": "09:00" }, …]`, local times |
-| `template` | optional; empty uses the page's default message |
-| `enabled` | `false` keeps the rule without sending |
+| `template` | optional; absent uses the default message |
+| `enabled` | `false` keeps the meeting without sending |
 | `override` | optional, one month: `{ "month": "2026-11", "skip": true }`, or a changed `time` or `venue` for that month's meeting |
 
 Template placeholders: `{hijriDate}` (`22 Rabi' al-Thani 1448 AH`), `{date}` (`3rd October 2026`), `{weekday}`, `{when}` (`today`, `tomorrow`, `on Saturday`, counted from the day it is sent), `{time}`, `{venue}`, `{label}`. The default message prints the date line as `📅 *Date:* {weekday}, {hijriDate} ({date})`.
 
-The AMYA rules, with the group JIDs filled in:
-
-```json
-[
-  {
-    "id": "amya-exco",
-    "label": "AMYA Exco meeting",
-    "chat": "<exco group JID>@g.us",
-    "meeting": { "nth": 1, "weekday": "sat" },
-    "time": "8:15 PM (shortly after Isha prayer)",
-    "venue": "WhatsApp group call or Aso'C Central Masjid",
-    "reminders": [{ "daysBefore": 2, "at": "09:00" }, { "daysBefore": 0, "at": "09:00" }],
-    "enabled": true
-  },
-  {
-    "id": "amya-general",
-    "label": "AMYA general meeting",
-    "chat": "<general group JID>@g.us",
-    "meeting": { "nth": 1, "weekday": "sun" },
-    "time": "11:00 AM",
-    "venue": "Aso'C Central Masjid",
-    "reminders": [{ "daysBefore": 1, "at": "18:00" }, { "daysBefore": 0, "at": "08:00" }],
-    "enabled": true
-  }
-]
-```
+For AMYA: "AMYA Exco meeting", the Exco group, every First Saturday, "8:15 PM (shortly after Isha prayer)", "WhatsApp group call or Aso'C Central Masjid", reminders 2 days before at 09:00 and on the day at 09:00; and "AMYA general meeting", the general group, every First Sunday, "11:00 AM", "Aso'C Central Masjid", reminders the day before at 18:00 and on the day at 08:00.
 
 Set **Hijri day adjustment** to `1` or `-1` when the local moon sighting puts the month a day off Umm al-Qura; **Preview** shows the result before anything is sent.
 
@@ -82,7 +57,7 @@ Set **Hijri day adjustment** to `1` or `-1` when the local moon sighting puts th
 
 `sender.ts` posts `{ name: 'whatsapp_send', args: { to, text, send_now: true } }` to the command route with the bearer token. The route wraps the tool's answer in `{ result }`, so success is `result.sent === true` and a refusal is `result.error`; anything else counts as a failure. Every send and failure is logged to stderr with the `meeting-reminders:` prefix.
 
-Signed-in routes under `path` (default `/meeting-reminders`): `GET status` (each rule's problems, next meeting with Hijri and English dates, reminder times and states, and recent sends), `POST preview` `{ ruleId }` (the message as it would be sent today), `POST send-now` `{ ruleId, daysBefore?, force? }`. A manual send is recorded under `daysBefore`'s key (default: the next reminder not yet sent), so the scheduled one with that key does not repeat; a key already sent answers 409 unless `force`.
+Signed-in routes under `path` (default `/meeting-reminders`): `GET groups` (the linked account's WhatsApp groups as `{ jid, name }`, from the WhatsApp plugin's `whatsapp_groups` tool; a WhatsApp plugin without that tool answers from `whatsapp_chats`, which gives group JIDs without names), `GET status` (each rule's problems, next meeting with Hijri and English dates, reminder times and states, and recent sends), `POST preview` `{ ruleId }` (the message as it would be sent today), `POST send-now` `{ ruleId, daysBefore?, force? }`. A manual send is recorded under `daysBefore`'s key (default: the next reminder not yet sent), so the scheduled one with that key does not repeat; a key already sent answers 409 unless `force`.
 
 </details>
 
