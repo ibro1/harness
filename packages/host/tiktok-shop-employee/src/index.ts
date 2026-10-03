@@ -225,7 +225,13 @@ export function apply(ctx: Context, config: Config): void {
   const mediaDir = join(dataDir, 'media')
   const prefix = config.path.replace(/\/+$/u, '')
   const publicBase = config.publicBaseUrl.replace(/\/+$/u, '')
-  const notify = whatsAppNotifier({ url: config.whatsappUrl, token: config.whatsappToken, to: () => config.notifyTo.get() })
+  const send = whatsAppNotifier({ url: config.whatsappUrl, token: config.whatsappToken, to: () => config.notifyTo.get() })
+  // The notifier never throws; say in the log when a message did not go, or a missing alert leaves no trace.
+  const notify = async (text: string): Promise<string> => {
+    const outcome = await send(text)
+    if (!outcome.startsWith('sent')) process.stderr.write(`tiktok-shop-employee: WhatsApp alert ${outcome}: ${text.slice(0, 80)}\n`)
+    return outcome
+  }
   const today = (): string => localTime(new Date(), config.timeZone.get()).date
 
   let linkKey = ''
@@ -310,6 +316,7 @@ export function apply(ctx: Context, config: Config): void {
     const product = state.products.find(p => p.id === video?.productId)
     if (video === undefined || product === undefined) return
     const workDir = join(dataDir, 'work', videoId)
+    process.stderr.write(`tiktok-shop-employee: rendering video ${videoId} for "${product.title.slice(0, 60)}"\n`)
     try {
       await mkdir(workDir, { recursive: true })
       await mkdir(mediaDir, { recursive: true })
@@ -340,6 +347,7 @@ export function apply(ctx: Context, config: Config): void {
         const v = s.videos.find(x => x.id === videoId)
         if (v !== undefined) Object.assign(v, { status: 'ready', file, seconds })
       })
+      process.stderr.write(`tiktok-shop-employee: video ${videoId} is ready (${String(Math.round(seconds))}s)\n`)
       await notify(`TikTok Shop: a new ${String(Math.round(seconds))}s video for "${product.title}" is ready.\n\nWatch, download and get the caption: ${reviewLink(videoId)}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -354,7 +362,10 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
   const startRender = (videoId: string): void => {
-    renders = renders.then(() => renderOne(videoId))
+    // A render that throws past its own handler must not stop the ones queued behind it.
+    renders = renders.then(() => renderOne(videoId)).catch((error: unknown) => {
+      process.stderr.write(`tiktok-shop-employee: render queue error for ${videoId}: ${error instanceof Error ? error.message : String(error)}\n`)
+    })
   }
   // A restart while rendering leaves videos marked rendering; finish them.
   void keyReady.then(async () => {
