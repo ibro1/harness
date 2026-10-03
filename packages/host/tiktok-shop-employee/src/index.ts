@@ -25,7 +25,7 @@ import { reviewPage } from './pages.ts'
 import { renderVideo } from './render.ts'
 import { DEFAULT_BLOCKED_WORDS } from './rules.ts'
 import { socialCrawl } from './socialcrawl.ts'
-import { directShop, withFallback } from './direct.ts'
+import { directShop, PRODUCT_URL, SEARCH_URL, withFallback } from './direct.ts'
 import { TikTokBrowser, type PostRun } from './tiktok-browser.ts'
 import { resolveBrowserPath } from '@deepseek-ai/dsh-host-capture'
 import { ShopStore } from './store.ts'
@@ -95,7 +95,7 @@ export interface Config {
   directProxy: Volatile<string>
   /** The proxy from the environment (`TTS_PROXY_URL`, else `HTTPS_PROXY`). */
   envProxy: string
-  /** Direct search page; `{region}` and `{query}` are filled in. */
+  /** Direct search page; `{region}`, `{query}` and `{slug}` are filled in. */
   directSearchUrl: Volatile<string>
   /** Direct product page; `{region}` and `{id}` are filled in. */
   directProductUrl: Volatile<string>
@@ -159,8 +159,8 @@ export const Config = z.object({
   envSocialCrawlApiKey: z.string().default(''),
   directProxy: z.string().role('secret').default('').volatile(),
   envProxy: z.string().default(''),
-  directSearchUrl: z.string().default('https://shop.tiktok.com/{region}/search?q={query}').volatile(),
-  directProductUrl: z.string().default('https://shop.tiktok.com/{region}/pdp/{id}').volatile(),
+  directSearchUrl: z.string().default(SEARCH_URL).volatile(),
+  directProductUrl: z.string().default(PRODUCT_URL).volatile(),
   browserPath: z.string().default(''),
   tiktokUploadUrl: z.string().default('https://www.tiktok.com/tiktokstudio/upload?from=webapp').volatile(),
   voiceProvider: z.string().default('auto').volatile(),

@@ -26,7 +26,7 @@ export interface DirectSettings {
   proxy: string
   browserPath: string
   region: string
-  /** Search page address; `{region}` and `{query}` are filled in. */
+  /** Search page address; `{region}`, `{query}` and `{slug}` ("lip-balm") are filled in. */
   searchUrl: string
   /** Product page address; `{region}` and `{id}` are filled in. */
   productUrl: string
@@ -74,6 +74,43 @@ export function proxyOption(url: string): { server: string; username?: string; p
   }
 }
 
+/** The search address TikTok serves: the market follows the visitor's address, here the proxy's. */
+export const SEARCH_URL = 'https://www.tiktok.com/shop/s/{slug}'
+/** The product address; TikTok redirects it to the visitor's market. */
+export const PRODUCT_URL = 'https://www.tiktok.com/shop/pdp/{id}'
+
+/**
+ * The address to use, replacing the first release's defaults, which TikTok answers with 404.
+ * @param saved - the saved setting.
+ * @param kind - which address.
+ * @returns the address.
+ */
+export function shopUrl(saved: string, kind: 'search' | 'product'): string {
+  if (saved.trim() === '' || saved.startsWith('https://shop.tiktok.com/{region}/')) return kind === 'search' ? SEARCH_URL : PRODUCT_URL
+  return saved.trim()
+}
+
+/** A search phrase as TikTok's address writes it: "Lip Balm" → "lip-balm". */
+export function slug(query: string): string {
+  return query.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/gu, '')
+}
+
+/**
+ * Open a page, once more when the proxy drops the connection: a rotating or busy proxy refuses a tunnel now and then.
+ * @param page - the page.
+ * @param url - where to go.
+ * @param timeout - per attempt.
+ */
+export async function gotoThroughProxy(page: { goto: (url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }) => Promise<unknown>; waitForTimeout: (ms: number) => Promise<void> }, url: string, timeout: number): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
+  } catch (error) {
+    if (!/ERR_TUNNEL_CONNECTION_FAILED|ERR_PROXY|ERR_CONNECTION_(?:RESET|CLOSED)|ERR_EMPTY_RESPONSE/u.test(String(error))) throw error
+    await page.waitForTimeout(3000)
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
+  }
+}
+
 function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/gu, (_, key: string) => encodeURIComponent(values[key] ?? ''))
 }
@@ -109,7 +146,7 @@ export function directShop(settings: () => DirectSettings): SocialCrawl {
         if (!TIKTOK_HOST.test(host) || !(response.headers()['content-type'] ?? '').includes('json')) return
         pending.push(response.json().then((body: unknown) => { bodies.push(body) }, () => undefined))
       })
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: current.timeoutMs })
+      await gotoThroughProxy(page, url, current.timeoutMs)
       // Product lists load after the first paint; scroll once to trigger lazy loading, then let requests settle.
       await page.waitForTimeout(4000)
       await page.mouse.wheel(0, 2400)
@@ -135,14 +172,14 @@ export function directShop(settings: () => DirectSettings): SocialCrawl {
   return {
     async search(query, signal) {
       const current = settings()
-      const products = await read(fill(current.searchUrl, { region: current.region.toLowerCase(), query }), signal)
+      const products = await read(fill(shopUrl(current.searchUrl, 'search'), { region: current.region.toLowerCase(), query, slug: slug(query) }), signal)
       if (products.length === 0) throw new DirectUnavailable('the search page showed no products the reader could recognise')
       return products
     },
     async product(ref, signal) {
       const current = settings()
       const id = /^\d+$/u.test(ref) ? ref : /(\d{12,})/u.exec(ref)?.[1] ?? ''
-      const url = /^https?:\/\//u.test(ref) ? ref : fill(current.productUrl, { region: current.region.toLowerCase(), id })
+      const url = /^https?:\/\//u.test(ref) ? ref : fill(shopUrl(current.productUrl, 'product'), { region: current.region.toLowerCase(), id })
       const products = await read(url, signal)
       const exact = products.find(p => p.id === id) ?? products[0]
       if (exact === undefined) throw new DirectUnavailable('the product page showed no product the reader could recognise')

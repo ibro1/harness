@@ -4,10 +4,11 @@
  * details, one credit per request. TikTok's own pages answer automated
  * readers with a security check, so a data service is the reliable route.
  *
- * SocialCrawl documents its fields by meaning, not by exact name, so the
- * parser reads each field under the names such services use (`sold_count`,
- * `soldCount`, `sold`) and keeps a product only when it has an id, a title and
- * a price. The raw answer of the last call is kept for diagnosis.
+ * SocialCrawl answers `data.items[].product` in its canonical product shape
+ * (`price.current`, `rating.average`/`count`, `image_urls`,
+ * `ext.sold_count`; see its openapi.json). The parser also reads the names
+ * TikTok's own page data uses, since the direct reader shares it, and keeps a
+ * product only when it has an id, a title and a price.
  */
 
 /** A product as the employee keeps it. */
@@ -59,7 +60,7 @@ function number(value: unknown): number | undefined {
   }
   if (typeof value !== 'object' || value === null) return undefined
   const nested = record(value)
-  const inner = nested['amount'] ?? nested['value'] ?? nested['sale_price'] ?? nested['min']
+  const inner = nested['current'] ?? nested['average'] ?? nested['amount'] ?? nested['value'] ?? nested['sale_price'] ?? nested['min']
   return typeof inner === 'object' ? undefined : number(inner)
 }
 
@@ -88,15 +89,17 @@ function images(row: Record<string, unknown>): string[] {
  * @returns the product, or undefined when it lacks an id, title or price.
  */
 export function parseProduct(raw: unknown, fallbackCurrency = 'GBP'): ShopProduct | undefined {
-  const row = record(raw)
-  const id = text(pick(row, 'id', 'product_id', 'productId', 'item_id'))
-  const title = text(pick(row, 'title', 'name', 'product_name', 'productName'))
-  const price = number(pick(row, 'price', 'sale_price', 'salePrice', 'price.amount', 'min_price'))
+  const outer = record(raw)
+  // SocialCrawl wraps each product: `{ product: { id, title, price: { current, currency }, ... } }`.
+  const row = typeof outer['product'] === 'object' && outer['product'] !== null && !Array.isArray(outer['product']) && outer['id'] === undefined ? record(outer['product']) : outer
+  const id = text(pick(row, 'product_id', 'productId', 'id', 'item_id'))
+  const title = text(pick(row, 'title', 'name', 'product_name', 'productName', 'product_base.title'))
+  const price = number(pick(row, 'price.current', 'price', 'sale_price', 'salePrice', 'price.amount', 'min_price', 'product_price_info.sale_price_decimal'))
   if (id === undefined || title === undefined || price === undefined) return undefined
-  const sold = number(pick(row, 'sold_count', 'soldCount', 'sold', 'sales', 'sold_count_text'))
-  const rating = number(pick(row, 'rating', 'rating_average', 'ratingAverage', 'star'))
-  const reviews = number(pick(row, 'review_count', 'reviewCount', 'reviews'))
-  const seller = text(pick(row, 'seller.name', 'seller', 'shop_name', 'shop.name', 'shopName'))
+  const sold = number(pick(row, 'ext.sold_count', 'sold_count', 'soldCount', 'sold', 'sales', 'sold_count_text', 'sold_info.sold_count'))
+  const rating = number(pick(row, 'rating.average', 'rating', 'rating_average', 'ratingAverage', 'star', 'rate_info.score'))
+  const reviews = number(pick(row, 'rating.count', 'reviews_count', 'review_count', 'reviewCount', 'reviews', 'rate_info.review_count'))
+  const seller = text(pick(row, 'seller.name', 'seller', 'brand', 'shop_name', 'shop.name', 'shopName', 'seller_info.shop_name'))
   const url = text(pick(row, 'url', 'product_url', 'productUrl', 'link', 'deep_link'))
   const category = pick(row, 'category', 'category_path', 'categories', 'breadcrumb')
   const description = text(pick(row, 'description', 'desc'))

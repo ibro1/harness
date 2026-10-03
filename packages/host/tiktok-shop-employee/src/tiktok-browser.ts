@@ -21,7 +21,7 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { chromium } from 'playwright-core'
 import type { BrowserContext, Page } from 'playwright-core'
-import { proxyOption } from './direct.ts'
+import { gotoThroughProxy, proxyOption } from './direct.ts'
 
 /** What the browser needs, read on every use. */
 export interface TikTokBrowserSettings {
@@ -130,7 +130,7 @@ export class TikTokBrowser {
           return this.current()
         }
         const page = context.pages()[0] ?? await context.newPage()
-        await page.goto('https://www.tiktok.com/login/qrcode', { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        await gotoThroughProxy(page, 'https://www.tiktok.com/login/qrcode', 60_000)
         await page.waitForTimeout(2000)
         await dismissCookies(page)
         this.login = { context, until: Date.now() + LOGIN_WINDOW_MS }
@@ -237,7 +237,7 @@ export class TikTokBrowser {
           this.account = { state: 'signed-out' }
           return { mode, steps, posted: false, error: 'not signed in' }
         }
-        await page.goto(this.settings().uploadUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        await gotoThroughProxy(page, this.settings().uploadUrl, 60_000)
         await page.waitForTimeout(5000)
         await dismissCookies(page)
         const title = await page.title()

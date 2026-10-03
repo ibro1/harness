@@ -169,7 +169,15 @@ export function buildShopTools(deps: ShopDeps): ToolDefinition[] {
       run: async (args, exec) => {
         const id = String(args['product_id'])
         const before = findProduct(await store.read(), id)
-        const details = (await deps.data.product(before.url ?? id, exec.signal)).value
+        let details: ShopProduct | undefined
+        let unavailable: string | undefined
+        try {
+          details = (await deps.data.product(before.url ?? id, exec.signal)).value
+        } catch (error) {
+          // SocialCrawl's product endpoint does not serve GB at the moment (503); the search result still holds the facts.
+          if (exec.signal.aborted) throw error
+          unavailable = error instanceof Error ? error.message : String(error)
+        }
         const product = await store.update((s) => {
           const p = findProduct(s, id)
           if (details !== undefined) {
@@ -180,7 +188,9 @@ export function buildShopTools(deps: ShopDeps): ToolDefinition[] {
         return [
           `${product.title}: ${priceText(product)}${product.seller === undefined ? '' : `, sold by ${product.seller}`}${product.category === undefined ? '' : `, in ${product.category}`}.`,
           `Images: ${String(product.images.length)}.`,
-          details === undefined ? 'The data service had no details for this product; work from the search result only, and make no claim it does not support.' : `Listing: ${product.description ?? '(no description)'}`,
+          details === undefined
+            ? `The full listing could not be read${unavailable === undefined ? '' : ` (${unavailable})`}. Work from the search result above only: its title, price, rating and images. Make no claim it does not support.`
+            : `Listing: ${product.description ?? '(no description)'}`,
         ].join('\n')
       },
     }),

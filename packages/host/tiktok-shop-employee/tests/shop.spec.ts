@@ -14,6 +14,7 @@ import {
 } from '../src/index.ts'
 import type { ShopProduct, SocialCrawl } from '../src/index.ts'
 import { DirectUnavailable, productsIn, proxyOption, withFallback } from '../src/index.ts'
+import { shopUrl, slug } from '../src/direct.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 const dirs: string[] = []
@@ -22,14 +23,14 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 const BALM: ShopProduct = { id: '1729', title: 'Pink Collagen Lip Balm', price: 12.99, currency: 'GBP', sold: 5400, rating: 4.6, images: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] }
 const WINE: ShopProduct = { id: '1730', title: 'Red Wine Glass Set', price: 19.5, currency: 'GBP', images: ['https://img.test/c.jpg'] }
 
-function setup(overrides: { videosPerDay?: number } = {}) {
+function setup(overrides: { videosPerDay?: number; productFails?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'tts-'))
   dirs.push(dir)
   const rendered: string[] = []
   const notes: string[] = []
   const data = {
     search: () => Promise.resolve({ value: [BALM, WINE], source: 'SocialCrawl' as const }),
-    product: () => Promise.resolve({
+    product: () => overrides.productFails !== undefined ? Promise.reject(new Error(overrides.productFails)) : Promise.resolve({
       value: { ...BALM, description: 'Tinted balm with collagen. Adds shine.', images: [...BALM.images, 'https://img.test/d.jpg'] },
       source: 'SocialCrawl' as const,
     }),
@@ -98,6 +99,29 @@ describe('the data service', () => {
     expect(parseProduct({ title: 'No id' })).toBeUndefined()
   })
 
+  it('reads SocialCrawl\'s canonical product wrapper, as its openapi.json documents it', async () => {
+    const body = {
+      success: true, platform: 'tiktokshop',
+      data: { items: [{ product: {
+        id: '1729587769570529799', url: 'https://www.tiktok.com/shop/pdp/x/1729587769570529799', title: 'Tinted Lip Oil',
+        seller: 'Glow Ltd', brand: null, price: { current: 7.99, original: 12, currency: 'GBP' }, rating: { average: 4.7, count: 812 },
+        image_urls: ['https://img.test/1.jpg', 'https://img.test/2.jpg'], reviews_count: null, ext: { sold_count: 15400 },
+      } }], total: null },
+    }
+    const fetcher = (): Promise<Response> => Promise.resolve(new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }))
+    const [found] = await socialCrawl(() => 'sc_test', () => 'GB', fetcher).search('lip oil', exec.signal)
+    expect(found).toMatchObject({
+      id: '1729587769570529799', title: 'Tinted Lip Oil', price: 7.99, currency: 'GBP', rating: 4.7, reviews: 812, sold: 15400,
+      seller: 'Glow Ltd', images: ['https://img.test/1.jpg', 'https://img.test/2.jpg'],
+    })
+  })
+
+  it('searches TikTok\'s own address, replacing the first release\'s 404ing default', () => {
+    expect(slug('Car Phone Holder!')).toBe('car-phone-holder')
+    expect(shopUrl('https://shop.tiktok.com/{region}/search?q={query}', 'search')).toBe('https://www.tiktok.com/shop/s/{slug}')
+    expect(shopUrl('https://example.test/{query}', 'search')).toBe('https://example.test/{query}')
+  })
+
   it('asks for the UK market with the key, and says how to get a key when none is saved', async () => {
     const seen: string[] = []
     const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -114,6 +138,14 @@ describe('the data service', () => {
 })
 
 describe('tools', () => {
+  it('works from the search result when the full listing cannot be read', async () => {
+    const { run } = setup({ productFails: 'SocialCrawl answered HTTP 503: GB is temporarily unavailable' })
+    await run('tts_search', { query: 'lip balm' })
+    const text = await run('tts_product', { product_id: '1729' })
+    expect(text).toContain('Pink Collagen Lip Balm')
+    expect(text).toContain('could not be read (SocialCrawl answered HTTP 503')
+  })
+
   it('saves allowed products only and lists best sellers', async () => {
     const { run, store } = setup()
     const text = await run('tts_search', { query: 'lip balm' })
