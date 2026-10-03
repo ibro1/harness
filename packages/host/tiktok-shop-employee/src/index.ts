@@ -65,6 +65,8 @@ export const name = 'tiktok-shop-employee'
 export const inject = ['agents', 'webServer', 'agentDefaultModel', 'agentPresets', 'permissionPresets', 'sessionTitle', 'workspaceRegistry']
 
 /** Session ids of the employee's shifts start with this. */
+/** How long after one "Run a shift now" another is refused. */
+const RUN_NOW_GAP_MS = 15 * 60_000
 const SESSION_PREFIX = 'tts-'
 
 /** Composition and live settings; the `Volatile` fields are edited on the Plugins page. */
@@ -490,6 +492,7 @@ export function apply(ctx: Context, config: Config): void {
       })
     },
   }), `tiktok-shop-employee: ${prefix}/status`)
+  let lastRunRequest = 0
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: `${prefix}/action`,
@@ -505,6 +508,9 @@ export function apply(ctx: Context, config: Config): void {
       if (body.action === 'pause') await store.update((s) => { s.paused = { reason: 'paused by the owner', at: new Date().toISOString() } })
       else if (body.action === 'resume') await store.update((s) => { s.paused = null })
       else if (body.action === 'run-now') {
+        // A second press while the first shift works would run every search and video twice.
+        if (Date.now() - lastRunRequest < RUN_NOW_GAP_MS) { json(res, 409, { error: 'a shift started a few minutes ago; it is still working' }); return }
+        lastRunRequest = Date.now()
         void start(`TikTok Shop employee shift ${today()} (on request)`)
       } else { json(res, 400, { error: 'unknown action' }); return }
       json(res, 200, { ok: true })

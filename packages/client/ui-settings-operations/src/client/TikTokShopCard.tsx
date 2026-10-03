@@ -42,7 +42,7 @@ function StatusBlock(props: {
       {status.dataKey || status.proxy === true ? null : <p className={css.pickerUnknown}>{t('ttsNoDataKey')}</p>}
       <p className={css.pickerHint}>{status.proxy === true ? t('ttsSourceDirect') : t('ttsSourceCrawl')}</p>
       <div className={css.pickerCurrent}>
-        <Button variant="outline" size="sm" disabled={status.paused !== null || !status.dataKey} onClick={props.onRun}>{t('ttsRunNow')}</Button>
+        <Button variant="outline" size="sm" disabled={live.started || status.paused !== null || !status.dataKey} onClick={props.onRun}>{t('ttsRunNow')}</Button>
         {status.paused === null
           ? <Button variant="ghost" size="sm" onClick={props.onPause}>{t('ttsPause')}</Button>
           : <Button variant="ghost" size="sm" onClick={props.onResume}>{t('ttsResume')}</Button>}
