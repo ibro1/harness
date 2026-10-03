@@ -323,6 +323,7 @@
       "@deepseek-ai/dsh-host-psd-tools": ["./packages/host/psd-tools/src"],
       "@deepseek-ai/dsh-host-tiktok-shop-employee": ["./packages/host/tiktok-shop-employee/src"],
       "@deepseek-ai/dsh-host-meeting-reminders": ["./packages/host/meeting-reminders/src"],
+      "@deepseek-ai/dsh-host-whatsapp-delegate": ["./packages/host/whatsapp-delegate/src"],
       "@deepseek-ai/dsh-host-plugin-switch": ["./packages/host/plugin-switch/src"],
       "@deepseek-ai/dsh-host-error-reporting": ["./packages/host/error-reporting/src"],
       "@deepseek-ai/dsh-host-dokploy": ["./packages/host/dokploy/src"],

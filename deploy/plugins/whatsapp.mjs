@@ -48,6 +48,12 @@ const ANNOUNCE_CHATS = parseChats(process.env.WA_ANNOUNCE_CHATS ?? '')
 const ANNOUNCE_EVERY_MS = Math.max(0, Number(process.env.WA_ANNOUNCE_COOLDOWN_SECONDS ?? 600)) * 1000
 /** chat jid -> when it was last announced to, for the cooldown above. */
 const announcedAt = new Map()
+// Sessions whose ids start with one of these may not send or approve through
+// the generic tools: the WhatsApp delegate's Sessions (`wad-…`) reply only
+// through the delegate's own tools, which hold commitments for the owner's OK
+// and apply its rate limit. Comma-separated; the CLIs pass DSH_SESSION_ID.
+const SEND_DENY_SESSION_PREFIX = (process.env.WA_SEND_DENY_SESSION_PREFIX ?? 'wad-')
+  .split(',').map(prefix => prefix.trim()).filter(Boolean)
 
 /** @param {string} raw - `Label=jid,Label=jid`. @returns {Map<string,string>} label to jid. */
 function parseChats(raw) {
@@ -120,13 +126,26 @@ async function sendDraft(draft) {
   return { ok: false, status, error: body.error ?? `HTTP ${status}` }
 }
 
-/** Resolve a recipient and send immediately (take-over mode). */
-async function sendNow(to, text) {
+/** Resolve a recipient and send immediately (take-over mode), as a reply to `quote` (a WhatsApp message id) when given. */
+async function sendNow(to, text, quote) {
   const { status, body: resolved } = await svc(`/resolve?query=${encodeURIComponent(to)}`)
   if (status !== 200 || typeof resolved.jid !== 'string') return { error: resolved.error ?? `could not resolve "${to}"` }
-  const { status: s2, body: out } = await svc('/send', { method: 'POST', body: { to: resolved.jid, text } })
-  if (s2 === 200) return { sent: true, to: resolved.name || to, text }
+  const body = { to: resolved.jid, text, ...(typeof quote === 'string' && quote !== '' ? { quote } : {}) }
+  const { status: s2, body: out } = await svc('/send', { method: 'POST', body })
+  if (s2 === 200) return { sent: true, to: resolved.name || to, text, ...(typeof out.id === 'string' ? { waId: out.id } : {}) }
   return { error: out.error ?? `send failed (HTTP ${s2})` }
+}
+
+/** A stored message's media as base64, for the WhatsApp delegate; not in the catalogue, so models never pull bytes. */
+async function media(id) {
+  const resp = await fetch(`${SVC_URL}/media?id=${encodeURIComponent(String(id))}`, { headers: { 'X-WA-Token': SVC_TOKEN } })
+  if (!resp.ok) {
+    let error = `HTTP ${resp.status}`
+    try { error = (await resp.json()).error ?? error } catch { /* non-JSON */ }
+    return { error }
+  }
+  const data = Buffer.from(await resp.arrayBuffer())
+  return { mime: resp.headers.get('content-type') ?? 'application/octet-stream', size: data.length, base64: data.toString('base64') }
 }
 
 /**
@@ -172,21 +191,31 @@ function passthrough(sidecarPath) {
 }
 
 /** Execute one agent tool. Reads proxy the sidecar; send QUEUES for approval. */
-async function runTool(name, args) {
+async function runTool(name, args, session = '') {
+  if ((name === 'whatsapp_send' || name === 'whatsapp_approve') && SEND_DENY_SESSION_PREFIX.some(prefix => session.startsWith(prefix))) {
+    return { error: 'This session sends WhatsApp messages only with delegate_reply.' }
+  }
   switch (name) {
     case 'whatsapp_status': return (await svc('/status')).body
     case 'whatsapp_contacts': return (await svc(`/contacts${args.query ? `?query=${encodeURIComponent(String(args.query))}` : ''}`)).body
     case 'whatsapp_chats': return (await svc(`/chats${args.limit ? `?limit=${encodeURIComponent(String(args.limit))}` : ''}`)).body
     case 'whatsapp_groups': return (await svc('/groups')).body
     case 'whatsapp_read': {
-      const params = [args.chat ? `chat=${encodeURIComponent(String(args.chat))}` : '', args.limit ? `limit=${encodeURIComponent(String(args.limit))}` : ''].filter(Boolean).join('&')
+      // `after` (a row id) and `include_sent` are for the WhatsApp delegate and are not in the catalogue.
+      const params = [
+        args.chat ? `chat=${encodeURIComponent(String(args.chat))}` : '',
+        args.limit ? `limit=${encodeURIComponent(String(args.limit))}` : '',
+        Number.isInteger(args.after) && args.after >= 0 ? `after=${String(args.after)}` : '',
+        args.include_sent === true ? 'include_sent=1' : '',
+      ].filter(Boolean).join('&')
       return (await svc(`/messages${params ? `?${params}` : ''}`)).body
     }
+    case 'whatsapp_media': return media(args.id)
     case 'whatsapp_resolve': return (await svc(`/resolve?query=${encodeURIComponent(String(args.query ?? ''))}`)).body
     case 'whatsapp_send': {
       if (typeof args.to !== 'string' || typeof args.text !== 'string' || args.text === '') return { error: 'need {to, text}' }
       // Take-over mode: the user authorized automatic sending, so send now.
-      if (args.send_now === true) return sendNow(args.to, args.text)
+      if (args.send_now === true) return sendNow(args.to, args.text, args.quote)
       // Default: queue for the user's approval (chat "yes" → whatsapp_approve, or the card).
       const { status, body: resolved } = await svc(`/resolve?query=${encodeURIComponent(args.to)}`)
       if (status !== 200 || typeof resolved.jid !== 'string') return { error: resolved.error ?? `could not resolve "${args.to}"` }
@@ -414,7 +443,7 @@ export function apply(ctx) {
       const body = await readJson(req)
       if (!body || typeof body.name !== 'string') { json(res, 400, { error: 'need { name, args }' }); return }
       try {
-        const result = await runTool(body.name, body.args ?? {})
+        const result = await runTool(body.name, body.args ?? {}, typeof body.session === 'string' ? body.session : '')
         json(res, 200, { result })
       } catch (error) {
         json(res, 200, { error: String(error) })

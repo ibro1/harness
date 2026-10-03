@@ -24,7 +24,7 @@ function warn(message) {
 /**
  * Call the harness command route.
  * @param {string} method - GET for the catalogue, POST for a tool call.
- * @param {object} [body] - the { name, args } call, for POST.
+ * @param {object} [body] - the { name, args, session } call, for POST.
  * @returns {Promise<object>} the route's JSON answer.
  */
 async function route(method, body) {
@@ -77,7 +77,9 @@ async function handle(request) {
       if (!known.some(tool => tool.name === name)) {
         return { content: [{ type: 'text', text: `No such tool: ${String(name)}` }], isError: true }
       }
-      const answer = await route('POST', { name, args: args ?? {} })
+      // The session lets the route refuse sending to Sessions that must reply another way (the WhatsApp delegate's).
+      const session = process.env.DSH_SESSION_ID ?? ''
+      const answer = await route('POST', { name, args: args ?? {}, ...(session === '' ? {} : { session }) })
       if (answer.error !== undefined) {
         // A missing server or an unset key is an answer the model reads, not a
         // transport failure.

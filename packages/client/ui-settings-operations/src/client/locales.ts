@@ -6,6 +6,7 @@ import { meetingRemindersEn, meetingRemindersZh, type MeetingRemindersLocaleKey 
 import { seoEn, seoZh, type SeoLocaleKey } from './locales/seo.ts'
 import { switchesEn, switchesZh, type SwitchLocaleKey } from './locales/switches.ts'
 import { ttsEn, ttsZh, type TtsLocaleKey } from './locales/tts.ts'
+import { wadEn, wadZh, type WadLocaleKey } from './locales/whatsapp-delegate.ts'
 
 /** The Klipara Scout fields that carry a label and a hint. */
 export type ScoutFieldKey =
@@ -39,6 +40,7 @@ export type OperationsSettingsLocaleKey =
   | SwitchLocaleKey
   | TtsLocaleKey
   | MeetingRemindersLocaleKey
+  | WadLocaleKey
 
 /** English copy. */
 export const en: Record<OperationsSettingsLocaleKey, string> = {
@@ -47,6 +49,7 @@ export const en: Record<OperationsSettingsLocaleKey, string> = {
   ...switchesEn,
   ...ttsEn,
   ...meetingRemindersEn,
+  ...wadEn,
   dokployTitle: 'Dokploy',
   dokployDescription: 'The Dokploy servers an agent may query and deploy through.',
   dokployServers: 'Servers',
@@ -234,6 +237,7 @@ export const zh: Record<OperationsSettingsLocaleKey, string> = {
   ...switchesZh,
   ...ttsZh,
   ...meetingRemindersZh,
+  ...wadZh,
   dokployTitle: 'Dokploy',
   dokployDescription: 'Agent 可查询并通过其部署的 Dokploy 服务器。',
   dokployServers: '服务器',

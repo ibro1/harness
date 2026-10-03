@@ -568,6 +568,7 @@ The overlay plugins in the table below each have a card on the Plugins page with
 | Page capture | yes | `DSH_CAPTURE=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
 | PSD tools | yes | `DSH_PSD_TOOLS=0` | yes, unless `DSH_SESSION_TOOLS_MCP=0` |
 | TikTok Shop employee | yes; idle until switched on at Plugins | `DSH_TIKTOK_SHOP_EMPLOYEE=0` | yes |
+| WhatsApp delegate | yes; idle until switched on and given contacts at Plugins | `DSH_WHATSAPP_DELEGATE=0` | yes, to delegate Sessions only |
 | Meeting reminders | yes; sends nothing until rules are saved at Plugins | `DSH_MEETING_REMINDERS=0` | no |
 | Agent Teams tools route | yes; lists tools only while Agent Teams is enabled under Plugins | `DSH_AGENT_TOOLS_MCP=0` | yes, unless `DSH_AGENT_TOOLS_MCP=0` |
 | Cloudflare | yes | `DSH_CLOUDFLARE=0` | yes, unless `DSH_CLOUDFLARE_MCP=0` |

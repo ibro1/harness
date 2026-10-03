@@ -41,6 +41,8 @@ import { TikTokShopCard } from './TikTokShopCard.tsx'
 import { TTS_NS, TtsCardController } from './tts-card-controller.ts'
 import { MeetingRemindersCard } from './MeetingRemindersCard.tsx'
 import { MEETING_REMINDERS_NS, MeetingRemindersCardController } from './meeting-reminders-card-controller.ts'
+import { WhatsAppDelegateCard } from './WhatsAppDelegateCard.tsx'
+import { WAD_NS, WadCardController } from './whatsapp-delegate-card-controller.ts'
 import { en, zh, type OperationsSettingsLocaleKey } from './locales.ts'
 
 export type { CloudflareCardFace, CloudflareCardState, CloudflareSettings } from './cloudflare-card-controller.ts'
@@ -51,6 +53,7 @@ export type { SeoCardFace, SeoCardState, SeoSettings } from './seo-card-controll
 export type { AdsCardFace, AdsCardState, AdsSettings } from './ads-card-controller.ts'
 export type { TtsCardFace, TtsCardState, TtsSettings } from './tts-card-controller.ts'
 export type { MeetingRemindersCardFace, MeetingRemindersCardState, MeetingRemindersSettings } from './meeting-reminders-card-controller.ts'
+export type { WadCardFace, WadCardState, WadSettings } from './whatsapp-delegate-card-controller.ts'
 export type { ErrorReportingCardFace, ErrorReportingCardState, ErrorReportingSettings } from './error-reporting-card-controller.ts'
 export type { OperationsSettingsLocaleKey } from './locales.ts'
 export type { SwitchCardFace, SwitchStatus } from './SwitchCard.tsx'
@@ -95,6 +98,7 @@ export function apply(ctx: ClientContext): void {
   const errorReporting = new ErrorReportingCardController(ctx.configForms.get(ERROR_REPORTING_NS))
   const tts = new TtsCardController(ctx.configForms.get(TTS_NS))
   const meetingReminders = new MeetingRemindersCardController(ctx.configForms.get(MEETING_REMINDERS_NS))
+  const wad = new WadCardController(ctx.configForms.get(WAD_NS))
   // Adapters come and go, and a settings commit elsewhere can change the routes.
   ctx.effect(() => ctx.remote.$on('llm/adapters-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model adapters')
   ctx.effect(() => ctx.remote.$on('settings/document-updated', () => { scoutModels.refresh() }), 'ui-settings-operations: scout model settings')
@@ -108,6 +112,7 @@ export function apply(ctx: ClientContext): void {
     ads.dispose()
     tts.dispose()
     meetingReminders.dispose()
+    wad.dispose()
   }, 'ui-settings-operations: form subscriptions')
 
   ctx.effect(() => ctx.configForms.whileServed([DOKPLOY_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
@@ -159,6 +164,13 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([MEETING_REMINDERS_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'meeting-reminders', order: 87, label: () => t('mrTitle'), locale: NS, inject: () => meetingReminders.inject(),
   }, MeetingRemindersCard))), 'ui-settings-operations: Meeting reminders page')
+  ctx.effect(() => ctx.configForms.whileServed([WAD_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'whatsapp-delegate', order: 88, label: () => t('wadTitle'), locale: NS,
+    inject: () => {
+      scoutModels.refresh()
+      return wad.inject(scoutModels.store, () => { scoutModels.refresh() })
+    },
+  }, WhatsAppDelegateCard))), 'ui-settings-operations: WhatsApp delegate page')
 
   // The deployment plugins with only an on/off switch have no settings form to
   // gate their cards on; each card appears when the Host answers its status

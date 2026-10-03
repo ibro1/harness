@@ -329,6 +329,18 @@
         whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
         whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
 
+    # Fork-local WhatsApp delegate (packages/host/whatsapp-delegate): answers
+    # the owner's listed work contacts on WhatsApp as the owner, one Session per
+    # contact. Off until switched on and given contacts at Plugins.
+    - id: whatsapp-delegate
+      name: '@deepseek-ai/dsh-host-whatsapp-delegate'
+      disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_WHATSAPP_DELEGATE === '0'
+      config:
+        token: !!js process.env.DSH_WAD_TOKEN || ''
+        envGroqApiKey: !!js process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1 || ''
+        whatsappUrl: !!js process.env.WA_COMMAND_URL || ''
+        whatsappToken: !!js process.env.WA_AGENT_TOKEN || ''
+
     - id: postgres
       name: '@deepseek-ai/dsh-host-postgres'
       disabled: !!js process.env.DSH_DEPLOY !== '1' || process.env.DSH_POSTGRES === '0'

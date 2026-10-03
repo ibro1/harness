@@ -99,6 +99,9 @@ fi
 if [[ "${DSH_TIKTOK_SHOP_EMPLOYEE:-1}" != "0" ]]; then
   export DSH_TTS_TOKEN="${DSH_TTS_TOKEN:-$(random_token)}"
 fi
+if [[ "${DSH_WHATSAPP_DELEGATE:-1}" != "0" ]]; then
+  export DSH_WAD_TOKEN="${DSH_WAD_TOKEN:-$(random_token)}"
+fi
 # Overridable so the script can be exercised outside the image.
 APP_DIR="${DSH_APP_DIR:-/app}"
 
@@ -416,6 +419,18 @@ if [[ "${DSH_TIKTOK_SHOP_EMPLOYEE:-1}" != "0" ]]; then
   echo "[entrypoint] TikTok Shop employee available (Plugins -> TikTok Shop employee)"
   register_cli_mcp dsh-tiktok-shop tts-mcp.mjs DSH_TTS_TOKEN DSH_TTS_COMMAND_URL \
     "http://127.0.0.1:$INTERNAL_PORT/tts/command" "TikTok Shop employee"
+fi
+
+# WhatsApp delegate (packages/host/whatsapp-delegate): answers the owner's
+# listed work contacts on WhatsApp as the owner, one Session per contact. Off
+# until switched on and given contacts at Plugins -> WhatsApp delegate. CLI
+# models reach its tools over MCP; the route lists them to delegate Sessions only.
+if [[ "${DSH_WHATSAPP_DELEGATE:-1}" != "0" ]]; then
+  mkdir -p "$HOME/.dsh/skills"
+  ln -sfn "$APP_DIR/deploy/skills/whatsapp-delegate" "$HOME/.dsh/skills/whatsapp-delegate"
+  echo "[entrypoint] WhatsApp delegate available (Plugins -> WhatsApp delegate)"
+  register_cli_mcp dsh-whatsapp-delegate wad-mcp.mjs DSH_WAD_TOKEN DSH_WAD_COMMAND_URL \
+    "http://127.0.0.1:$INTERNAL_PORT/whatsapp-delegate/command" "WhatsApp delegate"
 fi
 
 # Cloudflare control: the edge half of the deploy loop. Zones are configured in

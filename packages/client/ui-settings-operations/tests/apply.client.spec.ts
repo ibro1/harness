@@ -88,6 +88,16 @@ describe('ui-settings-operations apply', () => {
     expect([entry!.options.id, entry!.options.order, resolveSlotLabel(entry!.options.label)]).toEqual(['meeting-reminders', 87, 'Meeting reminders'])
   })
 
+  it('registers the WhatsApp delegate card while the Host serves whatsapp-delegate', async () => {
+    const { ctx, slots } = await bench(['whatsapp-delegate'])
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(1) })
+    const [entry] = slots.entries('plugins.item')
+    expect([entry!.options.id, entry!.options.order, resolveSlotLabel(entry!.options.label)]).toEqual(['whatsapp-delegate', 88, 'WhatsApp delegate'])
+  })
+
   it('removes its pages with the plugin', async () => {
     const { ctx, slots } = await bench(['dokploy', 'postgres', 'cloudflare'])
     const fiber = ctx.plugin({ inject: [...inject], apply })

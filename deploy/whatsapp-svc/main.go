@@ -8,8 +8,12 @@
 //	GET  /status               connection + login state, and the pairing QR
 //	POST /login                (re)start QR pairing when not logged in
 //	POST /logout               unlink this device
-//	POST /send   {to,text}     send a text message (to = JID | phone | name)
-//	GET  /messages?chat=&limit recent stored messages for a chat
+//	POST /send   {to,text,quote}  send a text message (to = JID | phone | name),
+//	                           optionally as a reply to a stored message's id
+//	GET  /messages?chat=&limit=&after=&include_sent=
+//	                           stored messages for a chat: the latest, or those
+//	                           after a row id, oldest first
+//	GET  /media?id=            the picture, voice note or file of a stored message
 //	GET  /chats?limit          recent chats, newest first
 //	GET  /contacts?query=      address-book matches
 //	GET  /resolve?query=       best JID for a name or number
@@ -32,8 +36,13 @@
 // A key is an opaque string chosen by the caller (a workspace id, say). It is
 // never shown to WhatsApp; it only names which device this service should use.
 //
-// The service persists incoming/outgoing text into its own `messages` table so
-// "check my messages" works; whatsmeow itself is event-based and keeps no log.
+// The service persists incoming/outgoing messages into its own `messages`
+// table so "check my messages" works; whatsmeow itself is event-based and keeps
+// no log. Text is stored as written; a picture, voice note, video, document or
+// sticker is stored as a row of that kind, with its caption (or a placeholder
+// such as "[voice note 12s]") as the body and the encrypted-media reference
+// needed to download it later. Messages this service sends are stored too,
+// marked via_api, and are left out of reads unless include_sent is asked for.
 package main
 
 import (
@@ -192,6 +201,7 @@ func main() {
 	route("/logout", (*service).handleLogout)
 	route("/send", (*service).handleSend)
 	route("/messages", (*service).handleMessages)
+	route("/media", (*service).handleMedia)
 	route("/chats", (*service).handleChats)
 	route("/contacts", (*service).handleContacts)
 	route("/groups", (*service).handleGroups)
@@ -245,8 +255,33 @@ func (h *hub) initTables(ctx context.Context) error {
 		}
 		h.log.Infof("messages: added session_key; existing rows kept as 'default'")
 	}
+	if _, err := h.db.ExecContext(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_messages_session_ts ON messages(session_key, ts)`); err != nil {
+		return err
+	}
+	// Message ids, kinds, media and replies arrived later still; older rows read
+	// as text with no id, which is what they were.
+	for _, column := range []struct{ name, ddl string }{
+		{"wa_id", `ALTER TABLE messages ADD COLUMN wa_id TEXT NOT NULL DEFAULT ''`},
+		{"kind", `ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'`},
+		{"media", `ALTER TABLE messages ADD COLUMN media BLOB`},
+		{"reply_to", `ALTER TABLE messages ADD COLUMN reply_to TEXT NOT NULL DEFAULT ''`},
+		{"via_api", `ALTER TABLE messages ADD COLUMN via_api INTEGER NOT NULL DEFAULT 0`},
+	} {
+		var has int
+		if err := h.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name = ?`, column.name,
+		).Scan(&has); err != nil {
+			return err
+		}
+		if has == 0 {
+			if _, err := h.db.ExecContext(ctx, column.ddl); err != nil {
+				return err
+			}
+		}
+	}
 	_, err := h.db.ExecContext(ctx,
-		`CREATE INDEX IF NOT EXISTS idx_messages_session_ts ON messages(session_key, ts)`)
+		`CREATE INDEX IF NOT EXISTS idx_messages_session_wa ON messages(session_key, wa_id)`)
 	return err
 }
 
@@ -583,20 +618,37 @@ func (s *service) onEvent(evt any) {
 // ---- message store ----
 
 func (s *service) storeMessage(m *events.Message) {
-	body := m.Message.GetConversation()
-	if body == "" && m.Message.GetExtendedTextMessage() != nil {
-		body = m.Message.GetExtendedTextMessage().GetText()
-	}
-	if body == "" {
-		return // skip non-text (media/reactions) in v1
+	kind, body, replyTo, media := describeMessage(m.Message)
+	if kind == "" {
+		return // reactions, edits, receipts and other protocol messages
 	}
 	fromMe := 0
 	if m.Info.IsFromMe {
 		fromMe = 1
 	}
+	chat, sender := s.phoneAddressed(m.Info)
+	s.insertMessage(storedMessage{
+		chat: chat, sender: sender, senderName: m.Info.PushName, fromMe: fromMe, ts: m.Info.Timestamp.Unix(),
+		body: body, waID: m.Info.ID, kind: kind, media: media, replyTo: replyTo,
+	})
+}
+
+// storedMessage is one row of the messages table.
+type storedMessage struct {
+	chat, sender, senderName string
+	fromMe                   int
+	ts                       int64
+	body, waID, kind         string
+	media                    []byte
+	replyTo                  string
+	viaAPI                   int
+}
+
+func (s *service) insertMessage(m storedMessage) {
 	_, err := s.db.Exec(
-		`INSERT INTO messages(session_key, chat_jid, sender_jid, sender_name, from_me, ts, body) VALUES(?,?,?,?,?,?,?)`,
-		s.key, m.Info.Chat.String(), m.Info.Sender.String(), m.Info.PushName, fromMe, m.Info.Timestamp.Unix(), body,
+		`INSERT INTO messages(session_key, chat_jid, sender_jid, sender_name, from_me, ts, body, wa_id, kind, media, reply_to, via_api)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		s.key, m.chat, m.sender, m.senderName, m.fromMe, m.ts, m.body, m.waID, m.kind, m.media, m.replyTo, m.viaAPI,
 	)
 	if err != nil {
 		s.log.Warnf("store message: %v", err)
@@ -608,6 +660,85 @@ func (s *service) storeMessage(m *events.Message) {
 		`DELETE FROM messages WHERE session_key = ? AND id < (
 			SELECT MAX(id) - 5000 FROM messages WHERE session_key = ?
 		)`, s.key, s.key)
+}
+
+// phoneAddressed returns the chat and sender of a message by phone number when
+// WhatsApp addressed it by LID, so a chat reads under the number a caller knows.
+// A LID with no known number is kept as it is.
+func (s *service) phoneAddressed(info types.MessageInfo) (string, string) {
+	chat, sender := info.Chat, info.Sender
+	if sender.Server == types.HiddenUserServer && info.SenderAlt.Server == types.DefaultUserServer {
+		sender = info.SenderAlt
+	}
+	if chat.Server == types.HiddenUserServer {
+		switch {
+		case !info.IsFromMe && info.SenderAlt.Server == types.DefaultUserServer:
+			chat = info.SenderAlt
+		case info.IsFromMe && info.RecipientAlt.Server == types.DefaultUserServer:
+			chat = info.RecipientAlt
+		default:
+			if pn, err := s.client.Store.LIDs.GetPNForLID(context.Background(), chat); err == nil && !pn.IsEmpty() {
+				chat = pn
+			}
+		}
+	}
+	return chat.ToNonAD().String(), sender.ToNonAD().String()
+}
+
+// describeMessage reads a message's kind, its text (a caption or a placeholder
+// for media), the id of the message it replies to, and for media the message
+// itself, serialized, which is what a later download needs. An empty kind means
+// the message is not stored.
+func describeMessage(msg *waProto.Message) (kind, body, replyTo string, media []byte) {
+	if msg == nil {
+		return "", "", "", nil
+	}
+	var info *waProto.ContextInfo
+	switch {
+	case msg.GetConversation() != "":
+		kind, body = "text", msg.GetConversation()
+	case msg.GetExtendedTextMessage() != nil:
+		kind, body = "text", msg.GetExtendedTextMessage().GetText()
+		info = msg.GetExtendedTextMessage().GetContextInfo()
+	case msg.GetAudioMessage() != nil:
+		audio := msg.GetAudioMessage()
+		kind, info = "audio", audio.GetContextInfo()
+		body = fmt.Sprintf("[voice note %ds]", audio.GetSeconds())
+		if !audio.GetPTT() {
+			body = fmt.Sprintf("[audio %ds]", audio.GetSeconds())
+		}
+	case msg.GetImageMessage() != nil:
+		kind, info = "image", msg.GetImageMessage().GetContextInfo()
+		body = withCaption("[image]", msg.GetImageMessage().GetCaption())
+	case msg.GetVideoMessage() != nil:
+		kind, info = "video", msg.GetVideoMessage().GetContextInfo()
+		body = withCaption(fmt.Sprintf("[video %ds]", msg.GetVideoMessage().GetSeconds()), msg.GetVideoMessage().GetCaption())
+	case msg.GetDocumentMessage() != nil:
+		doc := msg.GetDocumentMessage()
+		kind, info = "document", doc.GetContextInfo()
+		body = withCaption(fmt.Sprintf("[document %s]", doc.GetFileName()), doc.GetCaption())
+	case msg.GetStickerMessage() != nil:
+		kind, body, info = "sticker", "[sticker]", msg.GetStickerMessage().GetContextInfo()
+	default:
+		return "", "", "", nil
+	}
+	if body == "" {
+		return "", "", "", nil
+	}
+	replyTo = info.GetStanzaID()
+	if kind != "text" && kind != "sticker" {
+		if raw, err := proto.Marshal(msg); err == nil {
+			media = raw
+		}
+	}
+	return kind, body, replyTo, media
+}
+
+func withCaption(placeholder, caption string) string {
+	if strings.TrimSpace(caption) == "" {
+		return placeholder
+	}
+	return placeholder + " " + caption
 }
 
 // loggedIn reports whether a device is paired; store reads that touch contacts
@@ -663,8 +794,9 @@ func (s *service) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 type sendReq struct {
-	To   string `json:"to"`
-	Text string `json:"text"`
+	To    string `json:"to"`
+	Text  string `json:"text"`
+	Quote string `json:"quote"`
 }
 
 func (s *service) handleSend(w http.ResponseWriter, r *http.Request) {
@@ -679,12 +811,41 @@ func (s *service) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := &waProto.Message{Conversation: proto.String(req.Text)}
-	if _, err = s.client.SendMessage(r.Context(), jid, msg); err != nil {
+	if quote := strings.TrimSpace(req.Quote); quote != "" {
+		// A reply shows the quoted message above the text; an id this service
+		// never stored is sent as plain text rather than refused.
+		var sender, body string
+		if err = s.db.QueryRowContext(r.Context(),
+			`SELECT sender_jid, body FROM messages WHERE session_key = ? AND wa_id = ? ORDER BY id DESC LIMIT 1`, s.key, quote,
+		).Scan(&sender, &body); err == nil {
+			msg = &waProto.Message{ExtendedTextMessage: &waProto.ExtendedTextMessage{
+				Text: proto.String(req.Text),
+				ContextInfo: &waProto.ContextInfo{
+					StanzaID:      proto.String(quote),
+					Participant:   proto.String(sender),
+					QuotedMessage: &waProto.Message{Conversation: proto.String(body)},
+				},
+			}}
+		}
+	}
+	resp, err := s.client.SendMessage(r.Context(), jid, msg)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "to": jid.String(), "name": name, "session": s.key})
+	sender := ""
+	if id := s.client.Store.ID; id != nil {
+		sender = id.ToNonAD().String()
+	}
+	s.insertMessage(storedMessage{
+		chat: jid.ToNonAD().String(), sender: sender, senderName: s.client.Store.PushName, fromMe: 1, ts: resp.Timestamp.Unix(),
+		body: req.Text, waID: resp.ID, kind: "text", replyTo: strings.TrimSpace(req.Quote), viaAPI: 1,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "to": jid.String(), "name": name, "session": s.key, "id": resp.ID})
 }
+
+// messageColumns are the columns writeMessageRows reads, in its scan order.
+const messageColumns = `id, chat_jid, sender_jid, sender_name, from_me, ts, body, wa_id, kind, media IS NOT NULL, reply_to, via_api`
 
 func (s *service) handleMessages(w http.ResponseWriter, r *http.Request) {
 	chatQuery := strings.TrimSpace(r.URL.Query().Get("chat"))
@@ -696,24 +857,34 @@ func (s *service) handleMessages(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
-		chatJID = jid.String()
+		chatJID = jid.ToNonAD().String()
 	}
-	q := `SELECT chat_jid, sender_jid, sender_name, from_me, ts, body FROM messages WHERE session_key = ?`
+	q := `SELECT ` + messageColumns + ` FROM messages WHERE session_key = ?`
 	args := []any{s.key}
 	if chatJID != "" {
 		q += ` AND chat_jid = ?`
 		args = append(args, chatJID)
 	}
-	q += ` ORDER BY ts DESC LIMIT ?`
-	args = append(args, limit)
+	if r.URL.Query().Get("include_sent") != "1" && r.URL.Query().Get("include_sent") != "true" {
+		q += ` AND via_api = 0`
+	}
+	// With after, the rows that followed a row id, oldest first, so a caller can
+	// read a chat as a stream without gaps; without it, the latest, newest first.
+	if after, err := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64); err == nil && after >= 0 {
+		q += ` AND id > ? ORDER BY id ASC LIMIT ?`
+		args = append(args, after, limit)
+	} else {
+		q += ` ORDER BY ts DESC, id DESC LIMIT ?`
+		args = append(args, limit)
+	}
 	s.writeMessageRows(w, q, args)
 }
 
 func (s *service) handleChats(w http.ResponseWriter, r *http.Request) {
 	limit := parseLimit(r, 30, 200)
-	q := `SELECT chat_jid, sender_jid, sender_name, from_me, ts, body FROM messages
+	q := `SELECT ` + messageColumns + ` FROM messages
 	      WHERE session_key = ?
-	        AND id IN (SELECT MAX(id) FROM messages WHERE session_key = ? GROUP BY chat_jid)
+	        AND id IN (SELECT MAX(id) FROM messages WHERE session_key = ? AND via_api = 0 GROUP BY chat_jid)
 	      ORDER BY ts DESC LIMIT ?`
 	s.writeMessageRows(w, q, []any{s.key, s.key, limit})
 }
@@ -727,18 +898,96 @@ func (s *service) writeMessageRows(w http.ResponseWriter, q string, args []any) 
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var chat, sender, name, body string
-		var fromMe int
-		var ts int64
-		if err = rows.Scan(&chat, &sender, &name, &fromMe, &ts, &body); err != nil {
+		var chat, sender, name, body, waID, kind, replyTo string
+		var id, ts int64
+		var fromMe, viaAPI int
+		var hasMedia bool
+		if err = rows.Scan(&id, &chat, &sender, &name, &fromMe, &ts, &body, &waID, &kind, &hasMedia, &replyTo, &viaAPI); err != nil {
 			continue
 		}
 		out = append(out, map[string]any{
-			"chat": chat, "sender": sender, "senderName": name,
+			"id": id, "chat": chat, "sender": sender, "senderName": name,
 			"fromMe": fromMe == 1, "ts": ts, "body": body,
+			"waId": waID, "kind": kind, "hasMedia": hasMedia, "replyTo": replyTo, "viaApi": viaAPI == 1,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"messages": out})
+}
+
+// maxMediaBytes caps a download; a voice note or photo is far smaller.
+const maxMediaBytes = 32 << 20
+
+// handleMedia downloads and decrypts a stored message's media from WhatsApp's
+// servers. WhatsApp keeps media for a limited time, so an old message can fail
+// with a gone or not-found error.
+func (s *service) handleMedia(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "need ?id=<message row id>"})
+		return
+	}
+	var raw []byte
+	if err = s.db.QueryRowContext(r.Context(),
+		`SELECT media FROM messages WHERE session_key = ? AND id = ?`, s.key, id,
+	).Scan(&raw); err != nil || len(raw) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "no media for that message"})
+		return
+	}
+	var msg waProto.Message
+	if err = proto.Unmarshal(raw, &msg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "stored media reference is unreadable"})
+		return
+	}
+	mime := mediaMime(&msg)
+	if size := mediaSize(&msg); size > maxMediaBytes {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"error": fmt.Sprintf("media is %d bytes; the limit is %d", size, maxMediaBytes)})
+		return
+	}
+	data, err := s.client.DownloadAny(r.Context(), &msg)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+func mediaMime(msg *waProto.Message) string {
+	var mime string
+	switch {
+	case msg.GetAudioMessage() != nil:
+		mime = msg.GetAudioMessage().GetMimetype()
+	case msg.GetImageMessage() != nil:
+		mime = msg.GetImageMessage().GetMimetype()
+	case msg.GetVideoMessage() != nil:
+		mime = msg.GetVideoMessage().GetMimetype()
+	case msg.GetDocumentMessage() != nil:
+		mime = msg.GetDocumentMessage().GetMimetype()
+	case msg.GetStickerMessage() != nil:
+		mime = msg.GetStickerMessage().GetMimetype()
+	}
+	if mime == "" {
+		return "application/octet-stream"
+	}
+	return mime
+}
+
+func mediaSize(msg *waProto.Message) uint64 {
+	switch {
+	case msg.GetAudioMessage() != nil:
+		return msg.GetAudioMessage().GetFileLength()
+	case msg.GetImageMessage() != nil:
+		return msg.GetImageMessage().GetFileLength()
+	case msg.GetVideoMessage() != nil:
+		return msg.GetVideoMessage().GetFileLength()
+	case msg.GetDocumentMessage() != nil:
+		return msg.GetDocumentMessage().GetFileLength()
+	case msg.GetStickerMessage() != nil:
+		return msg.GetStickerMessage().GetFileLength()
+	}
+	return 0
 }
 
 func (s *service) handleContacts(w http.ResponseWriter, r *http.Request) {
