@@ -67,6 +67,7 @@ function describe(p: TrackedProduct, state: ShopState): string {
     p.sold === undefined ? undefined : `${String(Math.round(p.sold))} sold`,
     p.rating === undefined ? undefined : `${p.rating.toFixed(1)}★${p.reviews === undefined ? '' : ` (${String(Math.round(p.reviews))})`}`,
     `${String(p.images.length)} image${p.images.length === 1 ? '' : 's'}`,
+    p.video === undefined ? undefined : 'demo video',
     made === 0 ? undefined : `${String(made)} video${made === 1 ? '' : 's'} made`,
     p.rejected === undefined ? undefined : `REJECTED: ${p.rejected.why}`,
   ].filter(v => v !== undefined).join(', ')
@@ -133,7 +134,7 @@ export function buildShopTools(deps: ShopDeps): ToolDefinition[] {
     }),
     tool({
       name: 'tts_search',
-      description: 'Search UK TikTok Shop for products on a theme (one data credit). Saves new products that are allowed (not on the owner\'s blocked list) and lists them with price, units sold, rating and image count. Prefer products with many units sold, a good rating, a price under about £30, and at least two images.',
+      description: 'Search UK TikTok Shop for products on a theme (one data credit). Saves new products that are allowed (not on the owner\'s blocked list) and lists them with price, units sold, rating and image count. Prefer products with many units sold, a good rating, a price under about £30, at least two images, and a demo video (real footage makes the video far stronger).',
       parameters: { query: { type: 'string', required: true, description: 'Product search words, such as "lip balm" or "car phone holder".' } },
       run: async (args, exec) => {
         const query = String(args['query']).trim()

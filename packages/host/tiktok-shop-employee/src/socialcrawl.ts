@@ -27,6 +27,8 @@ export interface ShopProduct {
   images: string[]
   /** The product page. */
   url?: string
+  /** The listing's demo video address, when it has one. */
+  video?: string
   /** Category path, when given. */
   category?: string
   description?: string
@@ -83,6 +85,37 @@ function images(row: Record<string, unknown>): string[] {
 }
 
 /**
+ * The first video address under a key that names a video ("video", "demo_video", "videoUrl"), at any depth.
+ * Neither SocialCrawl nor TikTok documents where the demo video sits, so it is found by name.
+ * @param row - a product.
+ * @returns an http(s) address that is not an image, or undefined.
+ */
+export function demoVideo(row: Record<string, unknown>): string | undefined {
+  const firstUrl = (value: unknown, depth: number): string | undefined => {
+    if (typeof value === 'string') return /^https?:\/\//u.test(value) && !/\.(?:jpe?g|png|webp|gif|avif|heic)(?:[?#~]|$)/iu.test(value) ? value : undefined
+    if (depth > 4 || typeof value !== 'object' || value === null) return undefined
+    for (const child of Array.isArray(value) ? value : Object.values(value)) {
+      const found = firstUrl(child, depth + 1)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  const stack: { value: unknown; depth: number }[] = [{ value: row, depth: 0 }]
+  while (stack.length > 0) {
+    const { value, depth } = stack.pop() ?? { value: undefined, depth: 0 }
+    if (depth > 4 || typeof value !== 'object' || value === null) continue
+    for (const [key, child] of Object.entries(value)) {
+      if (/video/iu.test(key) && !/(?:count|duration|cover|poster|thumb)/iu.test(key) && !/(?:_id|Id)$/u.test(key)) {
+        const found = firstUrl(child, 0)
+        if (found !== undefined) return found
+      }
+      stack.push({ value: child, depth: depth + 1 })
+    }
+  }
+  return undefined
+}
+
+/**
  * Read one product from a SocialCrawl row.
  * @param raw - a search result or the product of a details answer.
  * @param fallbackCurrency - the region's currency when the row names none.
@@ -103,6 +136,7 @@ export function parseProduct(raw: unknown, fallbackCurrency = 'GBP'): ShopProduc
   const url = text(pick(row, 'url', 'product_url', 'productUrl', 'link', 'deep_link'))
   const category = pick(row, 'category', 'category_path', 'categories', 'breadcrumb')
   const description = text(pick(row, 'description', 'desc'))
+  const video = demoVideo(row)
   return {
     id, title, price,
     currency: text(pick(row, 'currency', 'price.currency')) ?? fallbackCurrency,
@@ -112,9 +146,19 @@ export function parseProduct(raw: unknown, fallbackCurrency = 'GBP'): ShopProduc
     ...reviews === undefined ? {} : { reviews },
     ...seller === undefined ? {} : { seller },
     ...url === undefined ? {} : { url },
+    ...video === undefined ? {} : { video },
     ...Array.isArray(category) ? { category: category.map(c => text(record(c)['name']) ?? text(c) ?? '').filter(c => c !== '').join(' > ') } : text(category) === undefined ? {} : { category: text(category) ?? '' },
     ...description === undefined ? {} : { description: description.slice(0, 2000) },
   }
+}
+
+let shapeNoted = false
+/** Log the first result's field names once per process: SocialCrawl documents the demo video's field by meaning only. */
+function noteShape(first: unknown): void {
+  if (shapeNoted || first === undefined) return
+  shapeNoted = true
+  const product = record(record(first)['product'] ?? first)
+  process.stderr.write(`tiktok-shop-employee: SocialCrawl product fields: ${Object.keys(product).join(', ')}; ext: ${Object.keys(record(product['ext'])).join(', ')}\n`)
 }
 
 /** The client. */
@@ -165,6 +209,7 @@ export function socialCrawl(apiKey: () => string, region: () => string, fetcher:
   return {
     async search(query, signal) {
       const body = await call('/v1/tiktokshop/search', { query }, signal)
+      noteShape(list(body)[0])
       return list(body).map(row => parseProduct(row)).filter((p): p is ShopProduct => p !== undefined)
     },
     async product(ref, signal) {

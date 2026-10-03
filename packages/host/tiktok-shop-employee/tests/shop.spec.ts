@@ -10,11 +10,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import {
   blockedWord, buildShopTools, createSpeaker, DEFAULT_BLOCKED_WORDS, envKeys, finalCaption, parseProduct, reviewPage,
-  lineSpans, scriptProblems, ShopStore, socialCrawl, wrap,
+  lineSpans, planShots, scriptProblems, ShopStore, socialCrawl, wordGroups, wrap,
 } from '../src/index.ts'
 import type { ShopProduct, SocialCrawl } from '../src/index.ts'
 import { DirectUnavailable, productsIn, proxyOption, withFallback } from '../src/index.ts'
 import { shopUrl, slug } from '../src/direct.ts'
+import { demoVideo } from '../src/socialcrawl.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
 const dirs: string[] = []
@@ -87,6 +88,20 @@ describe('script rules', () => {
     expect(lineSpans([{ start: 2, end: 3 }], 3, 8)).toBeUndefined()
   })
 
+  it('shows the spoken words two or three at a time, timed across the line', () => {
+    const groups = wordGroups('It clips on, and spins all the way round.', 3)
+    expect(groups.map(g => g.text)).toEqual(['It clips on,', 'and spins all', 'the way round.'])
+    expect(groups[0]?.start).toBe(0)
+    expect(groups.at(-1)?.end).toBeCloseTo(3)
+  })
+
+  it('cuts every couple of seconds, opening on the whole product and using the demo video every third shot', () => {
+    const shots = planShots([4, 4], 2, true)
+    expect(shots.map(s => s.framing)).toEqual(['whole', 'fill', 'clip', 'detail'])
+    expect(shots.reduce((n, s) => n + s.seconds, 0)).toBeCloseTo(8)
+    expect(planShots([4], 1, false).every(s => s.image === 0 && s.framing !== 'clip')).toBe(true)
+  })
+
   it('wraps captions at word boundaries', () => {
     expect(wrap('Tap the orange basket below now', 12)).toEqual(['Tap the', 'orange', 'basket below', 'now'])
   })
@@ -114,6 +129,11 @@ describe('the data service', () => {
       id: '1729587769570529799', title: 'Tinted Lip Oil', price: 7.99, currency: 'GBP', rating: 4.7, reviews: 812, sold: 15400,
       seller: 'Glow Ltd', images: ['https://img.test/1.jpg', 'https://img.test/2.jpg'],
     })
+  })
+
+  it('finds a demo video by its field name, not mistaking a cover image for it', () => {
+    expect(demoVideo({ ext: { tiktokshop: null }, demo_video: { cover: 'https://img.test/c.jpg', play_url: 'https://v.test/d.mp4' } })).toBe('https://v.test/d.mp4')
+    expect(demoVideo({ video_cover: 'https://img.test/c.jpg', images: ['https://img.test/a.jpg'] })).toBeUndefined()
   })
 
   it('searches TikTok\'s own address, replacing the first release\'s 404ing default', () => {

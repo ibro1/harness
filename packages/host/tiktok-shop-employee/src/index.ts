@@ -32,7 +32,7 @@ import { ShopStore } from './store.ts'
 import { buildShopTools } from './tools.ts'
 import { createSpeaker, envKeys, VOICE_PROVIDERS, type VoiceProvider } from './voice.ts'
 
-export { lineSpans, renderVideo, wrap } from './render.ts'
+export { lineSpans, planShots, renderVideo, wordGroups, wrap } from './render.ts'
 export type { RenderJob, RenderTools, ScriptLine } from './render.ts'
 export { blockedWord, DEFAULT_BLOCKED_WORDS, finalCaption, scriptProblems } from './rules.ts'
 export { parseProduct, socialCrawl } from './socialcrawl.ts'
@@ -65,6 +65,10 @@ export const name = 'tiktok-shop-employee'
 export const inject = ['agents', 'webServer', 'agentDefaultModel', 'agentPresets', 'permissionPresets', 'sessionTitle', 'workspaceRegistry']
 
 /** Session ids of the employee's shifts start with this. */
+/** The edit's version: 2 cuts between shots and times the words to the voice; 1 was one slow zoom per line. */
+const RENDER_EDIT = 2
+/** Largest demo video the renderer downloads. */
+const MAX_DEMO_BYTES = 80 * 1024 * 1024
 /** How long after one "Run a shift now" another is refused. */
 const RUN_NOW_GAP_MS = 15 * 60_000
 const SESSION_PREFIX = 'tts-'
@@ -308,6 +312,22 @@ export function apply(ctx: Context, config: Config): void {
     }).then(() => runPost(videoId, mode))
   }
 
+  /** The listing's demo video, or undefined when it cannot be had: the video is then made from the images alone. */
+  const downloadVideo = async (url: string, file: string): Promise<string | undefined> => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(60_000), headers: { 'Referer': 'https://www.tiktok.com/' } })
+      const length = Number(response.headers.get('content-length') ?? '0')
+      if (!response.ok || length > MAX_DEMO_BYTES) throw new Error(response.ok ? `${String(length)} bytes is too large` : `HTTP ${String(response.status)}`)
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (bytes.length > MAX_DEMO_BYTES) throw new Error(`${String(bytes.length)} bytes is too large`)
+      await writeFile(file, bytes)
+      return file
+    } catch (error) {
+      process.stderr.write(`tiktok-shop-employee: demo video ${url} could not be read: ${error instanceof Error ? error.message : String(error)}\n`)
+      return undefined
+    }
+  }
+
   // Renders run one at a time, in the order they were asked for.
   let renders: Promise<void> = Promise.resolve()
   const renderOne = async (videoId: string): Promise<void> => {
@@ -335,9 +355,11 @@ export function apply(ctx: Context, config: Config): void {
         }
       }
       if (images.length === 0) throw new Error('none of the product\'s images could be downloaded')
+      const demo = product.video === undefined ? undefined : await downloadVideo(product.video, join(workDir, 'demo.mp4'))
       const file = `${videoId}.mp4`
       const seconds = await renderVideo({
-        images, lines: video.lines, hook: video.hook, endCard: video.endCard, workDir, outPath: join(mediaDir, file),
+        images, ...demo === undefined ? {} : { video: demo },
+        lines: video.lines, hook: video.hook, endCard: video.endCard, workDir, outPath: join(mediaDir, file),
       }, {
         ffmpeg: config.ffmpeg, ffprobe: config.ffprobe, font: config.font, speak,
         // One request for the whole script: lines on their own paragraphs, read with a pause between them.
@@ -345,7 +367,7 @@ export function apply(ctx: Context, config: Config): void {
       }, AbortSignal.timeout(900_000))
       await store.update((s) => {
         const v = s.videos.find(x => x.id === videoId)
-        if (v !== undefined) Object.assign(v, { status: 'ready', file, seconds })
+        if (v !== undefined) Object.assign(v, { status: 'ready', file, seconds, edit: RENDER_EDIT })
       })
       process.stderr.write(`tiktok-shop-employee: video ${videoId} is ready (${String(Math.round(seconds))}s)\n`)
       await notify(`TikTok Shop: a new ${String(Math.round(seconds))}s video for "${product.title}" is ready.\n\nWatch, download and get the caption: ${reviewLink(videoId)}`)
@@ -371,6 +393,12 @@ export function apply(ctx: Context, config: Config): void {
   void keyReady.then(async () => {
     const state = await store.read()
     for (const v of state.videos.filter(x => x.status === 'rendering')) startRender(v.id)
+    // Videos made with an older edit and not yet posted are made again with the current one.
+    const stale = state.videos.filter(x => x.status === 'ready' && (x.edit ?? 1) < RENDER_EDIT && x.posting?.state !== 'running')
+    if (stale.length > 0) {
+      await store.update((s) => { for (const v of s.videos) if (stale.some(x => x.id === v.id)) v.status = 'rendering' })
+      for (const v of stale) startRender(v.id)
+    }
   })
 
   const tools = buildShopTools({

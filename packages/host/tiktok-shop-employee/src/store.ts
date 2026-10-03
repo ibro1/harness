@@ -38,6 +38,8 @@ export interface VideoRecord {
   /** Seconds, once rendered. */
   seconds?: number
   error?: string
+  /** Which version of the edit rendered it; videos from an older edit are rendered again when the owner has not posted them. */
+  edit?: number
   /** File name under the media directory, once rendered. */
   file?: string
   postedAt?: string
